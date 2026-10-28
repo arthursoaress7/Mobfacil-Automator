@@ -5,7 +5,10 @@ Ferramenta de automação para otimizar a coleta, organização e exportação d
 
 
 
+Configuração Inicial:
 
+Extensão: É obrigatório ter a extensão Tampermonkey instalado no navegador.
 
+Permissões: Valide nas definições da extensão se a execução de userscripts está autorizada no navegador.
 
-OBRIGATÓRIO: TAMPERMONKEY, PERMISSÕES NAS EXTENSÕES DO NAVEGADOR PARA QUE PERMITA SCRIPTS DE USUÁRIOS E INJETE O SCRIPT NO ER
+Funcionamento: O script será injetado e executado diretamente no ER caso o script se encontre ativo.

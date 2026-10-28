@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.27
+// @version      11.29
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.27');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.29');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -1004,7 +1004,7 @@
             <div class="mf-tit">Trocar de conta</div>
             <select id="mf-conta-sel"></select>
             <button id="mf-conta-trocar" class="azul" style="width:100%;margin-top:8px">Trocar para esta conta</button>
-            <div class="mf-info" style="margin-top:6px">Sai pelo botão "Sair" do próprio sistema (a sessão é do navegador: vale para todas as abas) e, na tela de login, preenche o usuário. A senha fica com você ou com o gerenciador de senhas do navegador.</div>
+            <div class="mf-info" style="margin-top:6px">Sai pelo botão "Sair" do próprio sistema (a sessão é do navegador: vale para todas as abas). Na tela de login preenche o usuário e, se a conta tiver senha salva, entra sozinho.</div>
           </div>
           <div class="mf-sec">
             <div class="mf-tit">Contas cadastradas</div>
@@ -1013,8 +1013,13 @@
               <input id="mf-conta-apelido" type="text" placeholder="Apelido (opcional)" autocomplete="off">
               <input id="mf-conta-usuario" type="text" placeholder="Usuário de login" autocomplete="off" spellcheck="false">
             </div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <input id="mf-conta-senha" type="password" placeholder="Senha (opcional: login automático)" autocomplete="new-password" style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+              <button id="mf-conta-ver" class="cinza" type="button" title="Mostrar / ocultar a senha digitada" style="padding:6px 10px">👁</button>
+            </div>
             <button id="mf-conta-salvar" class="cinza" style="width:100%;margin-top:8px">Adicionar / atualizar conta</button>
-            <div class="mf-info" style="margin-top:6px">Fica só neste navegador (armazenamento local do Tampermonkey). Nenhuma senha é guardada pelo script.</div>
+            <div class="mf-info" style="margin-top:6px">Usuário e senha ficam só neste navegador, no armazenamento local do Tampermonkey: não vão para o código, o GitHub, o Diagnóstico nem para outros funcionários.
+              <b>Esse armazenamento não é criptografado</b>: quem usar este perfil do navegador ou um backup do Tampermonkey consegue ler. Ao editar, senha em branco mantém a atual.</div>
           </div>
         </div>
 
@@ -1431,9 +1436,11 @@
     const dataDe = s => (String(s || '').match(/\d{2}\/\d{2}\/\d{4}/) || [])[0] || '';
     const valorCompra = v => (v ? String(v).replace(/^R\$\s*/, 'R$ ') : '');
     // Valor entrada (coluna M) em percentual, como no modelo (ex.: 37,51%): o da página, ou entrada ÷ valor da compra
+    // Valor entrada (coluna M) em percentual, como no modelo: o percentual que a própria página mostra ("(20,00 %)");
+    // sem ele, entrada ÷ valor da compra
     const percentualEntrada = e => {
-      if (e.entradaPct) return String(num(e.entradaPct)).replace(/^(\d+)$/, '$1,00') + '%';
-      const en = e.entrada != null ? aNum(num(e.entrada)) : NaN, co = e.compra != null ? aNum(num(e.compra)) : NaN;
+      if (e.entradaPct) return e.entradaPct;
+      const en = e.entrada ? aNum(num(e.entrada)) : NaN, co = e.compra ? aNum(num(e.compra)) : NaN;
       if (!(en >= 0) || !(co > 0)) return '';
       return (en / co * 100).toFixed(2).replace('.', ',') + '%';
     };
@@ -1445,30 +1452,37 @@
       if ((/efetivad|\bapr\b|aprovad/i.test(mt.sit)) && manual) return 'Aprovado manual';
       return '';
     };
-    function linhaCompleta(id, d, mt, e) {
+    // N/A: o campo foi procurado (proposta já processada) e não existe. Vazio: ainda não processada, ou a busca
+    // falhou (ex.: a aba Cliente não carregou) — aí aparece em Faltantes para tentar de novo, em vez de virar N/A.
+    const NA = 'N/A';
+    function linhaCompleta(id, d, mt, e, processada) {
       d = d || {}; mt = mt || null; e = e || {};
-      const v = x => (x == null ? '' : String(x));
       const m = mt || {};
+      const v = x => (x != null && String(x).trim() !== '' ? String(x) : processada ? NA : '');
+      // contato só vale se a aba Cliente for da mesma pessoa (CPF da aba = CPF do motor)
+      const cpfConfere = !e.cpfCliente || !d.cpf || e.cpfCliente === d.cpf;
+      const contato = x => (!processada ? (x || '') : e.abaCliente === false || !cpfConfere ? '' : v(x));
       return [
         id,                              // A Proposta
-        m.cli || e.cliente || '',        // B Nome
+        v(m.cli || e.clienteAba || e.cliente),   // B Nome
         v(d.cpf),                        // C CPF
         v(e.imei),                       // D IMEI
         v(d.qtd), v(d.val), v(d.score), v(d.consultas),   // E–H crédito
-        e.telefone || '',                // I Número
-        e.email || '',                   // J E-mail
-        dataDe(m.dh),                    // K Data da Proposta
-        valorCompra(e.compra || e.valor),   // L Valor da compra ("Valor da Compra"; reserva: Valor da aba Garantias)
-        percentualEntrada(e),            // M Valor entrada (%)
-        m.loja || '',                    // N Loja
-        e.vendedor || '',                // O Vendedor
-        situacaoLimpa(m.sit),            // P Situação
-        manualAuto(mt),                  // Q Manual/Auto
-        motivoColunaR(d, mt),            // R Motivo Reprovação
+        contato(e.telefone),             // I Número (aba Cliente: Telefone 1)
+        contato(e.email),                // J E-mail (aba Cliente)
+        v(dataDe(m.dh)),                 // K Data da Proposta
+        v(valorCompra(e.compra || e.valor)),   // L Valor da compra
+        v(percentualEntrada(e)),         // M Valor entrada (%)
+        v(m.loja),                       // N Loja
+        v(e.vendedor),                   // O Vendedor
+        v(situacaoLimpa(m.sit)),         // P Situação
+        manualAuto(mt),                  // Q Manual/Auto (vazio é regra do modelo, não falta de dado)
+        motivoColunaR(d, mt),            // R Motivo Reprovação (vazio = não reprovada)
       ];
     }
 
-    function relatorioCols(m, id, d) {
+    function relatorioCols(m, id, d, processada) {
+      const na = t => (t ? t : processada ? NA : '');   // procurado e não encontrado = N/A
       const x = GM_getValue('meta', {})[id] || {};
       const e = GM_getValue('extra', {})[id] || {};
       const hh = hora(x.dh);
@@ -1498,12 +1512,12 @@
         else cols = [id, hh, titulo(loja), tipo, motivo, det];
       } else if (m === 'valortransacao') {
         const nv = e.valor ? num(e.valor) : null;                         // "R$1.864,00" -> "1864,00" (Excel pt-BR)
-        cols = [nv ? nv.split(',')[0] + ',' + (((nv.split(',')[1] || '') + '00').slice(0, 2)) : ''];
+        cols = [na(nv ? nv.split(',')[0] + ',' + (((nv.split(',')[1] || '') + '00').slice(0, 2)) : '')];
       } else if (m === 'efetivadas') {
-        cols = [id, x.cli || '', e.vendedor || '', '', hh, loja.toUpperCase()];   // Acesso ao APP: à mão
+        cols = [id, na(x.cli), na(e.vendedor), '', na(hh), na(loja.toUpperCase())];   // Acesso ao APP: à mão (fica vazio)
       } else {
         const c = d && d.cpf ? d.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '';
-        cols = [id, x.cli || '', c, 'XPANSE - ' + loja.toUpperCase(), e.vendedor || '', e.valor || '', 'Aprovada, não efetivada'];
+        cols = [id, na(x.cli), na(c), 'XPANSE - ' + loja.toUpperCase(), na(e.vendedor), na(e.valor), 'Aprovada, não efetivada'];
       }
       return cols;
     }
@@ -1522,7 +1536,15 @@
       '<tr>' + cols.map(c => '<td>' + celulaHtml(c, est) + '</td>').join('') + '</tr>').join('') + '</table>';
 
     /* ---------- detalhe da proposta (Vendedor, Valor, IMEI, Cliente, Situação, contato e entrada) ---------- */
-    // "(11) 91437-7547" / "11914377547" / "+55 11 ..." -> "(11) 914377547" (formato da planilha)
+    // "R$ 360,00 (20,00 %)" -> "R$ 360,00" e "20,00%"
+    const dinheiro = t => { const m = String(t || '').match(/R\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/); return m ? 'R$ ' + m[1] : null; };
+    const pctDe = t => {
+      const m = String(t || '').match(/\(\s*(\d+(?:[.,]\d+)?)\s*%\s*\)/) || String(t || '').match(/(\d+(?:[.,]\d+)?)\s*%/);
+      if (!m) return null;
+      const n = Number(m[1].replace(',', '.'));
+      return isNaN(n) ? null : n.toFixed(2).replace('.', ',') + '%';
+    };
+    // "(11) 91437-7547" / "(11) 973546966 - " / "+55 11 ..." -> "(11) 973546966" (formato da planilha); "() -" = vazio
     const fmtTelefone = t => {
       let d = String(t).replace(/\D/g, '');
       if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
@@ -1544,12 +1566,14 @@
       return String(c.getAttribute('value') || c.textContent || '').replace(/\s+/g, ' ').trim();
     };
     // acha o "rótulo" (ex.: Digitador) e devolve o texto do valor que vem logo depois dele
-    function acharRotulo(doc, rotulo, depoisDeTitulo) {
-      const todos = [...doc.querySelectorAll('body *')];
+    // estrito = com título informado e não encontrado, não procura no resto da página (evita pegar dados de outra seção)
+    function acharRotulo(doc, rotulo, depoisDeTitulo, estrito) {
+      const todos = [...doc.querySelectorAll('body *')].filter(el => !/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(el.tagName));
       let cands = todos.filter(el => normRot(proprio(el)) === rotulo.toLowerCase());
       if (depoisDeTitulo) {
-        const tit = todos.find(el => normRot(proprio(el)) === depoisDeTitulo.toLowerCase());
-        if (tit) cands = cands.filter(c => tit.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const tit = todos.find(el => normRot(el.textContent.replace(/\s+/g, ' ')) === depoisDeTitulo.toLowerCase());
+        if (tit) cands = cands.filter(c => !tit.contains(c) && (tit.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING));
+        else if (estrito) return null;
       }
       for (const el of cands) {
         let n = el.nextSibling;
@@ -1599,25 +1623,60 @@
       const imei = imeiTxt ? imeiTxt.replace(/\D/g, '') : null;
       const cliente = primeiroRotulo(docs, ['Nome do Cliente', 'Cliente', 'Nome'], t => /^[A-Za-zÀ-ÿ'.\s-]{3,120}$/.test(t));
       const situacao = primeiroRotulo(docs, ['Situação', 'Situacao', 'Status'], t => t.length <= 60);
-      // auditoria completa (colunas I, J, L e M): só aceita valores no formato esperado
-      const telTxt = primeiroRotulo(docs, ['Celular', 'Telefone Celular', 'Tel. Celular', 'Telefone', 'Fone', 'Telefone 1', 'Telefone Residencial', 'Contato'],
-        t => /^\D*(55)?\d{10,11}\D*$/.test(t.replace(/[\s().-]/g, '')));
-      const telefone = telTxt ? fmtTelefone(telTxt) : null;
-      const email = primeiroRotulo(docs, ['E-mail', 'Email', 'E-Mail do Cliente', 'E-mail do Cliente', 'Endereço de E-mail'],
-        t => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t));
-      const compraTxt = primeiroRotulo(docs, ['Valor da Compra'], t => num(t) != null);
-      const compra = compraTxt ? 'R$' + compraTxt.replace(/^R\$\s*/, '') : null;
-      const entradaPct = primeiroRotulo(docs, ['% Entrada', 'Percentual de Entrada', 'Percentual Entrada', 'Entrada (%)'], t => /%/.test(t) && num(t) != null);
-      const entradaTxt = primeiroRotulo(docs, ['Valor da Entrada', 'Entrada'], t => num(t) != null);
-      const entrada = entradaTxt ? 'R$' + entradaTxt.replace(/^R\$\s*/, '') : null;
+      // Valor da Compra / Valor da Entrada ("R$ 360,00 (20,00 %)"): só pelo rótulo exato, nunca pelo primeiro dd.text-bold.
+      // Telefone e e-mail NÃO são lidos aqui: nestas páginas os rótulos de contato são do usuário que digitou
+      // (ex.: ADMINISTRATIVOXPANSE). Os do cliente vêm da aba "Cliente" (dadosCliente).
+      const compra = dinheiro(primeiroRotulo(docs, ['Valor da Compra'], t => !!dinheiro(t)));
+      const entradaTxt = primeiroRotulo(docs, ['Valor da Entrada'], t => !!dinheiro(t) || !!pctDe(t));
+      const entrada = entradaTxt ? dinheiro(entradaTxt) : null;
+      const entradaPct = entradaTxt ? pctDe(entradaTxt) : null;
       const extra = GM_getValue('extra', {});
       extra[id] = { vendedor: vendedor || null, valor: valor || null, imei, cliente: cliente || null, situacao: situacao || null,
-        telefone, email: email || null, compra, entrada, entradaPct: entradaPct || null };
+        compra, entrada, entradaPct };
       GM_setValue('extra', extra);
       const dbg = GM_getValue('extraDbg', {});
       dbg[id] = { paginas: info, achouVendedor: !!vendedor, achouValor: !!valor, achouImei: !!imei, achouCliente: !!cliente, achouSituacao: !!situacao,
-        achouTelefone: !!telefone, achouEmail: !!email, achouCompra: !!compra, achouEntrada: !!(entrada || entradaPct), rotulosVistos: [...rotulos].slice(0, 40) };
+        achouCompra: !!compra, achouEntrada: !!(entrada || entradaPct), rotulosVistos: [...rotulos].slice(0, 40) };
       GM_setValue('extraDbg', dbg);
+    }
+
+    /* ---------- aba "Cliente" da Análise de Proposta (telefone, e-mail) ----------
+       Os dados cadastrais não vêm no HTML da página: são carregados quando se clica na aba Cliente
+       (objMesaAnalise.MesaAnaliseDados('Cliente')). O script abre a Análise da proposta num iframe oculto
+       (uma página nova por proposta: nada sobra da anterior), clica na própria aba do sistema, espera
+       "Identificação do Cliente" aparecer e lê os rótulos DEPOIS desse título. O CPF da aba é guardado para
+       conferir com o CPF do motor (garante que os dados são da proposta certa). */
+    async function dadosCliente(base, id) {
+      const r = { ok: false, telefone: null, email: null, cpf: null, nome: null, motivo: '' };
+      const fr = document.createElement('iframe');
+      fr.src = base.replace(/\/$/, '') + DETALHES[0] + id;
+      fr.style.cssText = 'position:fixed;left:-4000px;top:0;width:1300px;height:900px;opacity:0;pointer-events:none;border:0';
+      document.body.appendChild(fr);
+      const doc = () => { try { return fr.contentDocument; } catch (_) { return null; } };
+      const ate = async (cond, seg) => { const fim = Date.now() + seg * 1000; while (Date.now() < fim) { try { if (cond()) return true; } catch (_) {} await sleep(150); } return false; };
+      const temTitulo = () => { const d = doc(); return !!d && [...d.querySelectorAll('body *')].some(el => !/^(SCRIPT|STYLE)$/.test(el.tagName) && /^identifica[çc][ãa]o do cliente$/i.test(el.textContent.replace(/\s+/g, ' ').trim())); };
+      try {
+        const link = () => { const d = doc(); return d && d.querySelector('a[onclick*="MesaAnaliseDados"][onclick*="Cliente"]'); };
+        if (!await ate(() => doc() && doc().location.href !== 'about:blank' && doc().readyState === 'complete', 25)) { r.motivo = 'página da análise não carregou'; return r; }
+        if (!await ate(link, 5)) { r.motivo = 'link da aba Cliente não encontrado'; return r; }
+        if (!temTitulo()) {
+          link().click();   // o próprio link do sistema (o onclick roda na página)
+          if (!await ate(temTitulo, 20)) { r.motivo = 'aba Cliente não carregou'; return r; }
+        }
+        await ate(() => acharRotulo(doc(), 'Nome do Cliente', 'Identificação do Cliente', true), 3);
+        await sleep(300);
+        const d = doc(), T = 'Identificação do Cliente';
+        r.ok = true;
+        r.nome = acharRotulo(d, 'Nome do Cliente', T, true);
+        r.cpf = (acharRotulo(d, 'CPF', T, true) || '').replace(/\D/g, '') || null;
+        const em = acharRotulo(d, 'Email', T, true) || acharRotulo(d, 'E-mail', T, true);
+        r.email = em && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) ? em : null;
+        for (const rot of ['Telefone 1', 'Celular', 'Telefone Celular', 'Telefone 2', 'Telefone']) {
+          const tel = fmtTelefone(acharRotulo(d, rot, T, true) || '');
+          if (tel) { r.telefone = tel; break; }
+        }
+      } finally { fr.remove(); }
+      return r;
     }
 
     // segunda barreira contra testes/canceladas: proposta que NÃO está na tabela da tela é conferida no detalhe
@@ -1663,21 +1722,25 @@
       if (modo() !== 'coleta') {
         const alinhado = modo() === 'valortransacao';
         const ids = alinhado ? fila() : fila().filter(id => !ig[id]);
-        emitir(ids.map(id => (ig[id] ? [''] : relatorioCols(modo(), id, dados[id]))));
+        const fe = new Set(feitas());
+        emitir(ids.map(id => (ig[id] ? [''] : relatorioCols(modo(), id, dados[id], fe.has(id)))));
         return false;
       }
       const usarId = comId !== undefined ? comId : GM_getValue('origem', 'manual') === 'tela';
       const vazias = Array(CONFIG.VAZIAS_APOS_ID).fill('');   // Nome, CPF, IMEI: entre a Proposta (A) e a coluna E
+      const fe = new Set(feitas());
       emitir(fila().map(id => {
         const d = ig[id] ? null : dados[id];
-        const cred = d ? [d.qtd, d.val, d.score, d.consultas].map(x => (x == null ? '' : x)) : ['', '', '', ''];
+        const falta = !ig[id] && fe.has(id) ? 'N/A' : '';   // processada e sem o dado = N/A (como na planilha, ex.: 4663)
+        const cred = [d && d.qtd, d && d.val, d && d.score, d && d.consultas].map(x => (x == null || x === '' ? falta : x));
         return usarId ? [id, ...vazias, ...cred] : cred;
       }));
       return usarId;
     }
     function copiarCompleta() {
       const dados = GM_getValue('dados', {}), meta = GM_getValue('meta', {}), extra = GM_getValue('extra', {}), ig = ignoradas();
-      emitir(fila().map(id => (ig[id] ? [id, ...Array(COLUNAS_AUDITORIA.length - 1).fill('')] : linhaCompleta(id, dados[id], meta[id], extra[id]))));
+      const fe = new Set(feitas());
+      emitir(fila().map(id => (ig[id] ? [id, ...Array(COLUNAS_AUDITORIA.length - 1).fill('')] : linhaCompleta(id, dados[id], meta[id], extra[id], fe.has(id)))));
     }
     const AVISO_COMPLETA = 'Copiado no modelo Auditoria 2 Completo (colunas A a R). Cole na coluna A (Proposta), na primeira linha da lista. ' +
       'Campos que a página da proposta não informar (ex.: telefone, e-mail, entrada, IMEI) vão em branco.';
@@ -1728,10 +1791,9 @@
         if (full && !meta[id]) f.push('nome/loja/situação (proposta fora da tabela da tela)');
         if (full && !(ex[id] && ex[id].vendedor)) f.push('vendedor');
         if (full && ex[id]) {
-          const e = ex[id];
-          if (!e.telefone) f.push('telefone');
-          if (!e.email) f.push('e-mail');
-          if (!e.entrada && !e.entradaPct) f.push('entrada');
+          const e = ex[id], d = dados[id] || {};
+          if (e.abaCliente === false) f.push('telefone/e-mail (aba Cliente não carregou: Continuar tenta de novo)');
+          else if (e.cpfCliente && d.cpf && e.cpfCliente !== d.cpf) f.push('telefone/e-mail (CPF da aba Cliente diferente: não usados)');
         }
         return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
       }).filter(Boolean);
@@ -1746,8 +1808,18 @@
       // dados da página de detalhe: Vendedor e Valor (aba Garantias); na auditoria completa também IMEI/cliente
       const precisaDetalhe = m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao' || (m === 'coleta' && cfg('auditoriaCompleta'));
       if (precisaDetalhe && !GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
+      if (m === 'coleta' && cfg('auditoriaCompleta')) {
+        const cli = await dadosCliente(base, id);
+        const ex1 = GM_getValue('extra', {});
+        ex1[id] = { ...(ex1[id] || {}), abaCliente: cli.ok, telefone: cli.telefone, email: cli.email, cpfCliente: cli.cpf, clienteAba: cli.nome || null };
+        GM_setValue('extra', ex1);
+        const dbg = GM_getValue('extraDbg', {});
+        dbg[id] = { ...(dbg[id] || {}), abaCliente: cli.ok ? 'ok' : cli.motivo, achouTelefone: !!cli.telefone, achouEmail: !!cli.email, achouCpfAba: !!cli.cpf };
+        GM_setValue('extraDbg', dbg);
+      }
       if (cfg('ignorarCanceladasTestes')) {
-        const mot = motivoDetalhe(GM_getValue('extra', {})[id]);
+        const ex2 = GM_getValue('extra', {})[id];
+        const mot = motivoDetalhe(ex2) || (ex2 && ehTeste([ex2.clienteAba]) ? 'teste' : null);
         if (mot) { marcarIgnorada(id, mot); return null; }
       }
       if (m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao') {
@@ -1788,6 +1860,7 @@
       GM_setValue('atualId', '');
       const coletados = GM_getValue('dados', {})[id] || {};
       if (!completo(coletados)) return 'auditoria incompleta: ' + faltaCampos(coletados).join(', ');
+      if (m === 'coleta' && cfg('auditoriaCompleta') && (GM_getValue('extra', {})[id] || {}).abaCliente === false) return 'aba Cliente não carregou (telefone/e-mail)';
       return null;
     }
 
@@ -2305,6 +2378,14 @@
         || els.find(el => el.tagName === 'A' && /(logout|logoff|signout|\/sair\b)/i.test(el.getAttribute('href') || '')) || null;
     };
 
+    // senhas: chave separada das contas, nunca exibidas nem incluídas no diagnóstico
+    const senhas = () => GM_getValue('senhasContas', {}) || {};
+    const guardarSenha = (usuario, senha) => {
+      const sx = senhas();
+      if (senha) sx[usuario.toLowerCase()] = senha; else delete sx[usuario.toLowerCase()];
+      if (Object.keys(sx).length) GM_setValue('senhasContas', sx); else GM_deleteValue('senhasContas');
+    };
+    $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
     function desenharContas() {
       const lista = contas();
       const sel = $('#mf-conta-sel');
@@ -2324,9 +2405,17 @@
         ex.onclick = () => {
           if (!confirm('Excluir a conta ' + rotuloConta(c) + ' deste navegador?')) return;
           GM_setValue('contas', contas().filter((_, k) => k !== i));
+          guardarSenha(c.usuario, null);
           desenharContas();
         };
-        lin.append(nome, ed, ex);
+        const temSenha = !!senhas()[c.usuario.toLowerCase()];
+        if (temSenha) nome.textContent += ' 🔒';
+        nome.title = temSenha ? 'Senha salva neste navegador: login automático' : 'Sem senha salva: login manual';
+        const rs = document.createElement('button'); rs.className = 'cinza'; rs.textContent = 'Tirar senha';
+        rs.onclick = () => { guardarSenha(c.usuario, null); desenharContas(); msg('Senha de ' + c.usuario + ' removida deste navegador.'); };
+        lin.append(nome, ed);
+        if (temSenha) lin.append(rs);
+        lin.append(ex);
         caixa.appendChild(lin);
       });
       const a = contaAtiva();
@@ -2341,7 +2430,9 @@
       const i = lista.findIndex(c => c.usuario.toLowerCase() === usuario.toLowerCase());
       if (i >= 0) lista[i] = { usuario, apelido }; else lista.push({ usuario, apelido });
       GM_setValue('contas', lista);
-      $('#mf-conta-usuario').value = ''; $('#mf-conta-apelido').value = '';
+      const senha = $('#mf-conta-senha').value;
+      if (senha) guardarSenha(usuario, senha);   // em branco: mantém a senha que já estava salva
+      $('#mf-conta-usuario').value = ''; $('#mf-conta-apelido').value = ''; $('#mf-conta-senha').value = ''; $('#mf-conta-senha').type = 'password';
       desenharContas();
       msg('Conta ' + usuario + (i >= 0 ? ' atualizada.' : ' adicionada.'));
     };
@@ -2370,11 +2461,35 @@
           u.dispatchEvent(new Event('input', { bubbles: true }));
           u.dispatchEvent(new Event('change', { bubbles: true }));
         }
-        GM_setValue('trocaConta', { ...t, etapa: 'login' });
+        if (t.etapa === 'saindo' || t.etapa === 'conferir') GM_setValue('trocaConta', { ...t, etapa: 'login' });
         setTimeout(() => { try { senha.focus(); } catch (_) {} }, 300);
         mostrarAba('cta');
-        msg(u ? 'Tela de login: usuário ' + t.usuario + ' preenchido. Digite a senha (ou escolha no gerenciador de senhas do navegador) e entre.'
-          : 'Tela de login: não achei o campo de usuário. Entre com ' + t.usuario + '.');
+        const pw = senhas()[t.usuario.toLowerCase()];
+        // login automático: só com senha salva, sem captcha visível e uma única tentativa por troca (senha errada não fica em laço)
+        const capt = document.querySelector('#txtCaptcha');
+        const temCaptcha = (capt && capt.type !== 'hidden') ||
+          [...document.querySelectorAll('.g-recaptcha, iframe[src*="captcha" i], img[src*="captcha" i], [id*="captcha" i]:not(input[type=hidden])')].some(visivel);
+        const btn = document.querySelector('#frmLogin button[onclick*="Login"]') || (senha.form && senha.form.querySelector('button, input[type=submit]'));
+        if (u && pw && t.etapa !== 'enviado' && t.etapa !== 'falhou' && !temCaptcha && btn) {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(senha, pw);
+          senha.dispatchEvent(new Event('input', { bubbles: true }));
+          senha.dispatchEvent(new Event('change', { bubbles: true }));
+          GM_setValue('trocaConta', { ...t, etapa: 'enviado', enviadoEm: Date.now() });
+          msg('Entrando automaticamente com ' + t.usuario + '...');
+          setTimeout(() => btn.click(), 400);
+          // o sistema pode recusar sem recarregar a página: se a tela de login continuar, avisa e não tenta de novo
+          setTimeout(() => {
+            if (!campoSenha()) return;
+            GM_setValue('trocaConta', { ...(GM_getValue('trocaConta', null) || t), etapa: 'falhou' });
+            msg('O login automático de ' + t.usuario + ' não foi concluído. Confira a mensagem do sistema e a senha salva (aba Contas) e entre manualmente.');
+          }, 10000);
+          return;
+        }
+        if (t.etapa === 'enviado') GM_setValue('trocaConta', { ...t, etapa: 'falhou' });
+        msg(!u ? 'Tela de login: não achei o campo de usuário. Entre com ' + t.usuario + '.'
+          : t.etapa === 'enviado' || t.etapa === 'falhou' ? 'O login automático de ' + t.usuario + ' não foi aceito. Confira a senha salva na aba Contas e entre manualmente (não tento de novo para não bloquear a conta).'
+          : temCaptcha && pw ? 'Tela de login com verificação (captcha): usuário ' + t.usuario + ' preenchido; complete a verificação e entre.'
+          : 'Tela de login: usuário ' + t.usuario + ' preenchido. Digite a senha (ou salve a senha na aba Contas para entrar sozinho).');
         return;
       }
       if (t.etapa === 'saindo' && Date.now() - t.quando < 3000) return;   // ainda é a página de onde saiu

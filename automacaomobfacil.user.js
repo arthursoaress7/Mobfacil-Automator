@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.31
+// @version      11.32
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.31');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.32');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -1681,44 +1681,47 @@
     }
 
     /* ---------- aba "Cliente" da Análise de Proposta (telefone, e-mail) ----------
-       Os dados cadastrais não vêm no HTML da página: são carregados quando se clica na aba Cliente
-       (objMesaAnalise.MesaAnaliseDados('Cliente')). O script abre a Análise da proposta num iframe oculto
-       (uma página nova por proposta: nada sobra da anterior), clica na própria aba do sistema, espera
-       "Identificação do Cliente" aparecer e lê os rótulos DEPOIS desse título. O CPF da aba é guardado para
-       conferir com o CPF do motor (garante que os dados são da proposta certa). */
+       No sistema, a aba Cliente é carregada por objMesaAnalise.MesaAnaliseDados('Cliente'), que faz
+       GET strCaminhoSistema + '/MesaCredito/MesaAnaliseCliente?lngProposta=N' e põe o HTML em #divMesaAnaliseDados.
+       O script faz a MESMA requisição (uma por proposta, nada fica da anterior) e lê o bloco #divDetalhePropostaCadastro:
+         <td><small> Email</small><br><b> &nbsp;</b></td>   <td><small> Telefone 1</small><br><b>(11) 964577660 - </b></td>
+       O valor é o <b> da MESMA célula do rótulo; <b> vazio/&nbsp; = sem dado (nunca lê a célula vizinha).
+       O CPF do bloco é guardado para conferir com o CPF do motor (garante que os dados são da proposta certa). */
     async function dadosCliente(base, id) {
       const r = { ok: false, telefone: null, email: null, cpf: null, nome: null, motivo: '' };
-      const fr = document.createElement('iframe');
-      fr.src = base.replace(/\/$/, '') + DETALHES[0] + id;
-      fr.style.cssText = 'position:fixed;left:-4000px;top:0;width:1300px;height:900px;opacity:0;pointer-events:none;border:0';
-      // sandbox SEM allow-top-navigation: se a página tentar "sair do iframe" (top.location = ...), o navegador bloqueia.
-      // Sem isso a janela principal era levada para a Análise da proposta e a coleta morria no meio (regressão da v11.29).
-      fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
-      document.body.appendChild(fr);
-      const doc = () => { try { return fr.contentDocument; } catch (_) { return null; } };
-      const ate = async (cond, seg) => { const fim = Date.now() + seg * 1000; while (Date.now() < fim) { try { if (cond()) return true; } catch (_) {} await sleep(150); } return false; };
-      const temTitulo = () => { const d = doc(); return !!d && [...d.querySelectorAll('body *')].some(el => !/^(SCRIPT|STYLE)$/.test(el.tagName) && /^identifica[çc][ãa]o do cliente$/i.test(el.textContent.replace(/\s+/g, ' ').trim())); };
+      const ctl = new AbortController();
+      const tm = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_REDE * 1000);
+      let html = '';
       try {
-        const link = () => { const d = doc(); return d && d.querySelector('a[onclick*="MesaAnaliseDados"][onclick*="Cliente"]'); };
-        if (!await ate(() => doc() && doc().location.href !== 'about:blank' && doc().readyState === 'complete', 20)) { r.motivo = 'página da análise não carregou'; return r; }
-        if (!await ate(link, 5)) { r.motivo = 'link da aba Cliente não encontrado'; return r; }
-        if (!temTitulo()) {
-          link().click();   // o próprio link do sistema (o onclick roda na página)
-          if (!await ate(temTitulo, 12)) { r.motivo = 'aba Cliente não carregou'; return r; }
-        }
-        await ate(() => acharRotulo(doc(), 'Nome do Cliente', 'Identificação do Cliente', true), 3);
-        await sleep(300);
-        const d = doc(), T = 'Identificação do Cliente';
-        r.ok = true;
-        r.nome = acharRotulo(d, 'Nome do Cliente', T, true);
-        r.cpf = (acharRotulo(d, 'CPF', T, true) || '').replace(/\D/g, '') || null;
-        const em = acharRotulo(d, 'Email', T, true) || acharRotulo(d, 'E-mail', T, true);
-        r.email = em && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) ? em : null;
-        for (const rot of ['Telefone 1', 'Celular', 'Telefone Celular', 'Telefone 2', 'Telefone']) {
-          const tel = fmtTelefone(acharRotulo(d, rot, T, true) || '');
-          if (tel) { r.telefone = tel; break; }
-        }
-      } finally { fr.remove(); }
+        const resp = await fetch(base.replace(/\/$/, '') + '/MesaCredito/MesaAnaliseCliente?lngProposta=' + encodeURIComponent(id), { credentials: 'include', signal: ctl.signal });
+        if (!resp.ok) { r.motivo = 'aba Cliente respondeu HTTP ' + resp.status; return r; }
+        html = await resp.text();
+      } catch (e) {
+        r.motivo = ctl.signal.aborted ? 'aba Cliente: tempo esgotado' : 'aba Cliente: erro de rede';
+        return r;
+      } finally { clearTimeout(tm); }
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const bloco = doc.querySelector('#divDetalhePropostaCadastro') || doc.body;
+      const limpo = t => String(t || '').replace(/[\s\u00a0]+/g, ' ').trim();
+      // valor do campo: <b> da mesma célula do <small> com o rótulo exato
+      const campo = rotulo => {
+        const sm = [...bloco.querySelectorAll('small')].find(x => limpo(x.textContent).toLowerCase() === rotulo.toLowerCase());
+        if (!sm) return null;
+        const cel = sm.closest('td') || sm.parentElement;
+        const b = cel && cel.querySelector('b');
+        const v = b ? limpo(b.textContent) : '';
+        return v || null;
+      };
+      if (!campo('Nome do Cliente') && !campo('CPF')) { r.motivo = 'aba Cliente sem o bloco Identificação do Cliente'; return r; }
+      r.ok = true;
+      r.nome = campo('Nome do Cliente');
+      r.cpf = (campo('CPF') || '').replace(/\D/g, '') || null;
+      const em = campo('Email') || campo('E-mail');
+      r.email = em && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em) ? em : null;
+      for (const rot of ['Telefone 1', 'Telefone 2']) {
+        const tel = fmtTelefone(campo(rot) || '');
+        if (tel) { r.telefone = tel; break; }
+      }
       return r;
     }
 

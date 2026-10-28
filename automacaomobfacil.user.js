@@ -2,7 +2,7 @@
 // @name         MobFacil -> Planilha (automático)
 // @namespace    mobfacil-planilha
 // @version      11.23
-// @vauthor      Arthur 
+// @author       Arthur
 // @description  Coleta restritivos, score e consultas do MobFacil e copia para a planilha
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*
@@ -452,7 +452,7 @@
         return { res: 'tempo' };
       };
 
-      // Com o scoreCadastroPositivo aberto, abre os filhos fechados dele, UM por vez
+      // Com o scoreCadastroPositivo aberto, abre os filhos fechados dela, UM por vez
       // (sanfona: abrir um fecha o irmão) e lê o score depois de cada clique.
       const explorarScore = async maxSeg => {
         const limite = Math.min(Date.now() + maxSeg * 1000, prazo);
@@ -886,7 +886,7 @@
       else label = descr.charAt(0).toUpperCase() + descr.slice(1);
       return { label, atual, descr };
     }
-    // Motivo de reprovação da coleta simples (coluna R), calculated pelos cortes do CONFIG.
+    // Motivo de reprovação da coleta simples (coluna R), calculado pelos cortes do CONFIG.
     // Não reprovada / sem dados = vazio. "Divergência Documentação" não dá para saber pelos dados: fica à mão.
     const motivoColunaR = d => {
       if (!d) return '';

@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         MobFacil -> Planilha (automático)
+// @name         PaymobiFin - Relatório
 // @namespace    mobfacil-planilha
-// @version      11.23
+// @version      11.25
 // @author       Arthur
-// @description  Coleta restritivos, score e consultas do MobFacil e copia para a planilha
+// @description  Auditoria de crédito, relatórios PaymobiFin para planilhas e download de CCBs
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*
 // @homepageURL  https://github.com/arthursoaress7/Mobfacil-Automator/tree/main
@@ -20,34 +20,50 @@
 (function () {
   'use strict';
 
-  const VERSAO = 'v11.23';
+  const VERSAO = 'v11.25';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
     MARGEM: 8,              // s: o iframe encerra sozinho antes do limite acima
     ESPERA_ARVORE: 25,      // s esperando o ID/árvore aparecer no iframe
     CAMINHO_SEG: 35,        // s máximos para abrir cada caminho da árvore até o dado
     SCORE_SEG: 30,          // s máximos para o caminho do score + exploração dos filhos
-    BUSCA_SEG: 15,          // s máximos para cada caminho depois de uma pesquisa (plano B)
+    BUSCA_SEG: 25,          // s máximos para cada caminho depois de uma pesquisa (plano B) (antes 15: faltava tempo, ex.: 4677)
     ESPERA_NO: 4,           // s esperando um nó aparecer (renderizar) antes de concluir que ele não existe
-    MAX_CLIQUES_NO: 6,      // cliques máximos num mesmo nó que não abre (antes 12)
+    MAX_CLIQUES_NO: 6,      // cliques máximos num mesmo nó que não abre
     CLIQUES_VAZIO: 4,       // cliques num nó FINAL do caminho que continua fechado: considera o nó vazio (ex.: pendenciaFinanceira sem pendências)
     PAUSA_BUSCA: 700,       // ms esperando a pesquisa filtrar a árvore
     PASSO_ROLAGEM: 0.4,     // fração da altura visível que a rolagem avança por passo
-    PASSO_MS: 150,          // ms de espera depois de cada passo de rolagem (antes 200; aumente se falhar a leitura)
-    ESPERA_CLIQUE: 120,     // ms de espera depois de clicar nos nós (antes 250; aumente se falhar a leitura)
-    INTERVALO_CLIQUE: 900,  // ms mínimos antes de clicar DE NOVO no mesmo nó (evita abrir e fechar; não mudou)
-    GAP_NOVO_NO: 150,       // ms mínimos entre cliques em nós DIFERENTES (o anterior já abriu; antes era 900 para todos)
+    PASSO_MS: 150,          // ms de espera depois de cada passo de rolagem
+    ESPERA_CLIQUE: 120,     // ms de espera depois de clicar nos nós
+    INTERVALO_CLIQUE: 900,  // ms mínimos antes de clicar DE NOVO no mesmo nó (evita abrir e fechar)
+    GAP_NOVO_NO: 150,       // ms mínimos entre cliques em nós DIFERENTES
     ESPERA_RENDER: 500,     // ms esperando o próximo nó aparecer antes de começar a rolar a árvore
-    POLL_MOTOR: 150,        // ms entre verificações no iframe (antes 300)
-    POLL_PRINCIPAL: 100,    // ms entre verificações na janela principal (antes 250)
-    PAUSA: 100,             // ms entre propostas (antes 300)
+    ESPERA_MOVIMENTO: 1500, // ms máximos esperando a animação de abrir/fechar da árvore terminar antes de clicar
+    DESTRAVA_MOVIMENTO: 1200, // ms com a árvore "em animação" para considerá-la travada e liberar os cliques
+    POLL_MOTOR: 150,        // ms entre verificações no iframe
+    POLL_PRINCIPAL: 100,    // ms entre verificações na janela principal
+    PAUSA: 100,             // ms entre propostas
     TIMEOUT_REDE: 30,       // s máximos do fetch da página do motor
     BATIDA: 5,              // s: tempo para considerar que a coleta de outra aba ainda está viva
     CORTE_SCORE: 390,       // reprova se score < 390
     CORTE_VALOR: 4000,      // reprova se valor de restrições > 4000
     CORTE_QTD: 10,          // reprova se quantidade de restrições > 10
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
+    TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
   };
+
+  // janela da página (fora da sandbox do Tampermonkey): dá acesso aos objetos do próprio site
+  const PAGINA = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+  // Preferências (aba Configurações). Valor padrão usado quando o usuário nunca alterou.
+  const PADRAO = {
+    auditoriaCompleta: true,         // CPF, motivo e dados da proposta (modelo Auditoria 2 Completo)
+    ignorarCanceladasTestes: true,   // canceladas e testes nunca são processadas
+    formatoAuto: true,               // formato de cópia escolhido pelo modo
+    formatosAntigos: false,          // mostra os formatos antigos na escolha manual
+    copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
+  };
+  const cfg = k => GM_getValue(k, PADRAO[k]);
 
   // sleep via Web Worker: abas em segundo plano deixam setTimeout lento (até 1 minuto por tick); o worker não.
   // Se o site bloquear o worker (CSP), cai no setTimeout normal. O setTimeout reserva (ms + 1,5 s) evita travar se o worker falhar.
@@ -67,23 +83,29 @@
       setTimeout(() => { if (pend[i]) { delete pend[i]; r(); } }, ms + 1500);
     });
   })();
-  // motivos de reprovação que exigem ler a árvore (qtd e valor de restrições); nos outros (renda, score, idade...) a mensagem basta
-  const PRECISA_ARVORE = /restri|pend|negativ/i;
   const NOMES = { qtd: 'qtd restritivos', val: 'valor restritivos', score: 'score', consultas: 'consultas', cpf: 'cpf', reprov: 'motivo da reprovação' };
-  // o que falta coletar depende do modo: aprovadas = só CPF; reprovadas = mensagem de reprovação (+ qtd/valor/score se for o caso)
-  const campos = d => {
+  // Auditoria completa inclui CPF e motivo; os dados de crédito são SEMPRE coletados.
+  const campos = () => {
     const m = GM_getValue('modo', 'coleta');
     if (m === 'aprovadas') return ['cpf'];
-    if (m === 'reprovadas') return ['reprov'];   // a mensagem de reprovação traz todos os motivos e valores; não precisa abrir a árvore
-    return ['qtd', 'val', 'score', 'consultas'];
+    if (m === 'reprovadas') return ['reprov'];
+    const credito = ['qtd', 'val', 'score', 'consultas'];
+    return cfg('auditoriaCompleta') ? [...credito, 'cpf', 'reprov'] : credito;
   };
-  const completo = d => d && campos(d).every(k => d[k] != null);
-  const faltaCampos = d => !d ? ['tudo'] : campos(d).filter(k => d[k] == null).map(k => NOMES[k]);
+  const completo = d => !!d && campos().every(k => d[k] != null);
+  const faltaCampos = d => !d ? ['tudo'] : campos().filter(k => d[k] == null).map(k => NOMES[k]);
 
   /* ================= LEITURA DA ÁRVORE ================= */
 
   // tira o ": null" (e similares) do título dos nós-objeto: "calculaRisco: null" -> "calculaRisco"
   const limpa = s => s.replace(/\s*:\s*(null|undefined|Object|Array\(\d*\)|\{.*\}|\[.*\])?\s*$/i, '').trim();
+
+  // execuções do fluxo: "27/10/2026 às 12:34:56"
+  const rxData = /^(\d{2})\/(\d{2})\/(\d{4}).*?(\d{2}):(\d{2})(?::(\d{2}))?/;
+  const chaveData = txt => {
+    const m = String(txt).match(rxData);
+    return m ? Number(m[3] + m[2] + m[1] + m[4] + m[5] + (m[6] || '00')) : -1;
+  };
 
   // A árvore é VIRTUALIZADA: só os nós da área visível existem no DOM.
   const nos = () =>
@@ -97,6 +119,119 @@
         d: no.querySelectorAll('.ant-tree-indent-unit').length,       // profundidade
       };
     }).filter(x => x && x.t);
+
+  /* ---- Leitura direta dos dados da árvore (React) ----
+     A árvore do MobFacil (antd/rc-tree) guarda TODOS os nós na memória (treeData), inclusive os fechados
+     e os fora da tela. Quando o navegador permite acessar esses dados, os valores são lidos sem depender
+     de cliques. Se não der (outro navegador, outra versão do site), tudo continua pelo caminho de cliques.
+     A lista só é usada depois de conferida com os títulos que aparecem na tela. */
+  const react = { dados: null, bruta: null, lista: null, ok: null, nos: 0, motivo: 'não lido', inst: null };
+
+  const textoReact = (x, prof = 0) => {
+    if (x == null || typeof x === 'boolean' || prof > 15) return '';
+    if (typeof x === 'string' || typeof x === 'number') return String(x);
+    if (Array.isArray(x)) return x.map(y => textoReact(y, prof + 1)).join('');
+    if (typeof x === 'object' && x.props) return textoReact(x.props.children, prof + 1);
+    return '';
+  };
+
+  function arvoreReact() {
+    let raizes = [];
+    try { raizes = [...PAGINA.document.querySelectorAll('.ant-tree')]; } catch (_) { return null; }
+    for (const el of raizes) {
+      let k = null;
+      try { k = Object.keys(el).find(x => /^__react(Fiber|InternalInstance)\$/.test(x)); } catch (_) {}
+      if (!k) continue;
+      let f = el[k], achado = null, inst = null;
+      for (let i = 0; f && i < 40; i++, f = f.return) {
+        const sn = f.stateNode, st = sn && sn.state;
+        if (!inst && st && typeof st === 'object' && 'listChanging' in st) inst = sn;
+        if (!achado && st && Array.isArray(st.treeData)) achado = { dados: st.treeData, fn: st.fieldNames || (sn.props || {}).fieldNames || {}, tr: (sn.props || {}).titleRender };
+        const p = f.memoizedProps;
+        if (!achado && p && Array.isArray(p.treeData)) achado = { dados: p.treeData, fn: p.fieldNames || {}, tr: p.titleRender };
+        if (achado && inst) break;
+      }
+      if (achado || inst) return { ...(achado || {}), inst };
+    }
+    return null;
+  }
+
+  function achatar(info) {
+    const kc = (info.fn && info.fn.children) || 'children', kt = (info.fn && info.fn.title) || 'title';
+    const out = [];
+    const rec = (arr, d) => {
+      for (const n of arr) {
+        if (out.length >= 40000) return;
+        if (!n || typeof n !== 'object') continue;
+        let t = n[kt];
+        if (typeof info.tr === 'function') { try { const s = textoReact(info.tr(n)); if (s) t = s; } catch (_) {} }
+        if (typeof t === 'function') { try { t = t(n); } catch (_) { t = ''; } }
+        const txt = textoReact(t).replace(/\s+/g, ' ').trim();
+        const filhos = Array.isArray(n[kc]) ? n[kc] : [];
+        out.push({ t: txt, n: limpa(txt), d, filhos: filhos.length });
+        if (filhos.length && d < 80) rec(filhos, d + 1);
+      }
+    };
+    rec(info.dados, 0);
+    return out;
+  }
+
+  // Várias execuções do fluxo (datas) no mesmo nível: mantém só a MAIS RECENTE, igual ao caminho de cliques.
+  function podarExecucoes(lista) {
+    const fora = new Uint8Array(lista.length);
+    for (let i = 0; i < lista.length; i++) {
+      const p = lista[i];
+      const datas = [];
+      for (let j = i + 1; j < lista.length && lista[j].d > p.d; j++) if (lista[j].d === p.d + 1 && rxData.test(lista[j].n)) datas.push(j);
+      if (datas.length < 2) continue;
+      const melhor = datas.reduce((a, b) => (chaveData(lista[b].t) > chaveData(lista[a].t) ? b : a));
+      datas.forEach(j => {
+        if (j === melhor) return;
+        fora[j] = 1;
+        for (let k = j + 1; k < lista.length && lista[k].d > lista[j].d; k++) fora[k] = 1;
+      });
+    }
+    return lista.filter((_, i) => !fora[i]);
+  }
+
+  // confere a lista da memória com os títulos visíveis na tela (null = ainda não dá para conferir)
+  function validarReact(bruta) {
+    const dom = nos().slice(0, 80);
+    if (dom.length < 3) return null;
+    const vistos = new Set(bruta.map(n => n.t));
+    return dom.filter(n => vistos.has(n.t)).length / dom.length >= 0.8;
+  }
+
+  function listaReact() {
+    const arv = arvoreReact();
+    react.inst = arv ? arv.inst : null;
+    if (!arv || !arv.dados) { react.motivo = 'árvore React não acessível'; return null; }
+    if (arv.dados !== react.dados) {
+      react.dados = arv.dados;
+      try { react.bruta = achatar(arv); react.lista = podarExecucoes(react.bruta); } catch (e) { react.bruta = react.lista = []; }
+      react.nos = react.bruta.length;
+      react.ok = null;
+    }
+    if (react.ok == null && react.bruta.length) {
+      const v = validarReact(react.bruta);
+      if (v != null) { react.ok = v; react.motivo = v ? 'ok' : 'títulos não conferem com a tela'; }
+    }
+    return react.ok ? react.lista : null;
+  }
+  // nº de filhos de um nó segundo a memória da árvore (null = não sabe)
+  const filhosReact = (txt, d) => {
+    if (!react.ok || !react.bruta) return null;
+    const n = react.bruta.find(x => x.d === d && x.t === txt);
+    return n ? n.filhos : null;
+  };
+  // só o bloco "Fluxos P1" (quando existe); sem ele (ex.: fluxos_reanalise), a árvore toda
+  const soP1 = lista => {
+    const i = lista.findIndex(n => /^Fluxos P1\b/i.test(n.t));
+    if (i < 0) return lista;
+    let f = i + 1;
+    while (f < lista.length && lista[f].d > lista[i].d) f++;
+    return lista.slice(i, f);
+  };
 
   function valor(lista, chave, ancora) {
     let i = -1, dA = null;
@@ -130,12 +265,8 @@
   // nós "raiz" dos dados (usado só no diagnóstico)
   const RAIZES = /^(spcbrasil|calcularisco|pendenciafinanceira|consultarealizada|scorecadastropositivo)$/i;
 
-  function extrair() {
-    const texto = document.body.textContent.replace(/\s+/g, ' ');
-    const id = (texto.match(/ID da proposta:\s*(\d+)/i) || [])[1];
-    if (!id) return null;
-    const todos = nos();
-
+  // dados de crédito e CPF a partir de uma lista de nós (da tela ou da memória da árvore)
+  function extrairDeLista(todos) {
     const marcas = [];
     todos.forEach((n, i) => { if (/^Fluxos P\d/i.test(n.t)) marcas.push({ nome: n.t, ini: i }); });
     marcas.forEach((m, k) => (m.fim = k + 1 < marcas.length ? marcas[k + 1].ini : todos.length));
@@ -165,7 +296,7 @@
 
     // Score: o nó scoreCadastroPositivo (ramo do SPC) guarda o valor. Aceita "valorScore" em qualquer
     // lugar ou "score" dentro do scoreCadastroPositivo.
-    let score =
+    const score =
       num(valor(todos, 'valorScore')) ??
       num(valor(todos, 'valorScore', 'scoreCadastroPositivo')) ??
       num(valor(todos, 'score', 'scoreCadastroPositivo')) ??
@@ -178,20 +309,37 @@
     // CPF: nó "Cpf: 12345678901" logo abaixo da execução do fluxo (só aceita 11 dígitos)
     const cpfDig = String(valor(todos, 'Cpf') || '').replace(/\D/g, '');
     const cpf = cpfDig.length === 11 ? cpfDig : null;
+    return { qtd, val, score, consultas, cpf };
+  }
+
+  function extrair() {
+    const texto = document.body.textContent.replace(/\s+/g, ' ');
+    const id = (texto.match(/ID da proposta:\s*(\d+)/i) || [])[1];
+    if (!id) return null;
+    // 1) o que está na tela (validado nas versões anteriores); 2) completa o que faltar com a memória da árvore
+    const r = extrairDeLista(nos());
+    let lr = null;
+    try { lr = listaReact(); } catch (_) { lr = null; }
+    if (lr) {
+      const x = extrairDeLista(soP1(lr));
+      ['qtd', 'val', 'score', 'consultas', 'cpf'].forEach(k => { if (r[k] == null && x[k] != null) r[k] = x[k]; });
+    }
     // Mensagem de reprovação do MobFacil: "(P1) Reprovar: renda inferior a mínima permitida (1621 reais) (atual=R$1300)"
     // null = cartão de resultado ainda não carregou; '' = carregou e não tem mensagem de reprovação
     let reprov = null;
     if (/Fluxo processado\s*:/i.test(texto)) {
-      let ms = texto.match(/\(P\d+\)\s*Reprovar\s*:.{0,200}?\(atual\s*=\s*[^)]*\)/gi);
+      // cada motivo termina no "(atual=...)", "(score=...)" ou "(situação=...)" e NUNCA atravessa o motivo seguinte
+      // (antes um motivo de score seguido de um de valor virava uma mensagem só, e o score sem "atual=" se perdia)
+      let ms = texto.match(/\(P\d+\)\s*Reprovar\s*:(?:(?!\(P\d+\)\s*Reprovar).){0,200}?\((?:atual|score|situa[çc][ãa]o)\s*=\s*[^)]*\)/gi);
       if (!ms) ms = texto.match(/\(P\d+\)\s*Reprovar\s*:.{0,150}?(?=\s*\(P\d+\)|\s*Exibir|\s*$)/gi);
       reprov = [...new Set((ms || []).map(x => x.trim()))].join(' ¦ ');
     }
     // reprovada por score: a própria mensagem traz o valor, ex.: "(score=351)"
-    if (score == null && reprov) {
+    if (r.score == null && reprov) {
       const ms = reprov.match(/score\s*=\s*(\d+(?:[.,]\d+)?)/i);
-      if (ms) score = num(ms[1]);
+      if (ms) r.score = num(ms[1]);
     }
-    return { id, qtd, val, score, consultas, cpf, reprov };
+    return { id, ...r, reprov };
   }
 
   // só preenche campos ainda vazios: uma leitura posterior nunca sobrescreve dado bom
@@ -205,7 +353,7 @@
     if (!mudou) return;
     todos[r.id] = atual;
     GM_setValue('dados', todos);
-    console.log('[MobFacil]', r.id, atual);
+    console.log('[PaymobiFin]', r.id, atual);
   }
 
   /* ================= IFRAME DO MOTOR (enviamotor.mobfacil.com.br) ================= */
@@ -213,7 +361,7 @@
     // Em aba escondida o navegador não executa requestAnimationFrame, e a árvore (antd) usa isso para abrir os nós.
     // Só enquanto a aba estiver escondida, troca por um setTimeout equivalente. Com a aba visível nada muda.
     try {
-      const W = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+      const W = PAGINA;
       const raf0 = W.requestAnimationFrame.bind(W), caf0 = W.cancelAnimationFrame.bind(W);
       const falsos = new Map();
       let nid = 1e9;
@@ -252,6 +400,60 @@
       return null;
     }
 
+    /* A árvore ignora cliques enquanto a animação de abrir/fechar está em andamento (rc-tree: "listChanging").
+       Se a animação fica presa (nó animado fora da área visível), TODOS os cliques seguintes são ignorados:
+       era o que travava "result"/"return_object" e fazia o score não abrir (4677, 4688, 4689).
+       Antes de cada clique, espera a animação terminar; se ela não termina, traz o nó animado para a tela
+       e, em último caso, libera a árvore. */
+    let destravadas = 0;
+    const emMovimento = () => {
+      if (document.querySelector('.ant-tree-treenode-motion')) return true;
+      try { return !!(react.inst && react.inst.state && react.inst.state.listChanging); } catch (_) { return false; }
+    };
+    const aguardarMovimento = async () => {
+      const ini = Date.now();
+      try { const a = arvoreReact(); if (a) react.inst = a.inst; } catch (_) {}
+      while (emMovimento() && Date.now() - ini < CONFIG.ESPERA_MOVIMENTO) {
+        if (Date.now() - ini > 500) {
+          const m = document.querySelector('.ant-tree-treenode-motion'), h = areaRolavel();
+          if (m && h) {
+            const r = m.getBoundingClientRect(), rh = h.getBoundingClientRect();
+            if (r.bottom < rh.top || r.top > rh.bottom) h.scrollTop += r.top - rh.top - 40;
+          }
+        }
+        if (Date.now() - ini > CONFIG.DESTRAVA_MOVIMENTO) {
+          try {
+            const inst = react.inst;
+            if (inst && inst.state && inst.state.listChanging) {
+              if (typeof inst.onListChangeEnd === 'function') inst.onListChangeEnd();
+              else inst.setState({ listChanging: false });
+              destravadas++;
+            }
+          } catch (_) {}
+        }
+        await sleep(50);
+      }
+    };
+
+    // clica no seletor (+) do nó; relocaliza o elemento (a lista virtual recria os nós) e, a partir da
+    // 3ª tentativa, envia a sequência completa de eventos do mouse
+    const clicar = (item, tentativa) => {
+      const fresco = [...document.querySelectorAll('.ant-tree-treenode')].find(no => {
+        const t = no.querySelector('.ant-tree-title');
+        return t && t.textContent.replace(/\s+/g, ' ').trim() === item.txt && no.querySelectorAll('.ant-tree-indent-unit').length === item.d;
+      }) || item.no;
+      const sw = fresco.querySelector(':scope > .ant-tree-switcher_close');
+      if (!sw) return false;
+      if (tentativa <= 2) { sw.click(); return true; }
+      const o = { bubbles: true, cancelable: true, button: 0 };
+      try { sw.dispatchEvent(new PointerEvent('pointerdown', o)); } catch (_) {}
+      sw.dispatchEvent(new MouseEvent('mousedown', o));
+      try { sw.dispatchEvent(new PointerEvent('pointerup', o)); } catch (_) {}
+      sw.dispatchEvent(new MouseEvent('mouseup', o));
+      sw.dispatchEvent(new MouseEvent('click', o));
+      return true;
+    };
+
     // Diagnóstico SEM dados pessoais: só mostra o NOME dos campos.
     // Valores só aparecem para campos numéricos de interesse (quantidade, valor, score, restritivos...).
     const SEGURO = /^(quantidade\w*|valor\w*|total\w*|qtd\w*|score\w*|\w*restritiv\w*|pendencia\w*|consulta\w*)$/i;
@@ -274,9 +476,12 @@
         totalNos: todas.length,
         nosFechados: document.querySelectorAll('.ant-tree-switcher_close').length,
         rolagem: h ? { topo: Math.round(h.scrollTop), visivel: h.clientHeight, total: h.scrollHeight } : 'sem rolagem',
+        // leitura direta da memória da árvore: ok = usada; nos = quantidade de nós lidos
+        memoria: { ok: react.ok, nos: react.nos, motivo: react.motivo },
+        animacao: { agora: emMovimento(), destravadas },
         dadosAteAgora,
         linhas: semToken.filter(n =>
-          /restritiv|score|quantidadeTotal|valorTotal|^Fluxos|calculaRisco|pendencia|consultaRealizada|^resumo$|^Exibir|^\d{2}\/\d{2}\/\d{4}/i.test(n.t)
+          /restritiv|score|quantidadeTotal|valorTotal|^Fluxos|calculaRisco|pendencia|consultaRealizada|^resumo$|^Exibir|^\d{2}\/\d{2}\/\d{4}|reanalise/i.test(n.t)
         ).slice(0, 60).map(fmt),
       };
       if (!completo(dadosAteAgora)) {
@@ -291,6 +496,8 @@
           if (raiz != null) dentro.push(fmt(n));
         });
         info.dentroDasRaizes = dentro.slice(0, 250);
+        // estrutura da memória (só nomes, até 4 níveis) — mostra o que existe mesmo nos nós fechados (ex.: fluxos_reanalise)
+        if (react.bruta && react.bruta.length) info.memoriaEsqueleto = react.bruta.filter(n => n.d <= 5 && !/token|jwt/i.test(n.t)).slice(0, 120).map(fmt);
       }
       // histórico: a árvore como ficou depois de cada caminho (não é sobrescrito pelo snapshot seguinte)
       const todos = GM_getValue('debug', {});
@@ -339,12 +546,8 @@
          Por isso não dá para abrir tudo de uma vez. Abre-se só o CAMINHO até o dado, lê,
          e depois abre o caminho do próximo dado. Sempre um clique por vez, recalculando
          o próximo passo a partir da árvore como ela está agora. */
-      const rxData = /^(\d{2})\/(\d{2})\/(\d{4}).*?(\d{2}):(\d{2})(?::(\d{2}))?/;
-      const chaveData = txt => {
-        const m = txt.match(rxData);
-        return m ? Number(m[3] + m[2] + m[1] + m[4] + m[5] + (m[6] || '00')) : -1;
-      };
-      const FLUXO = [{ re: /^exibir fluxos$/i }, { re: /^fluxos p1\b/i }, { data: true }];  // data = a execução mais recente
+      // "Fluxos P1" (ou, em propostas de reanálise, "fluxos_reanalise"); data = a execução mais recente (pula se não houver datas)
+      const FLUXO = [{ re: /^exibir fluxos$/i }, { re: /^fluxos p1\b/i, alt: /^fluxos[\s_-]*rean/i }, { data: true, pula: true }];
       const SPC = [{ re: /^biros$/i }, { re: /^spcbrasil$/i }, { re: /^result$/i }, { re: /^return_object$/i }, { re: /^resultado$/i }];
       const CAMINHOS = {
         // só abre a execução do fluxo (o CPF fica logo abaixo dela)
@@ -377,16 +580,23 @@
         let ini = 0, fim = lista.length, dPai = -1, pai = null;
         for (let k = 0; k < passos.length; k++) {
           const p = passos[k];
-          let alvo = -1;
-          for (let j = ini; j < fim; j++) {
-            const n = lista[j];
-            if (k > 0 && n.d !== dPai + 1) continue;                    // só filhos diretos do nó anterior
-            if (!(p.data ? rxData.test(n.nome) : p.re.test(n.nome))) continue;
-            if (alvo < 0 || (p.data && chaveData(n.txt) > chaveData(lista[alvo].txt))) alvo = j;
-            if (!p.data) break;
-          }
+          const achar = re => {
+            let alvo = -1;
+            for (let j = ini; j < fim; j++) {
+              const n = lista[j];
+              if (k > 0 && n.d !== dPai + 1) continue;                    // só filhos diretos do nó anterior
+              if (!(p.data ? rxData.test(n.nome) : re.test(n.nome))) continue;
+              if (alvo < 0 || (p.data && chaveData(n.txt) > chaveData(lista[alvo].txt))) alvo = j;
+              if (!p.data) break;
+            }
+            return alvo;
+          };
+          let alvo = achar(p.re);
+          if (alvo < 0 && p.alt) alvo = achar(p.alt);
           if (alvo < 0) {
-            if (p.opc && pai && !pai.fechado && fim - ini > 0) return { estado: 'ok' };   // passo opcional que não existe
+            const paiComFilhos = pai && !pai.fechado && fim - ini > 0;
+            if (p.pula && paiComFilhos) continue;                         // passo dispensável (ex.: reanálise sem datas)
+            if (p.opc && paiComFilhos) return { estado: 'ok' };           // passo opcional que não existe
             return { estado: 'sem-no', passo: k, paiAberto: !!pai && !pai.fechado, nFilhos: fim - ini };
           }
           const n = lista[alvo];
@@ -422,12 +632,15 @@
             // nó novo (o anterior já abriu): clica logo; o MESMO nó ainda fechado: espera o intervalo longo
             if (Date.now() - ultimoClique >= (chave === ultimaChave ? CONFIG.INTERVALO_CLIQUE : CONFIG.GAP_NOVO_NO) &&
                 !s.no.no.querySelector('.ant-tree-switcher-loading-icon')) {
-              // nó final que não abre depois de alguns cliques = nó vazio (lista sem itens), não é erro
-              if (s.passo === ultimoObrig && (cliques[chave] || 0) >= CONFIG.CLIQUES_VAZIO) return { res: 'vazio', nome: s.no.nome.slice(0, 40), passo: s.passo };
+              // nó final que não abre depois de alguns cliques = nó vazio (lista sem itens), não é erro.
+              // Se a memória da árvore mostra que ele TEM filhos, não é vazio: continua tentando (evita "0" falso).
+              if (s.passo === ultimoObrig && (cliques[chave] || 0) >= CONFIG.CLIQUES_VAZIO && !(filhosReact(s.no.txt, s.no.d) > 0)) {
+                return { res: 'vazio', nome: s.no.nome.slice(0, 40), passo: s.passo };
+              }
               cliques[chave] = (cliques[chave] || 0) + 1;
               if (cliques[chave] > CONFIG.MAX_CLIQUES_NO) return { res: 'travou', nome: s.no.nome.slice(0, 40), passo: s.passo };
-              const sw = s.no.no.querySelector(':scope > .ant-tree-switcher_close');
-              if (sw) { sw.click(); ultimoClique = Date.now(); ultimaChave = chave; }
+              await aguardarMovimento();
+              if (clicar(s.no, cliques[chave])) { ultimoClique = Date.now(); ultimaChave = chave; }
             }
             await sleep(CONFIG.ESPERA_CLIQUE);
             continue;
@@ -455,11 +668,13 @@
         return { res: 'tempo' };
       };
 
-      // Com o scoreCadastroPositivo aberto, abre os filhos fechados dela, UM por vez
-      // (sanfona: abrir um fecha o irmão) e lê o score depois de cada clique.
+      // Com o scoreCadastroPositivo aberto, abre os filhos fechados dele, UM por vez, e lê o score depois de cada clique.
+      // Sanfona: abrir "detalheScoreCadastroPositivo" fecha o irmão "resumo". Antes o script voltava a abrir o resumo,
+      // que fechava o detalhe de novo (pingue-pongue) e o nó com o Score nunca era aberto (4688, 4689).
+      // Agora um nó que já esteve aberto (e foi lido) não é reaberto: a exploração segue para dentro.
       const explorarScore = async maxSeg => {
         const limite = Math.min(Date.now() + maxSeg * 1000, prazo);
-        const tentados = {};
+        const tentados = {}, abertos = new Set();
         let ultimoClique = 0, ultimaChave = '';
         while (Date.now() < limite) {
           lerEGravar();
@@ -471,8 +686,10 @@
           let alvo = base.fechado ? base : null;
           if (!alvo) {
             for (let f = i + 1; f < lista.length && lista[f].d > base.d; f++) {
-              const n = lista[f];
-              if (n.fechado && (tentados[n.d + '|' + n.txt] || 0) < 3) { alvo = n; break; }
+              const n = lista[f], ch = n.d + '|' + n.txt;
+              if (!n.fechado) { abertos.add(ch); continue; }
+              if (abertos.has(ch)) continue;
+              if ((tentados[ch] || 0) < 3) { alvo = n; break; }
             }
           }
           if (!alvo) {
@@ -484,10 +701,9 @@
           const chaveA = alvo.d + '|' + alvo.txt;
           if (Date.now() - ultimoClique >= (chaveA === ultimaChave ? CONFIG.INTERVALO_CLIQUE : CONFIG.GAP_NOVO_NO) &&
               !alvo.no.querySelector('.ant-tree-switcher-loading-icon')) {
-            const chave = chaveA;
-            tentados[chave] = (tentados[chave] || 0) + 1;
-            const sw = alvo.no.querySelector(':scope > .ant-tree-switcher_close');
-            if (sw) { sw.click(); ultimoClique = Date.now(); ultimaChave = chave; }
+            tentados[chaveA] = (tentados[chaveA] || 0) + 1;
+            await aguardarMovimento();
+            if (clicar(alvo, tentados[chaveA])) { ultimoClique = Date.now(); ultimaChave = chaveA; }
           }
           await sleep(CONFIG.ESPERA_CLIQUE);
         }
@@ -512,6 +728,9 @@
         return rr;
       };
 
+      // antes de abrir qualquer caminho: a memória da árvore pode já ter tudo
+      lerEGravar();
+
       const modoAtual = GM_getValue('modo', 'coleta');
       // modo "reprovadas": se o motivo não depende da árvore (renda, idade...), a mensagem do MobFacil basta
       if (modoAtual === 'reprovadas') {
@@ -529,25 +748,35 @@
       }
 
       // modo "aprovadas": só precisa do CPF, não faz o resto da coleta
-      if (GM_getValue('modo', 'coleta') === 'aprovadas') {
-        await rodar('fluxo', CONFIG.CAMINHO_SEG);
-        snapshot(r.id, 'fim (' + log.join(' | ') + ')', null);
+      if (modoAtual === 'aprovadas') {
+        if (!completo(dadosAtuais())) await rodar('fluxo', CONFIG.CAMINHO_SEG);
+        snapshot(r.id, 'fim (' + (log.join(' | ') || 'lido da memória') + ')', null);
         GM_setValue('fim', r.id);
         return;
       }
 
+      // auditoria: dá um instante para o cartão do resultado (motivo) carregar antes de concluir pela memória
+      if (completo(dadosAtuais()) === false && campos().includes('reprov') && dadosAtuais().reprov == null) {
+        for (let i = 0; i < 6 && dadosAtuais().reprov == null; i++) { await sleep(300); lerEGravar(); }
+      }
+
+      // Se um caminho do SPC (Biros > SPCBrasil > result...) travou, os outros caminhos do SPC travam no mesmo nó:
+      // pula direto para a pesquisa (plano B), que abre os ancestrais sozinha, em vez de gastar o tempo da proposta.
+      let spcTravou = false;
+      const marcaSPC = rr => { if (rr && rr.res === 'travou' && rr.passo >= FLUXO.length) spcTravou = true; return rr; };
+
       // 1) restritivos (qtd e valor)
       let d = dadosAtuais();
-      if (d.qtd == null || d.val == null) await rodar('risco', CONFIG.CAMINHO_SEG);
+      if (!completo(d) && (d.qtd == null || d.val == null)) await rodar('risco', CONFIG.CAMINHO_SEG);
 
       // 2) consultas
       d = dadosAtuais();
       let rrCons = null;
-      if (modoAtual !== 'reprovadas' && d.consultas == null && Date.now() < prazo) rrCons = await rodar('consultas', CONFIG.CAMINHO_SEG);
+      if (!completo(d) && modoAtual !== 'reprovadas' && d.consultas == null && Date.now() < prazo) rrCons = marcaSPC(await rodar('consultas', CONFIG.CAMINHO_SEG));
 
       // 3) score (scoreCadastroPositivo, depois de ler as consultas)
       d = dadosAtuais();
-      if (d.score == null && Date.now() < prazo) await rodar('score', CONFIG.SCORE_SEG);
+      if (!completo(d) && d.score == null && !spcTravou && Date.now() < prazo) marcaSPC(await rodar('score', CONFIG.SCORE_SEG));
 
       // 0 consultas SÓ se o caminho chegou em "resultado" aberto, com filhos,
       // o nó consultaRealizada não existe, e os outros dados já foram lidos.
@@ -559,11 +788,11 @@
 
       // 4) reserva: restritivos pelo SPC (pendenciaFinanceira)
       d = dadosAtuais();
-      if ((d.qtd == null || d.val == null) && Date.now() < prazo) await rodar('pendencia', CONFIG.CAMINHO_SEG);
+      if (!completo(d) && (d.qtd == null || d.val == null) && !spcTravou && Date.now() < prazo) marcaSPC(await rodar('pendencia', CONFIG.CAMINHO_SEG));
 
       // 4b) consultas de novo: depois do passo anterior o caminho do SPC já está aberto
       d = dadosAtuais();
-      if (modoAtual !== 'reprovadas' && d.consultas == null && Date.now() < prazo) await rodar('consultas', CONFIG.CAMINHO_SEG);
+      if (!completo(d) && modoAtual !== 'reprovadas' && d.consultas == null && !spcTravou && Date.now() < prazo) marcaSPC(await rodar('consultas', CONFIG.CAMINHO_SEG));
 
       // plano B: pesquisa o que ainda falta (a pesquisa abre os ancestrais sozinha) e refaz o caminho
       const busca = [
@@ -578,12 +807,13 @@
         const x = dadosAtuais();
         if (completo(x)) break;
         if (!precisa(x)) continue;
+        await aguardarMovimento();
         buscaOk = pesquisar(termo);
         await sleep(CONFIG.PAUSA_BUSCA);
         await rodar(caminho, caminho === 'score' ? CONFIG.SCORE_SEG : CONFIG.BUSCA_SEG);
       }
 
-      snapshot(r.id, 'fim (' + log.join(' | ') + ')', buscaOk);
+      snapshot(r.id, 'fim (' + (log.join(' | ') || 'lido sem abrir caminhos') + ')', buscaOk);
       GM_setValue('fim', r.id);
     }, CONFIG.POLL_MOTOR);
   }
@@ -640,6 +870,8 @@
     const falhas = {};
     const fila = () => GM_getValue('fila', []);
     const feitas = () => GM_getValue('feitas', []);
+    const ignoradas = () => GM_getValue('ignoradas', {});          // { id: 'teste' | 'cancelada' }
+    const verificadas = () => GM_getValue('verificadas', []);      // conferidas na tabela da tela
     const pendentes = () => { const f = new Set(feitas()); return fila().filter(id => !f.has(id)); };
     const linha = d => (d ? [d.qtd, d.val, d.score, d.consultas].map(x => (x == null ? '' : x)).join('\t') : '\t\t\t');
 
@@ -648,20 +880,27 @@
     painel.id = 'mf-p';
     painel.innerHTML = `
       <style>
-        #mf-p{position:fixed;bottom:60px;left:10px;z-index:2147483647;width:340px;background:#fff;color:#1f2937;
+        #mf-p{position:fixed;bottom:60px;left:10px;z-index:2147483647;width:340px;max-width:calc(100vw - 8px);background:#fff;color:#1f2937;
           border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 28px #0005;font:14px/1.4 system-ui,Segoe UI,Arial,sans-serif;overflow:hidden}
         #mf-p *{box-sizing:border-box;font-family:inherit}
-        #mf-p .mf-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e293b;color:#fff;font-size:15px}
+        #mf-p .mf-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e293b;color:#fff;font-size:15px;
+          cursor:move;user-select:none;touch-action:none}
         #mf-p .mf-top small{opacity:.6;margin-left:6px;font-size:12px}
+        #mf-p.mf-arrastando{opacity:.93;box-shadow:0 14px 40px #0007}
+        #mf-p .mf-abas{display:flex;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+        #mf-p .mf-abas button{flex:1;background:transparent;color:#64748b;border-radius:0;padding:9px 4px;font-size:13px;border-bottom:2px solid transparent}
+        #mf-p .mf-abas button.ativa{background:#fff;color:#1e293b;border-bottom-color:#2563eb}
         #mf-p .mf-sec{padding:10px 14px;border-bottom:1px solid #e2e8f0}
         #mf-p .mf-tit{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px}
         #mf-p #mf-st{font-size:15px;font-weight:600;margin-bottom:6px}
         #mf-p .mf-barra{height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden}
         #mf-p #mf-prog{height:100%;width:0;background:#16a34a;transition:width .3s}
         #mf-p .mf-linha{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-        #mf-p .mf-linha label{font-size:13px;color:#475569;cursor:pointer;display:flex;align-items:center;gap:4px}
+        #mf-p .mf-info{font-size:12px;color:#64748b}
         #mf-p textarea{width:100%;height:80px;resize:vertical;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;color:#1f2937;background:#fff}
+        #mf-p select,#mf-p input[type=url]{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;color:#1f2937}
         #mf-p .mf-grade{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+        #mf-p .mf-cheia{grid-column:1/-1}
         #mf-p button{cursor:pointer;border:0;border-radius:8px;padding:10px 8px;font-size:14px;font-weight:600;color:#fff;background:#475569;line-height:1.2}
         #mf-p button:hover:not(:disabled){filter:brightness(1.1)}
         #mf-p button:disabled{opacity:.35;cursor:not-allowed}
@@ -670,101 +909,218 @@
         #mf-p .azul{background:#2563eb}
         #mf-p .vermelho{background:#dc2626}
         #mf-p .cinza{background:#e2e8f0;color:#1e293b}
-        #mf-p .mf-mini{background:transparent;color:#fff;padding:2px 10px;font-size:18px}
-        #mf-p details{padding:10px 14px;border-bottom:1px solid #e2e8f0}
-        #mf-p summary{cursor:pointer;font-size:13px;color:#64748b;font-weight:600;margin-bottom:8px}
+        #mf-p .mf-mini{background:transparent;color:#fff;padding:2px 10px;font-size:18px;cursor:pointer}
+        #mf-p .mf-opc{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13px;color:#1f2937;cursor:pointer}
+        #mf-p .mf-opc input{margin-top:3px;flex:none}
+        #mf-p .mf-opc small{display:block;color:#64748b;font-size:12px;margin-top:1px}
+        #mf-p .mf-foot{padding:6px 14px;text-align:right;font-size:11px;color:#64748b;border-top:1px solid #e2e8f0}
+        #mf-p #mf-versao{cursor:default;user-select:none}
         #mf-p #mf-msg{margin:10px 14px 14px;padding:10px;background:#f1f5f9;border-radius:8px;font-size:13px;max-height:130px;overflow:auto;white-space:pre-wrap}
         #mf-p #mf-msg:empty{display:none}
         #mf-p .mf-corpo{max-height:calc(100vh - 140px);overflow-y:auto;overscroll-behavior:contain}
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
       </style>
-      <div class="mf-top"><div><b>Coleta MobFacil</b><small>${VERSAO}</small></div>
+      <div class="mf-top" title="Arraste para mover o painel"><div><b>PaymobiFin - Relatório</b></div>
         <button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-corpo">
-        <div class="mf-sec">
-          <div class="mf-tit">Status</div>
-          <div id="mf-st">Pronto</div>
-          <div class="mf-barra"><div id="mf-prog"></div></div>
+        <div class="mf-abas">
+          <button data-aba="rel">Relatórios</button>
+          <button data-aba="ccb">CCBs</button>
+          <button data-aba="cfg">Configurações</button>
         </div>
-        <div class="mf-sec">
-          <div class="mf-tit">Propostas <span id="mf-qtd"></span></div>
-          <select id="mf-modo" style="width:100%;margin-bottom:8px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;color:#1f2937">
-            <option value="coleta">Coleta simples (qtd, valor, score, consultas)</option>
-            <option value="reprovadas">Relatório: Reprovadas</option>
-            <option value="efetivadas">Relatório: Efetivadas (Boleto+)</option>
-            <option value="aprovadas">Relatório: Aprovadas não efetivadas</option>
-            <option value="valortransacao">Valor de transação (só a coluna, p/ Excel)</option>
-          </select>
-          <div class="mf-linha">
-            <button id="mf-tela" class="cinza">Ler da tela</button>
-            <label><input type="checkbox" id="mf-canc"> ignorar canceladas e testes</label>
+
+        <div data-pag="rel">
+          <div class="mf-sec">
+            <div class="mf-tit">Status</div>
+            <div id="mf-st">Pronto</div>
+            <div class="mf-barra"><div id="mf-prog"></div></div>
           </div>
-          <textarea id="mf-lista" placeholder="Ou cole aqui os números das propostas (um por linha)"></textarea>
-        </div>
-        <div class="mf-sec">
-          <div class="mf-tit">Controle</div>
-          <div class="mf-grade">
-            <button id="mf-ini" class="verde">▶ Iniciar</button>
-            <button id="mf-par" class="laranja">⏸ Pausar</button>
-            <button id="mf-cont" class="azul">⏯ Continuar</button>
-            <button id="mf-res" class="vermelho">↺ Resetar</button>
-          </div>
-        </div>
-        <div class="mf-sec">
-          <div class="mf-tit">Copiar para a planilha</div>
-          <div class="mf-grade">
-            <button id="mf-cop">Copiar resultado</button>
-            <button id="mf-cid">Copiar c/ proposta</button>
-            <button id="mf-colr" class="cinza" style="grid-column:1/-1" title="Só a coluna do motivo de reprovação, para colar na coluna R">Copiar motivo (coluna R)</button>
-          </div>
-        </div>
-        <details>
-          <summary>Ferramentas</summary>
-          <div class="mf-grade">
-            <button id="mf-fal" class="cinza">Faltantes</button>
-            <button id="mf-dbg" class="cinza">Diagnóstico</button>
-          </div>
-          <div style="margin-top:10px;font-size:13px;color:#475569">Colar em (formato da cópia dos relatórios):
-            <select id="mf-estilo" style="width:100%;margin-top:4px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;color:#1f2937">
-              <option value="canva">Canva (tabela com parágrafos)</option>
-              <option value="canvaxl">Canva (tabela estilo Excel)</option>
-              <option value="canvabr">Canva (tabela com quebra br)</option>
-              <option value="canvadiv">Canva (tabela com blocos div)</option>
-              <option value="canva2col">Canva (valor e quantidade em 2 colunas)</option>
-              <option value="excel">Excel (texto com tabulação)</option>
-              <option value="sheets">Google Sheets (texto com tabulação)</option>
+          <div class="mf-sec">
+            <div class="mf-tit">Propostas <span id="mf-qtd"></span></div>
+            <select id="mf-modo" style="margin-bottom:8px">
+              <option value="coleta">Relatório - Auditoria</option>
+              <option value="reprovadas">Relatório - Reprovadas</option>
+              <option value="efetivadas">Relatório - Efetivadas (Boleto+)</option>
+              <option value="aprovadas">Relatório - Aprovadas não efetivadas</option>
+              <option value="valortransacao">Relatório - Valor de transação (Excel)</option>
             </select>
+            <div class="mf-linha">
+              <button id="mf-tela" class="cinza">Ler da tela</button>
+              <span id="mf-filtro" class="mf-info"></span>
+            </div>
+            <textarea id="mf-lista" placeholder="Ou cole aqui os números das propostas (um por linha)"></textarea>
           </div>
-        </details>
+          <div class="mf-sec">
+            <div class="mf-tit">Controle</div>
+            <div class="mf-grade">
+              <button id="mf-ini" class="verde">▶ Iniciar</button>
+              <button id="mf-par" class="laranja">⏸ Pausar</button>
+              <button id="mf-cont" class="azul">⏯ Continuar</button>
+              <button id="mf-res" class="vermelho">↺ Resetar</button>
+            </div>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Copiar para a planilha <span id="mf-formato-info" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
+            <div class="mf-grade">
+              <button id="mf-cop">Copiar resultado</button>
+              <button id="mf-cid">Copiar c/ proposta</button>
+              <button id="mf-cfull" class="azul mf-cheia" title="Linha inteira do modelo Auditoria 2 Completo, da coluna A (Proposta) à R (Motivo Reprovação)">Copiar auditoria completa (A–R)</button>
+              <button id="mf-colr" class="cinza mf-cheia" title="Só a coluna do motivo de reprovação, para colar na coluna R">Copiar motivo (coluna R)</button>
+            </div>
+          </div>
+        </div>
+
+        <div data-pag="ccb">
+          <div class="mf-sec">
+            <div class="mf-tit">Download de CCBs</div>
+            <div class="mf-info" style="margin-bottom:8px">Use na tela <b>Fila de Propostas</b>. Informe nomes de clientes ou números de proposta (um por linha).
+              Só baixa propostas <b>EFETIVADAS</b>, <b>assinadas digitalmente</b> e com exatamente uma "CCB ASSINADA". Arquivo: CPF_NOME.pdf.</div>
+            <button id="mf-ccb-ler" class="cinza" style="width:100%;margin-bottom:8px">Ler propostas elegíveis da fila</button>
+            <textarea id="mf-ccb-lista" placeholder="Nomes completos ou números das propostas (um por linha)"></textarea>
+            <div class="mf-grade" style="margin-top:8px">
+              <button id="mf-ccb-baixar" class="verde">⬇ Baixar CCBs</button>
+              <button id="mf-ccb-parar" class="laranja" disabled>⏹ Parar</button>
+            </div>
+            <div id="mf-ccb-st" class="mf-info" style="margin-top:8px"></div>
+          </div>
+        </div>
+
+        <div data-pag="cfg">
+          <div class="mf-sec">
+            <div class="mf-tit">Coleta</div>
+            <label class="mf-opc"><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b>
+              <small>Coleta também CPF, motivo da reprovação (coluna R) e os dados da proposta (nome, loja, vendedor, situação...) no modelo Auditoria 2 Completo. Desative quando esses dados já estiverem na planilha: os dados de crédito continuam sendo coletados.</small></span></label>
+            <label class="mf-opc"><input type="checkbox" id="mf-canc"><span><b>Ignorar canceladas e testes</b>
+              <small>Proposta cancelada ou de teste (ex.: cliente "TESTE") nunca é processada, qualquer que seja a situação.</small></span></label>
+            <label class="mf-opc"><input type="checkbox" id="mf-auto-copia"><span><b>Copiar ao concluir</b>
+              <small>Copia o resultado sozinho quando a fila termina.</small></span></label>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Formato de cópia</div>
+            <label class="mf-opc"><input type="checkbox" id="mf-formato-auto"><span><b>Formato automático por modo</b>
+              <small>Auditoria e Valor de transação: texto com tabulação (Excel). Reprovadas, Efetivadas e Aprovadas: tabela com parágrafos (Canva).</small></span></label>
+            <div id="mf-formato-manual" style="display:none;margin:6px 0 4px">
+              <div class="mf-info" id="mf-formato-rot" style="margin-bottom:4px"></div>
+              <select id="mf-estilo"></select>
+            </div>
+            <label class="mf-opc"><input type="checkbox" id="mf-formatos-antigos"><span><b>Mostrar formatos antigos</b>
+              <small>Tabela estilo Excel, quebra &lt;br&gt;, blocos div, 2 colunas e Google Sheets, na escolha manual.</small></span></label>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Painel</div>
+            <button id="mf-pos" class="cinza" style="width:100%">Restaurar posição original do painel</button>
+            <div class="mf-info" style="margin-top:6px">Arraste o painel pela barra escura do título. A posição fica salva.</div>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Diagnóstico</div>
+            <div class="mf-grade">
+              <button id="mf-fal" class="cinza">Faltantes</button>
+              <button id="mf-dbg" class="cinza">Diagnóstico</button>
+            </div>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Tutorial</div>
+            <input id="mf-video-url" type="url" placeholder="Link do tutorial no YouTube" style="margin-bottom:8px">
+            <div class="mf-grade"><button id="mf-video-salvar" class="cinza">Salvar link</button><button id="mf-video-abrir" class="azul" disabled>Abrir tutorial</button></div>
+            <div class="mf-info" style="margin-top:6px">O link fica salvo somente neste navegador; não é incluído no código público.</div>
+          </div>
+        </div>
         <div id="mf-msg"></div>
-      </div>`;
+      </div>
+      <div class="mf-foot"><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small></div>`;
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
     const msg = t => ($('#mf-msg').textContent = t);
     const idsDaCaixa = () => $('#mf-lista').value.split(/\s+/).filter(Boolean);
 
+    /* ---------- abas ---------- */
+    const mostrarAba = a => {
+      if (!['rel', 'ccb', 'cfg'].includes(a)) a = 'rel';
+      painel.querySelectorAll('[data-pag]').forEach(p => { p.style.display = p.dataset.pag === a ? 'block' : 'none'; });
+      painel.querySelectorAll('.mf-abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === a));
+      GM_setValue('abaPainel', a);
+    };
+    painel.querySelectorAll('.mf-abas button').forEach(b => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
+    mostrarAba(GM_getValue('abaPainel', 'rel'));
+
+    /* ---------- posição do painel (arrastar, salvar, restaurar) ---------- */
+    const topo = $('.mf-top'), corpo = $('.mf-corpo');
+    const aplicarPosicao = p => {
+      if (!p) {   // posição original (definida no CSS: canto inferior esquerdo)
+        painel.style.left = painel.style.top = painel.style.bottom = '';
+        corpo.style.maxHeight = '';
+        return null;
+      }
+      const w = painel.offsetWidth || 340, hTopo = topo.offsetHeight || 42;
+      // mantém pelo menos a barra do título dentro da tela (dá para arrastar de volta)
+      const left = Math.round(Math.min(Math.max(0, p.left), Math.max(0, window.innerWidth - w)));
+      const top = Math.round(Math.min(Math.max(0, p.top), Math.max(0, window.innerHeight - hTopo)));
+      painel.style.left = left + 'px';
+      painel.style.top = top + 'px';
+      painel.style.bottom = 'auto';
+      corpo.style.maxHeight = Math.max(140, window.innerHeight - top - hTopo - 40) + 'px';
+      return { left, top };
+    };
+    let arraste = null;
+    topo.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label')) return;
+      const r = painel.getBoundingClientRect();
+      arraste = { dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, id: e.pointerId, moveu: false };
+      try { topo.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    topo.addEventListener('pointermove', e => {
+      if (!arraste || e.pointerId !== arraste.id) return;
+      if (!arraste.moveu && Math.abs(e.clientX - arraste.x0) + Math.abs(e.clientY - arraste.y0) < 4) return;
+      arraste.moveu = true;
+      painel.classList.add('mf-arrastando');
+      aplicarPosicao({ left: e.clientX - arraste.dx, top: e.clientY - arraste.dy });
+    });
+    const soltar = e => {
+      if (!arraste || (e && e.pointerId !== arraste.id)) return;
+      const moveu = arraste.moveu;
+      arraste = null;
+      painel.classList.remove('mf-arrastando');
+      try { topo.releasePointerCapture(e.pointerId); } catch (_) {}
+      if (moveu) {
+        const r = painel.getBoundingClientRect();
+        GM_setValue('posPainel', { left: Math.round(r.left), top: Math.round(r.top) });
+      }
+    };
+    topo.addEventListener('pointerup', soltar);
+    topo.addEventListener('pointercancel', soltar);
+    window.addEventListener('resize', () => aplicarPosicao(GM_getValue('posPainel', null)));
+    aplicarPosicao(GM_getValue('posPainel', null));
+    $('#mf-pos').onclick = () => {
+      GM_deleteValue('posPainel');
+      aplicarPosicao(null);
+      msg('Painel de volta à posição original.');
+    };
+
     // "completas" = propostas com todos os dados do modo atual; mesma regra no status e na cópia parcial
     // conta só entre as já PROCESSADAS (a proposta em andamento ainda não entra), então nunca passa do número de processadas
     function completas() {
-      const f = fila(), fe = new Set(feitas());
+      const f = fila(), fe = new Set(feitas()), ig = ignoradas();
       if (modo() !== 'coleta') {
         const falt = new Set(faltantes().map(x => x.split(' ')[0]));
-        return f.filter(id => fe.has(id) && !falt.has(id)).length;
+        return f.filter(id => fe.has(id) && !ig[id] && !falt.has(id)).length;
       }
       const dd = GM_getValue('dados', {});
-      return f.filter(id => fe.has(id) && completo(dd[id])).length;
+      return f.filter(id => fe.has(id) && !ig[id] && completo(dd[id])).length;
     }
 
     function atualizarUI() {
       const total = fila().length;
       const pend = pendentes().length;
       const f = total - pend;
+      const nIg = Object.keys(ignoradas()).filter(id => fila().includes(id)).length;
       let st;
       if (executando) st = 'Rodando: ' + f + ' de ' + total + ' processadas · ' + completas() + ' completas' + (atual ? ' (em andamento: ' + atual + ')' : '');
       else if (!total) st = 'Pronto';
       else if (!pend) st = 'Concluído: ' + f + ' de ' + total;
       else st = 'Parado: ' + f + ' de ' + total + ' coletadas';
+      if (total && nIg) st += ' · ' + nIg + ' ignorada' + (nIg > 1 ? 's' : '');
       $('#mf-st').textContent = st;
       $('#mf-prog').style.width = (total ? Math.round(f / total * 100) : 0) + '%';
       $('#mf-qtd').textContent = idsDaCaixa().length ? '(' + idsDaCaixa().length + ')' : '';
@@ -781,19 +1137,44 @@
     };
     $('#mf-min').onclick = () => { const m = !GM_getValue('min', false); GM_setValue('min', m); aplicarMin(m); };
     aplicarMin(GM_getValue('min', false));
+    let toquesVersao = 0, resetToquesVersao = null;
+    $('#mf-versao').addEventListener('click', () => {
+      toquesVersao++;
+      clearTimeout(resetToquesVersao);
+      resetToquesVersao = setTimeout(() => { toquesVersao = 0; }, 5000);
+      if (toquesVersao === 7) {
+        toquesVersao = 0;
+        msg('/*\nVocê encontrou uma mensagem secreta. *\nEsse projeto começou como uma tentativa de automatizar\nalgumas tarefas e acabou virando tudo isso. *\nFeito por Arthur, na base da curiosidade e da persistência.\n© 2026 */');
+      }
+    });
+
+    /* ---------- canceladas e testes ---------- */
+    // texto de cada célula separado: tr.textContent junta as células sem espaço ("16:04TESTEMASTER"),
+    // e aí "\bteste\b" não casava — por isso a 4336 (cliente "TESTE") passava pelo filtro.
+    const celulas = tr => [...tr.children].map(td => td.textContent.replace(/\s+/g, ' ').trim());
+    // teste: qualquer célula com a PALAVRA "teste"/"testes" (cliente "TESTE", "PROPOSTA DE TESTE"...), em qualquer situação
+    const ehTeste = cels => [].concat(cels).some(c => /\btestes?\b/i.test(String(c || '')));
+    const motivoIgnorar = cels => {
+      if ([].concat(cels).some(c => /cancelad/i.test(String(c || '')))) return 'cancelada';
+      if (ehTeste(cels)) return 'teste';
+      return null;
+    };
+    const ehConfCad = txt => /\bCONF\s*CAD\b/i.test(txt || '');         // situação "20 - CONF CAD": proposta em digitação, não concluída
 
     /* ---------- leitura da tela ---------- */
     let confCadIgnoradas = 0;   // propostas "20 - CONF CAD" (em digitação) deixadas de fora na última leitura
+    let canceladasTestesIgnoradas = 0;
     function lerTela(ignorarCanc) {
       const ids = [];
-      confCadIgnoradas = 0;
+      confCadIgnoradas = 0; canceladasTestesIgnoradas = 0;
 
       // 1) Tabela da Mesa de Crédito (#tabMesaCreditoLista): o número da proposta vem do
       //    onclick da célula, ex.: objMesaCredito.DetalheProposta('4672')
       document.querySelectorAll('#tabMesaCreditoLista tbody tr').forEach(tr => {
         if (painel.contains(tr)) return;
-        if (ehConfCad(tr.textContent)) { confCadIgnoradas++; return; }   // em digitação: nunca entra
-        if (ignorarCanc && (/cancelad/i.test(tr.textContent) || ehTeste(tr.textContent))) return;
+        const cels = celulas(tr);
+        if (ehConfCad(cels.join(' | '))) { confCadIgnoradas++; return; }   // em digitação: nunca entra
+        if (ignorarCanc && motivoIgnorar(cels)) { canceladasTestesIgnoradas++; return; }
         const td = tr.querySelector('td[onclick*="DetalheProposta"]');
         const m = td && (td.getAttribute('onclick') || '').match(/DetalheProposta\(\s*['"]?(\d+)/);
         if (m) ids.push(m[1]);
@@ -801,19 +1182,22 @@
       if (ids.length) return [...new Set(ids)];
 
       // 2) Reserva (lógica anterior): primeira célula só com 3 a 8 dígitos em qualquer linha
-      confCadIgnoradas = 0;
+      confCadIgnoradas = 0; canceladasTestesIgnoradas = 0;
       document.querySelectorAll('tr').forEach(tr => {
         if (painel.contains(tr)) return;
         const c = [...tr.querySelectorAll('td')]
           .find(td => /^\d{3,8}$/.test(td.textContent.replace(/\s+/g, '')));
         if (!c) return;
-        if (ehConfCad(tr.textContent)) { confCadIgnoradas++; return; }
-        if (ignorarCanc && (/cancelad/i.test(tr.textContent) || ehTeste(tr.textContent))) return;
+        const cels = celulas(tr);
+        if (ehConfCad(cels.join(' | '))) { confCadIgnoradas++; return; }
+        if (ignorarCanc && motivoIgnorar(cels)) { canceladasTestesIgnoradas++; return; }
         ids.push(c.textContent.replace(/\s+/g, ''));
       });
       if (!ids.length) {
         document.querySelectorAll('a').forEach(a => {
           if (painel.contains(a)) return;
+          const tr = a.closest('tr');
+          if (ignorarCanc && tr && motivoIgnorar(celulas(tr))) return;
           const t = a.textContent.replace(/\s+/g, '');
           if (/^\d{4,8}$/.test(t)) ids.push(t);
         });
@@ -823,18 +1207,86 @@
 
     /* ---------- relatórios (ordem das colunas dos slides) ---------- */
     const modo = () => $('#mf-modo').value;
-    const ehTeste = txt => /\bPA\s*-\s*PAYMOBI\b/i.test(txt || '');   // propostas de teste (loja PA - PAYMOBI)
-    const ehConfCad = txt => /\bCONF\s*CAD\b/i.test(txt || '');         // situação "20 - CONF CAD": proposta em digitação, não concluída
     $('#mf-modo').value = GM_getValue('modo', 'coleta');
-    $('#mf-modo').addEventListener('change', () => GM_setValue('modo', modo()));
-    // destino da cópia dos relatórios: cada programa usa o formato mais confiável para ele
-    //   canva  -> tabela HTML, um parágrafo por linha ('p'; se o Canva juntar as linhas, teste 'div' ou 'br')
-    //   excel / sheets -> texto com tabulação ('tsv'; células com quebra de linha vão entre aspas)
-    const DESTINOS = { canva: 'p', canvaxl: 'xl', canvabr: 'br', canvadiv: 'div', canva2col: 'p2col', excel: 'tsv', sheets: 'tsv' };
-    $('#mf-estilo').value = GM_getValue('estiloCopia', 'canva');
-    if (!$('#mf-estilo').value) $('#mf-estilo').value = 'canva';   // valor antigo salvo (p/div/br/tsv)
-    $('#mf-estilo').addEventListener('change', () => GM_setValue('estiloCopia', $('#mf-estilo').value));
-    const estilo = () => DESTINOS[$('#mf-estilo').value] || 'p';
+    if (!$('#mf-modo').value) $('#mf-modo').value = 'coleta';
+
+    /* ---------- formatos de cópia ---------- */
+    // est = como a cópia é montada: 'p' parágrafos, 'xl' estilo Excel, 'br', 'div', 'p2col', 'tsv' texto tabulado
+    const FORMATOS = {
+      canva:     { rot: 'Tabela com parágrafos (Canva)', est: 'p' },
+      excel:     { rot: 'Excel (texto com tabulação)', est: 'tsv' },
+      canvaxl:   { rot: 'Tabela estilo Excel (antigo)', est: 'xl', antigo: true },
+      canvabr:   { rot: 'Tabela com quebra br (antigo)', est: 'br', antigo: true },
+      canvadiv:  { rot: 'Tabela com blocos div (antigo)', est: 'div', antigo: true },
+      canva2col: { rot: 'Valor e quantidade em 2 colunas (antigo)', est: 'p2col', antigo: true },
+      sheets:    { rot: 'Google Sheets (texto com tabulação, antigo)', est: 'tsv', antigo: true },
+    };
+    // formato automático: cada modo usa o mais adequado ao destino
+    const FORMATO_AUTO = { coleta: 'excel', reprovadas: 'canva', efetivadas: 'canva', aprovadas: 'canva', valortransacao: 'excel' };
+    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Valor de transação' };
+    // a escolha manual é guardada POR MODO: mudar o formato de um relatório não altera os outros
+    const formatoDoModo = m => {
+      if (m === 'coleta') return 'excel';   // a auditoria é colada em colunas fixas da planilha: sempre texto tabulado
+      if (cfg('formatoAuto')) return FORMATO_AUTO[m] || 'canva';
+      const esc = (GM_getValue('formatoPorModo', {}) || {})[m];
+      const f = FORMATOS[esc];
+      if (!f || (f.antigo && !cfg('formatosAntigos'))) return FORMATO_AUTO[m] || 'canva';
+      return esc;
+    };
+    const estilo = () => FORMATOS[formatoDoModo(modo())].est;
+
+    function atualizarConfigUI() {
+      const m = modo();
+      const auto = cfg('formatoAuto');
+      $('#mf-formato-manual').style.display = auto ? 'none' : 'block';
+      const sel = $('#mf-estilo');
+      if (m === 'coleta') {
+        $('#mf-formato-rot').textContent = 'Modo Auditoria: sempre texto com tabulação (colunas fixas da planilha).';
+        sel.style.display = 'none';
+      } else {
+        $('#mf-formato-rot').textContent = 'Formato do modo atual (' + NOME_MODO[m] + '):';
+        sel.style.display = 'block';
+        sel.innerHTML = '';
+        Object.entries(FORMATOS).forEach(([k, f]) => {
+          if (f.antigo && !cfg('formatosAntigos')) return;
+          const o = document.createElement('option');
+          o.value = k; o.textContent = f.rot;
+          sel.appendChild(o);
+        });
+        sel.value = formatoDoModo(m);
+      }
+      $('#mf-formato-info').textContent = '· ' + FORMATOS[formatoDoModo(m)].rot + (auto && m !== 'coleta' ? ' (auto)' : '');
+      const coleta = m === 'coleta';
+      $('#mf-colr').style.display = coleta ? '' : 'none';
+      $('#mf-cfull').style.display = coleta && cfg('auditoriaCompleta') ? '' : 'none';
+      $('#mf-filtro').textContent = cfg('ignorarCanceladasTestes') ? 'Ignorando canceladas e testes' : 'Incluindo canceladas e testes';
+    }
+    $('#mf-modo').addEventListener('change', () => { GM_setValue('modo', modo()); atualizarConfigUI(); });
+    $('#mf-estilo').addEventListener('change', () => {
+      const pm = GM_getValue('formatoPorModo', {}) || {};
+      pm[modo()] = $('#mf-estilo').value;
+      GM_setValue('formatoPorModo', pm);
+      atualizarConfigUI();
+    });
+    const ligarOpcao = (sel, chave) => {
+      $(sel).checked = cfg(chave);
+      $(sel).addEventListener('change', () => { GM_setValue(chave, $(sel).checked); atualizarConfigUI(); });
+    };
+    ligarOpcao('#mf-audit-full', 'auditoriaCompleta');
+    ligarOpcao('#mf-canc', 'ignorarCanceladasTestes');
+    ligarOpcao('#mf-auto-copia', 'copiarAoConcluir');
+    ligarOpcao('#mf-formato-auto', 'formatoAuto');
+    ligarOpcao('#mf-formatos-antigos', 'formatosAntigos');
+    atualizarConfigUI();
+
+    const urlVideoSalva = GM_getValue('urlVideoAjuda', '');
+    $('#mf-video-url').value = urlVideoSalva;
+    const urlVideoValida = v => { try { const u = new URL(v); return u.protocol === 'https:' && /(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname); } catch (_) { return false; } };
+    const atualizarVideo = () => { const v = $('#mf-video-url').value.trim(); $('#mf-video-abrir').disabled = !urlVideoValida(v); };
+    $('#mf-video-url').addEventListener('input', atualizarVideo);
+    $('#mf-video-salvar').onclick = () => { const v = $('#mf-video-url').value.trim(); if (v && !urlVideoValida(v)) return msg('Informe um link https válido do YouTube.'); GM_setValue('urlVideoAjuda', v); atualizarVideo(); msg(v ? 'Link de ajuda salvo neste navegador.' : 'Link de ajuda removido.'); };
+    $('#mf-video-abrir').onclick = () => { const v = $('#mf-video-url').value.trim(); if (urlVideoValida(v)) window.open(v, '_blank', 'noopener,noreferrer'); };
+    atualizarVideo();
 
     const FILTROS = {
       reprovadas: sit => /\brep\b|reprov/i.test(sit),
@@ -852,13 +1304,15 @@
       const ci = { id: col('proposta'), sit: col('situa'), dh: col('data/hora'), cli: col('cliente'), ana: col('analista'), loja: col('pto') };
       const out = [];
       t.querySelectorAll('tbody tr').forEach(tr => {
-        const c = [...tr.children].map(td => td.textContent.replace(/\s+/g, ' ').trim());
+        const c = celulas(tr);
         const id = (c[ci.id] || '').replace(/\D/g, '');
         if (!id) return;
-        out.push({ id, sit: c[ci.sit] || '', dh: c[ci.dh] || '', cli: c[ci.cli] || '', ana: c[ci.ana] || '', loja: c[ci.loja] || '' });
+        out.push({ id, sit: c[ci.sit] || '', dh: c[ci.dh] || '', cli: c[ci.cli] || '', ana: c[ci.ana] || '', loja: c[ci.loja] || '', cels: c, texto: c.join(' | ') });
       });
       return out;
     }
+    // o que fica guardado da tabela (sem o texto da linha inteira)
+    const metaDe = l => ({ id: l.id, sit: l.sit, dh: l.dh, cli: l.cli, ana: l.ana, loja: l.loja });
 
     const hora = s => (String(s || '').match(/(\d{1,2}:\d{2})\s*$/) || [])[1] || '';
     const lojaNome = s => String(s || '').replace(/^.*?\s-\s/, '').trim();       // "XPANSE NEGOCIOS LTDA - GRAND PLAZA" -> "GRAND PLAZA"
@@ -889,23 +1343,88 @@
       else label = descr.charAt(0).toUpperCase() + descr.slice(1);
       return { label, atual, descr };
     }
-    // Motivo de reprovação da coleta simples (coluna R), calculado pelos cortes do CONFIG.
-    // Não reprovada / sem dados = vazio. "Divergência Documentação" não dá para saber pelos dados: fica à mão.
-    const motivoColunaR = d => {
+    const ehReprovada = sit => /\brep\b|\brepr\b|reprov/i.test(String(sit || ''));
+    // Motivo de reprovação (coluna R).
+    // 1) Mensagem do MobFacil (fonte primária; mantém a ordem e junta "valor" + "quantidade" num motivo só, como na planilha).
+    // 2) Sem mensagem: cortes do CONFIG (só quando a situação é reprovada ou desconhecida).
+    // Situação conhecida e NÃO reprovada (efetivada, aprovada, cancelada): vazio, como no modelo.
+    // "Divergência Documentação" / "Erro de Digitação" não dá para saber pelos dados: fica à mão.
+    const motivoColunaR = (d, mt) => {
       if (!d) return '';
+      const sit = mt && mt.sit;
+      if (sit && !ehReprovada(sit)) return '';
+      if (d.reprov) {
+        const reais = [];
+        let posRestr = -1, temValor = false, temQtd = false;
+        String(d.reprov).split(' ¦ ').map(motivoDoMobFacil).filter(Boolean).forEach(mf => {
+          if (/restri|pend|negativ/i.test(mf.descr) && /quantidade|qtd|valor/i.test(mf.descr)) {
+            if (/quantidade|qtd/i.test(mf.descr)) temQtd = true; else temValor = true;
+            if (posRestr < 0) { posRestr = reais.length; reais.push(null); }
+            return;
+          }
+          if (/renda/i.test(mf.descr)) return reais.push('Renda');
+          if (/idade/i.test(mf.descr)) return reais.push('Idade');
+          if (/score|ponto de corte/i.test(mf.descr)) return reais.push('Score Baixo');
+          const t = (mf.descr || mf.label).replace(/\bcpf\b/gi, 'CPF');
+          reais.push(t.charAt(0).toUpperCase() + t.slice(1));
+        });
+        if (posRestr >= 0) {
+          reais[posRestr] = temValor && temQtd ? 'Valor e quantidade de restrições acima do limite'
+            : temValor ? 'Valor de restrições acima do limite' : 'Quantidade de restrições acima do limite';
+        }
+        if (reais.length) return [...new Set(reais)].join(' / ');
+      }
+      // proposta sem reprovação na mensagem e situação desconhecida: usa os cortes (comportamento anterior)
       const val = d.val != null ? aNum(d.val) : null;
       const qtd = d.qtd != null ? aNum(d.qtd) : null;
       const sc = d.score != null ? aNum(d.score) : null;
       const v = val != null && val > CONFIG.CORTE_VALOR;
       const q = qtd != null && qtd > CONFIG.CORTE_QTD;
-      const m = [];
-      if (v && q) m.push('Valor e quantidade de restrições acima do limite');
-      else if (v) m.push('Valor de restrições acima do limite');
-      else if (q) m.push('Quantidade de restrições acima do limite');
-      if (sc != null && sc < CONFIG.CORTE_SCORE) m.push('Score Baixo');
-      return m.join(' / ');
+      const motivos = [];
+      if (v && q) motivos.push('Valor e quantidade de restrições acima do limite');
+      else if (v) motivos.push('Valor de restrições acima do limite');
+      else if (q) motivos.push('Quantidade de restrições acima do limite');
+      if (sc != null && sc < CONFIG.CORTE_SCORE) motivos.push('Score Baixo');
+      return motivos.join(' / ');
     };
     const fmtAtual = a => (/^R\$/.test(a) && num(a) != null ? moeda(num(a)) : a);
+
+    /* ---------- modelo "Auditoria 2 Completo" (colunas A a R) ---------- */
+    const COLUNAS_AUDITORIA = ['Proposta', 'Nome', 'CPF', 'IMEI', 'Quantidade Restritivos', 'Valor dos Restritivos', 'Score',
+      'Quantidade de Consultas', 'Número', 'E-mail', 'Data da Proposta', 'Valor da compra', 'Valor entrada', 'Loja', 'Vendedor',
+      'Situação', 'Manual/Auto', 'Motivo Reprovação'];
+    const situacaoLimpa = s => String(s || '').replace(/^\s*\d+\s*-\s*/, '').trim();          // "17 - PRE PROP REP" -> "PRE PROP REP"
+    const dataDe = s => (String(s || '').match(/\d{2}\/\d{2}\/\d{4}/) || [])[0] || '';
+    const valorCompra = v => (v ? String(v).replace(/^R\$\s*/, 'R$ ') : '');
+    // Manual/Auto: mesma regra do relatório de Reprovadas (analista MASTER = automática); textos como no modelo
+    const manualAuto = mt => {
+      if (!mt || !mt.sit) return '';
+      const manual = !!mt.ana && !/master/i.test(mt.ana);
+      if (ehReprovada(mt.sit)) return manual || /\bman\b/i.test(mt.sit) ? 'Reprovado manual' : 'Reprovação Automática';
+      if ((/efetivad|\bapr\b|aprovad/i.test(mt.sit)) && manual) return 'Aprovado manual';
+      return '';
+    };
+    function linhaCompleta(id, d, mt, e) {
+      d = d || {}; mt = mt || null; e = e || {};
+      const v = x => (x == null ? '' : String(x));
+      const m = mt || {};
+      return [
+        id,                              // A Proposta
+        m.cli || e.cliente || '',        // B Nome
+        v(d.cpf),                        // C CPF
+        v(e.imei),                       // D IMEI
+        v(d.qtd), v(d.val), v(d.score), v(d.consultas),   // E–H crédito
+        '', '',                          // I Número, J E-mail (não coletados)
+        dataDe(m.dh),                    // K Data da Proposta
+        valorCompra(e.valor),            // L Valor da compra (aba Garantias)
+        '',                              // M Valor entrada (não coletado)
+        m.loja || '',                    // N Loja
+        e.vendedor || '',                // O Vendedor
+        situacaoLimpa(m.sit),            // P Situação
+        manualAuto(mt),                  // Q Manual/Auto
+        motivoColunaR(d, mt),            // R Motivo Reprovação
+      ];
+    }
 
     function relatorioCols(m, id, d) {
       const x = GM_getValue('meta', {})[id] || {};
@@ -946,11 +1465,10 @@
       }
       return cols;
     }
-    const relatorioLinha = (m, id, d) => relatorioCols(m, id, d).map(cel).join('\t');
 
     // tabela HTML: o Canva/Excel/Sheets mantêm cada coluna separada e a quebra de linha dentro da célula (valor em cima, quantidade embaixo)
     const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // a quebra de linha dentro da célula (valor em cima, quantidade embaixo) muda conforme o estilo:
+    // a quebra de linha dentro da célula muda conforme o estilo:
     // 'br' = <br>; 'p' = um parágrafo por linha; 'div' = um bloco por linha
     const celulaHtml = (c, est) => {
       const ls = String(c).split('\n');
@@ -961,7 +1479,7 @@
     const htmlTabela = (linhas, est) => '<table border="1" cellspacing="0" cellpadding="4">' + linhas.map(cols =>
       '<tr>' + cols.map(c => '<td>' + celulaHtml(c, est) + '</td>').join('') + '</tr>').join('') + '</table>';
 
-    /* ---------- detalhe da proposta (Vendedor e Valor) ---------- */
+    /* ---------- detalhe da proposta (Vendedor, Valor, IMEI, Cliente, Situação) ---------- */
     const DETALHES = ['/MesaCredito/MesaAnaliseProposta?lngProposta=', '/MesaCredito/DetalheProposta?lngProposta='];
     const proprio = el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
     const normRot = t => t.replace(/:$/, '').trim().toLowerCase();
@@ -986,6 +1504,13 @@
       }
       return null;
     }
+    const primeiroRotulo = (docs, rotulos, valida) => {
+      for (const doc of docs) for (const r of rotulos) {
+        const t = acharRotulo(doc, r);
+        if (t && (!valida || valida(t))) return t;
+      }
+      return null;
+    };
 
     async function buscarDetalhe(base, id) {
       const raiz = base.replace(/\/$/, '');
@@ -1001,7 +1526,7 @@
           info.push(nome + ': ' + html.length + ' bytes');
           doc.querySelectorAll('body *').forEach(el => {
             const t = proprio(el);
-            if (t.length < 30 && /digitador|vendedor|valor|imei|garantia/i.test(t)) rotulos.add(t);
+            if (t.length < 30 && /digitador|vendedor|valor|imei|garantia|cliente|nome|situa/i.test(t)) rotulos.add(t);
           });
         } catch (e) { info.push(nome + ': erro'); }
         finally { clearTimeout(tm); }
@@ -1013,13 +1538,29 @@
       }
       if (vendedor) vendedor = vendedor.replace(/^\d+\s+/, '').replace(/\s+-\s+.*$/, '').trim();   // "4144175588 LUCAS S. LINERES - XP ..." -> "LUCAS S. LINERES"
       if (valor) valor = valor.replace(/^R\$\s*/, 'R$');                                          // "R$ 1.864,00" -> "R$1.864,00"
+      // IMEI: só aceita 14 a 16 dígitos; cliente: só letras (não inventa quando o rótulo não existe)
+      const imeiTxt = primeiroRotulo(docs, ['IMEI'], t => /^\d{14,16}$/.test(t.replace(/\D/g, '')));
+      const imei = imeiTxt ? imeiTxt.replace(/\D/g, '') : null;
+      const cliente = primeiroRotulo(docs, ['Nome do Cliente', 'Cliente', 'Nome'], t => /^[A-Za-zÀ-ÿ'.\s-]{3,120}$/.test(t));
+      const situacao = primeiroRotulo(docs, ['Situação', 'Situacao', 'Status'], t => t.length <= 60);
       const extra = GM_getValue('extra', {});
-      extra[id] = { vendedor: vendedor || null, valor: valor || null };
+      extra[id] = { vendedor: vendedor || null, valor: valor || null, imei, cliente: cliente || null, situacao: situacao || null };
       GM_setValue('extra', extra);
       const dbg = GM_getValue('extraDbg', {});
-      dbg[id] = { paginas: info, achouVendedor: !!vendedor, achouValor: !!valor, rotulosVistos: [...rotulos].slice(0, 25) };
+      dbg[id] = { paginas: info, achouVendedor: !!vendedor, achouValor: !!valor, achouImei: !!imei, achouCliente: !!cliente, achouSituacao: !!situacao, rotulosVistos: [...rotulos].slice(0, 30) };
       GM_setValue('extraDbg', dbg);
     }
+
+    // segunda barreira contra testes/canceladas: proposta que NÃO está na tabela da tela é conferida no detalhe
+    async function verificarRemoto(id) {
+      const base = (document.getElementById('txtCaminhoSistema') || {}).value || '';
+      if (!GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
+      const e = GM_getValue('extra', {})[id] || {};
+      if (e.situacao && /cancelad/i.test(e.situacao)) return 'cancelada';
+      if (e.cliente && ehTeste([e.cliente])) return 'teste';
+      return null;
+    }
+    const marcarIgnorada = (id, motivo) => { const ig = ignoradas(); ig[id] = motivo; GM_setValue('ignoradas', ig); };
 
     /* ---------- cópia ---------- */
     // copia HTML e texto ao mesmo tempo; sem clique do usuário (ou em página http) cai no GM_setClipboard só com HTML
@@ -1035,29 +1576,40 @@
       } catch (_) {}
       GM_setClipboard(html, { type: 'html', mimetype: 'text/html' });
     };
+    // Propostas ignoradas (teste/cancelada): nas listas coladas linha a linha na planilha (Auditoria e Valor de transação)
+    // viram linha em branco, para não desalinhar as linhas seguintes; nas tabelas dos relatórios (Canva) saem da lista.
     function copiar(comId) {
       const dados = GM_getValue('dados', {});
+      const ig = ignoradas();
       if (modo() !== 'coleta') {
-        if (estilo() !== 'tsv') {
-          // todos os relatórios (reprovadas, efetivadas, aprovadas, valor de transação) saem como tabela
-          const linhasRel = fila().map(id => relatorioCols(modo(), id, dados[id]));
-          if (estilo() === 'xl') copiarHtmlETexto(htmlTabela(linhasRel, 'xl'), linhasRel.map(c => c.map(cel).join('\t')).join('\n'));
-          else GM_setClipboard(htmlTabela(linhasRel, estilo()), { type: 'html', mimetype: 'text/html' });
-        } else {
-          GM_setClipboard(fila().map(id => relatorioLinha(modo(), id, dados[id])).join('\n'), 'text');
-        }
+        const alinhado = modo() === 'valortransacao';
+        const ids = alinhado ? fila() : fila().filter(id => !ig[id]);
+        const linhasRel = ids.map(id => (ig[id] ? [''] : relatorioCols(modo(), id, dados[id])));
+        const est = estilo();
+        if (est === 'tsv') GM_setClipboard(linhasRel.map(c => c.map(cel).join('\t')).join('\n'), 'text');
+        else if (est === 'xl') copiarHtmlETexto(htmlTabela(linhasRel, 'xl'), linhasRel.map(c => c.map(cel).join('\t')).join('\n'));
+        else GM_setClipboard(htmlTabela(linhasRel, est), { type: 'html', mimetype: 'text/html' });
         return false;
       }
       const usarId = comId !== undefined ? comId : GM_getValue('origem', 'manual') === 'tela';
       const sep = '\t'.repeat(CONFIG.VAZIAS_APOS_ID + 1);   // id + colunas vazias até a coluna E
-      GM_setClipboard(fila().map(id => (usarId ? id + sep : '') + linha(dados[id])).join('\n'), 'text');
+      GM_setClipboard(fila().map(id => (usarId ? id + sep : '') + (ig[id] ? '\t\t\t' : linha(dados[id]))).join('\n'), 'text');
       return usarId;
     }
+    function copiarCompleta() {
+      const dados = GM_getValue('dados', {}), meta = GM_getValue('meta', {}), extra = GM_getValue('extra', {}), ig = ignoradas();
+      const linhas = fila().map(id => (ig[id] ? [id, ...Array(COLUNAS_AUDITORIA.length - 1).fill('')] : linhaCompleta(id, dados[id], meta[id], extra[id])));
+      GM_setClipboard(linhas.map(c => c.map(v => cel(String(v))).join('\t')).join('\n'), 'text');
+    }
+    const AVISO_COMPLETA = 'Copiado no modelo Auditoria 2 Completo (colunas A a R). Cole na coluna A (Proposta), na primeira linha da lista. ' +
+      'Número, E-mail e Valor entrada não são coletados e vão em branco (IMEI também, quando não encontrado).';
 
     const avisoCopia = usouId => modo() === 'valortransacao'
-      ? 'Cole na coluna Valor de transação, na mesma ordem da lista (linha em branco = sem valor).'
+      ? (estilo() === 'tsv'
+        ? 'Cole na coluna Valor de transação, na mesma ordem da lista (linha em branco = sem valor ou ignorada).'
+        : 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem da lista.')
       : modo() !== 'coleta'
-      ? (estilo() !== 'tsv' ? 'Copiado como TABELA (uma coluna por campo), na ordem do slide do Canva.' : 'Colunas na ordem do slide do Canva.')
+      ? 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem do relatório.'
       : usouId
       ? 'Cole na coluna A (proposta). Atenção: Nome, CPF e IMEI das linhas coladas serão sobrescritos por células vazias.'
       : 'Cole na coluna E.';
@@ -1065,9 +1617,11 @@
     function faltantes() {
       const dados = GM_getValue('dados', {});
       const ex = GM_getValue('extra', {});
+      const ig = ignoradas();
+      const ativos = fila().filter(id => !ig[id]);
       const m = modo();
       if (m === 'reprovadas') {
-        return fila().map(id => {
+        return ativos.map(id => {
           const rp = dados[id] && dados[id].reprov;
           if (rp == null) return id + ' (falta: motivo da reprovação)';
           if (rp === '') return id + ' (o MobFacil NÃO mostrou mensagem de reprovação: conferir à mão)';
@@ -1076,10 +1630,10 @@
           return null;
         }).filter(Boolean);
       }
-      if (m === 'valortransacao') return fila().filter(id => !(ex[id] && ex[id].valor)).map(id => id + ' (sem valor de transação)');
-      if (m === 'efetivadas') return fila().filter(id => !(ex[id] && ex[id].vendedor)).map(id => id + ' (falta: vendedor)');
+      if (m === 'valortransacao') return ativos.filter(id => !(ex[id] && ex[id].valor)).map(id => id + ' (sem valor de transação)');
+      if (m === 'efetivadas') return ativos.filter(id => !(ex[id] && ex[id].vendedor)).map(id => id + ' (falta: vendedor)');
       if (m === 'aprovadas') {
-        return fila().map(id => {
+        return ativos.map(id => {
           const f = [];
           if (!(dados[id] && dados[id].cpf)) f.push('cpf');
           if (!(ex[id] && ex[id].vendedor)) f.push('vendedor');
@@ -1087,19 +1641,33 @@
           return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
         }).filter(Boolean);
       }
-      return fila().filter(id => !completo(dados[id]))
-        .map(id => id + ' (falta: ' + faltaCampos(dados[id]).join(', ') + ')');
+      const meta = GM_getValue('meta', {});
+      const full = cfg('auditoriaCompleta');
+      return ativos.map(id => {
+        const f = completo(dados[id]) ? [] : faltaCampos(dados[id]);
+        if (full && !meta[id]) f.push('nome/loja/situação (proposta fora da tabela da tela)');
+        if (full && !(ex[id] && ex[id].vendedor)) f.push('vendedor');
+        return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
+      }).filter(Boolean);
     }
 
     /* ---------- coleta ---------- */
     async function coletar(id) {
       const base = (document.getElementById('txtCaminhoSistema') || {}).value || '';
       const url = base.replace(/\/$/, '') + '/MesaCredito/MesaAnaliseMobFacil?lngProposta=' + id;
+      const m = modo();
 
-      if (modo() === 'efetivadas' || modo() === 'aprovadas' || modo() === 'valortransacao') {
-        await buscarDetalhe(base, id);          // Vendedor e Valor (aba Garantias)
-        if (modo() !== 'aprovadas') return null; // só as aprovadas precisam do MobFacil (CPF)
+      // dados da página de detalhe: Vendedor e Valor (aba Garantias); na auditoria completa também IMEI/cliente
+      const precisaDetalhe = m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao' || (m === 'coleta' && cfg('auditoriaCompleta'));
+      if (precisaDetalhe && !GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
+      if (m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao') {
+        const extra = GM_getValue('extra', {})[id] || {};
+        if (m === 'valortransacao' && !extra.valor) return 'valor de transação não localizado';
+        if (m === 'efetivadas' && !extra.vendedor) return 'vendedor não localizado';
+        if (m === 'aprovadas' && (!extra.vendedor || !extra.valor)) return 'vendedor ou valor não localizado';
+        if (m !== 'aprovadas') return null;
       }
+      if (!GM_getValue('rodando', false)) return 'pausado';
 
       const ctl = new AbortController();
       ctlAtual = ctl;
@@ -1128,6 +1696,8 @@
       }
       fr.remove();
       GM_setValue('atualId', '');
+      const coletados = GM_getValue('dados', {})[id] || {};
+      if (!completo(coletados)) return 'auditoria incompleta: ' + faltaCampos(coletados).join(', ');
       return null;
     }
 
@@ -1140,7 +1710,14 @@
           atual = id;
           delete falhas[id];
           atualizarUI();
-          const erro = await coletar(id);
+          // regra rígida: teste/cancelada NUNCA é processada (independe da situação). A tabela da tela já foi
+          // conferida no Iniciar; o que não estava nela é conferido agora, no detalhe da proposta.
+          if (!ignoradas()[id] && cfg('ignorarCanceladasTestes') && !verificadas().includes(id)) {
+            const mot = await verificarRemoto(id);
+            if (mot) marcarIgnorada(id, mot);
+          }
+          let erro = null;
+          if (!ignoradas()[id]) erro = await coletar(id);
           if (!GM_getValue('rodando', false)) break;    // pausou no meio: NÃO marca como feita, será refeita
           if (erro) falhas[id] = erro;                  // falhou: não marca, "Continuar" tenta de novo
           else GM_setValue('feitas', [...feitas(), id]);
@@ -1163,10 +1740,20 @@
         return msg('Pausado em ' + (total - pendentes().length) + ' de ' + total +
           '. Clique em Continuar para seguir de onde parou.');
       }
-      const usouId = copiar(false);   // sem número da proposta: só as 4 colunas, para a coluna E
+      let aviso = 'Fila concluída.';
+      if (cfg('copiarAoConcluir')) {
+        if (modo() === 'coleta' && cfg('auditoriaCompleta')) { copiarCompleta(); aviso = 'Fila concluída e resultado COPIADO. ' + AVISO_COMPLETA; }
+        else aviso = 'Fila concluída e resultado COPIADO. ' + avisoCopia(copiar(false));
+      } else aviso += ' Use os botões de cópia.';
       const f = faltantes();
       const ef = Object.keys(falhas);
-      msg('Fila concluída e resultado COPIADO. ' + avisoCopia(usouId) +
+      const ig = ignoradas();
+      const igLista = fila().filter(id => ig[id]);
+      const ex = GM_getValue('extra', {}), ver = new Set(verificadas());
+      const semVerif = cfg('ignorarCanceladasTestes') ? fila().filter(id => !ig[id] && !ver.has(id) && !(ex[id] && ex[id].cliente)) : [];
+      msg(aviso +
+        (igLista.length ? '\nIgnoradas (teste/cancelada): ' + igLista.map(id => id + ' (' + ig[id] + ')').join(', ') : '') +
+        (semVerif.length ? '\nNão conferidas como teste (fora da tabela da tela e sem nome no detalhe): ' + semVerif.join(', ') : '') +
         (f.length ? '\nIncompletas: ' + f.join('; ') : '') +
         (ef.length ? '\nFalhas (clique em Continuar para tentar de novo): ' + ef.map(k => k + ' (' + falhas[k] + ')').join(', ') : ''));
     }
@@ -1181,19 +1768,24 @@
       if (executando) return msg('Coleta em andamento. Pause antes de ler a tela de novo.');
       const m = modo();
       GM_setValue('modo', m);
+      const ign = cfg('ignorarCanceladasTestes');
       let ids;
       if (m === 'coleta') {
-        ids = lerTela($('#mf-canc').checked);
+        ids = lerTela(ign);
         if (!ids.length) return msg('Não achei propostas na tela. Abra a Mesa de Crédito com a lista visível.');
+        const meta = {};
+        lerLinhas().forEach(l => { if (ids.includes(l.id)) meta[l.id] = metaDe(l); });   // nome/loja/situação para a auditoria completa
+        GM_setValue('meta', meta);
       } else {
-        const ign = $('#mf-canc').checked;
         const todasLinhas = lerLinhas();
         const semConf = todasLinhas.filter(l => !ehConfCad(l.sit));   // CONF CAD fora de todos os relatórios
         confCadIgnoradas = todasLinhas.length - semConf.length;
-        const linhas = semConf.filter(l => FILTROS[m](l.sit) && !(ign && (/cancelad/i.test(l.sit) || ehTeste(l.loja))));
+        const elegiveis = semConf.filter(l => FILTROS[m](l.sit));
+        const linhas = elegiveis.filter(l => !(ign && motivoIgnorar(l.cels)));
+        canceladasTestesIgnoradas = elegiveis.length - linhas.length;
         if (!linhas.length) return msg('Nenhuma proposta desse tipo na lista da tela. Confira o filtro de data/situação da Mesa de Crédito.');
         const meta = {};
-        linhas.forEach(l => (meta[l.id] = l));
+        linhas.forEach(l => (meta[l.id] = metaDe(l)));
         GM_setValue('meta', meta);
         ids = [...new Set(linhas.map(l => l.id))];
       }
@@ -1201,14 +1793,34 @@
       GM_setValue('origem', 'tela');
       atualizarUI();
       msg(ids.length + ' propostas lidas da tela. Confira com o contador do sistema e clique em Iniciar.' +
+        (canceladasTestesIgnoradas ? '\n' + canceladasTestesIgnoradas + ' canceladas/de teste ficaram de fora.' : '') +
         (confCadIgnoradas ? '\n' + confCadIgnoradas + ' em "CONF CAD" (em digitação) ficaram de fora.' : ''));
     };
 
     $('#mf-ini').onclick = () => {
       if (executando) return;
       if (outraAbaRodando()) return msg('Já existe uma coleta rodando em outra aba.');
-      const ids = [...new Set(idsDaCaixa())];
+      let ids = [...new Set(idsDaCaixa())];
       if (!ids.length) return msg('Clique em "Ler da tela" ou cole a lista de propostas.');
+      GM_setValue('modo', modo());
+      // confere cada proposta na tabela da Mesa de Crédito que está na tela (situação e células da linha)
+      const linhasTela = lerLinhas();
+      const porId = {};
+      linhasTela.forEach(l => { porId[l.id] = l; });
+      const ign = cfg('ignorarCanceladasTestes');
+      const novasIgnoradas = {};
+      if (ign) ids.forEach(id => { const l = porId[id]; const mot = l && motivoIgnorar(l.cels); if (mot) novasIgnoradas[id] = mot; });
+      // lista colada da planilha (Auditoria) e Valor de transação: a proposta ignorada continua na fila como linha em branco,
+      // para a cópia ficar alinhada com as linhas da planilha. Nos outros casos ela sai da lista.
+      const alinhado = (modo() === 'coleta' && GM_getValue('origem', 'manual') !== 'tela') || modo() === 'valortransacao';
+      let removidas = 0;
+      if (!alinhado) {
+        const antes = ids.length;
+        ids = ids.filter(id => !novasIgnoradas[id]);
+        removidas = antes - ids.length;
+        if (!ids.length) return msg('Todas as propostas da lista são canceladas ou de teste. Nada para processar.');
+        if (removidas) $('#mf-lista').value = ids.join('\n');
+      }
       const dados = GM_getValue('dados', {});
       ids.forEach(id => delete dados[id]);
       GM_setValue('dados', dados);
@@ -1217,15 +1829,16 @@
       GM_setValue('extra', ex0);
       GM_deleteValue('extraDbg');
       GM_deleteValue('debug');
-      // relatórios: garante horário, loja e tipo mesmo com a lista colada à mão
-      // (esses dados vêm da tabela da Mesa de Crédito que está na tela, não do MobFacil)
+      GM_setValue('ignoradas', alinhado ? novasIgnoradas : {});
+      GM_setValue('verificadas', ids.filter(id => porId[id]));
+      // horário, loja, nome, situação e analista vêm da tabela da Mesa de Crédito que está na tela (não do MobFacil)
       let avisoMeta = '';
-      if (modo() !== 'coleta') {
-        const meta = GM_getValue('meta', {});
-        lerLinhas().forEach(l => { if (ids.includes(l.id)) meta[l.id] = l; });
-        GM_setValue('meta', meta);
-        const sem = ids.filter(id => !meta[id]);
-        if (sem.length) avisoMeta = '\nSem horário/loja (não estão na tabela da tela): ' + sem.join(', ') +
+      const meta = GM_getValue('meta', {});
+      linhasTela.forEach(l => { if (ids.includes(l.id)) meta[l.id] = metaDe(l); });
+      GM_setValue('meta', meta);
+      const sem = ids.filter(id => !meta[id]);
+      if (sem.length && (modo() !== 'coleta' || cfg('auditoriaCompleta'))) {
+        avisoMeta = '\nSem dados da tabela da tela (horário/loja/nome/situação): ' + sem.join(', ') +
           '. Deixe a lista da Mesa de Crédito visível e clique em Iniciar de novo.';
       }
       GM_setValue('fila', ids);
@@ -1234,7 +1847,9 @@
       Object.keys(falhas).forEach(k => delete falhas[k]);
       executando = true;
       iniciarBatida();
-      msg('Rodando... deixe esta aba aberta e visível.' + avisoMeta);
+      const nIg = Object.keys(novasIgnoradas).length;
+      msg('Rodando... deixe esta aba aberta e visível.' + avisoMeta +
+        (nIg ? '\n' + nIg + ' canceladas/de teste ' + (alinhado ? 'ficam como linha em branco: ' : 'foram retiradas: ') + Object.keys(novasIgnoradas).join(', ') : ''));
       atualizarUI();
       rodar();
     };
@@ -1272,7 +1887,7 @@
         while (executando) await sleep(200);   // espera a coleta encerrar de verdade antes de apagar
         resetando = false;
       }
-      ['dados', 'fila', 'feitas', 'fim', 'debug', 'origem', 'atualId', 'meta', 'extra', 'extraDbg'].forEach(k => GM_deleteValue(k));
+      ['dados', 'fila', 'feitas', 'fim', 'debug', 'origem', 'atualId', 'meta', 'extra', 'extraDbg', 'ignoradas', 'verificadas'].forEach(k => GM_deleteValue(k));
       GM_setValue('rodando', false);
       Object.keys(falhas).forEach(k => delete falhas[k]);
       atual = null;
@@ -1309,14 +1924,23 @@
         ? 'Cópia PARCIAL (' + resumoParcial() + ') com o número da proposta na 1ª coluna. A coleta continua rodando.'
         : 'Copiado com o número da proposta na 1ª coluna.');
     };
+    $('#mf-cfull').onclick = () => {
+      atualizarFila();
+      if (!fila().length) return msg('Não há propostas na fila. Leia a tela ou cole a lista e faça a coleta antes.');
+      copiarCompleta();
+      msg((executando ? 'Cópia PARCIAL (' + resumoParcial() + '). ' : '') + AVISO_COMPLETA);
+    };
     $('#mf-colr').onclick = () => {
       atualizarFila();
       const dados = GM_getValue('dados', {});
+      const meta = GM_getValue('meta', {});
+      const ig = ignoradas();
       const f = fila();
       if (!f.length) return msg('Não há propostas na fila. Leia a tela ou cole a lista e faça a coleta antes.');
-      GM_setClipboard(f.map(id => motivoColunaR(dados[id])).join('\n'), 'text');
-      const sem = f.filter(id => !completo(dados[id])).length;
-      const com = f.filter(id => motivoColunaR(dados[id])).length;
+      const motivos = f.map(id => (ig[id] ? '' : motivoColunaR(dados[id], meta[id])));
+      GM_setClipboard(motivos.join('\n'), 'text');
+      const sem = f.filter(id => !ig[id] && !completo(dados[id])).length;
+      const com = motivos.filter(Boolean).length;
       msg((executando ? 'Cópia PARCIAL. ' : '') + 'Motivo copiado na ordem da lista: ' + com + ' com motivo, ' + (f.length - com) + ' em branco' +
         (sem ? ' (' + sem + ' ainda sem coleta completa)' : '') + '. Cole na coluna R, na primeira linha da lista. ' +
         'Linhas em branco apagam o que já estiver digitado na R (ex.: Divergência Documentação).');
@@ -1335,16 +1959,205 @@
         const d = dbg[id];
         if (!d) return;
         const incompleta = !completo(dados[id]);
-        debug[id] = (incompleta && n++ < 3) ? d : { ...d, esqueleto: undefined, dentroDasRaizes: undefined, historico: undefined };
+        debug[id] = (incompleta && n++ < 3) ? d : { ...d, esqueleto: undefined, dentroDasRaizes: undefined, historico: undefined, memoriaEsqueleto: undefined };
       });
       if (dbg['sem-id']) debug['sem-id'] = dbg['sem-id'];
       GM_setClipboard(JSON.stringify({
-        versao: VERSAO, dados, fila: fila(), faltam: faltantes(), falhas, extraDbg: GM_getValue('extraDbg', {}),
+        versao: VERSAO, modo: modo(),
+        config: Object.fromEntries(Object.keys(PADRAO).map(k => [k, cfg(k)])),
+        dados, fila: fila(), faltam: faltantes(), falhas, ignoradas: ignoradas(), verificadas: verificadas().length,
+        extraDbg: GM_getValue('extraDbg', {}),
         // horário/loja/analista da tabela da tela: só mostra se o campo existe (sem nomes de clientes)
-        meta: Object.fromEntries(fila().map(id => { const m = GM_getValue('meta', {})[id]; return [id, m ? { dh: !!m.dh, loja: !!m.loja, ana: !!m.ana } : null]; })),
+        meta: Object.fromEntries(fila().map(id => { const m = GM_getValue('meta', {})[id]; return [id, m ? { dh: !!m.dh, loja: !!m.loja, ana: !!m.ana, sit: !!m.sit, cli: !!m.cli } : null]; })),
         debug,
       }, null, 1), 'text');
       msg('Diagnóstico copiado.');
+    };
+
+    /* ================= CCBs (Fila de Propostas) =================
+       Mesma lógica do script antigo do Console, usando as funções do próprio sistema:
+       objFilaPropostas.FilaPropostas('X')            -> pesquisa (/FilaPropostas/FilaPropostasLista)
+       objFilaPropostas.MostraDetalheProposta(id,'C') -> cadastro (/FilaPropostas/DetalhePropostaCadastro): confere nome e CPF
+       objFilaPropostas.DetalheProposta('D')          -> documentos (/FilaPropostas/DetalhePropostaDocumentos)
+       DetalhePropostaDocumentos.Download(doc, nome)  -> arquivo (/Documentos/BaixaDocumento)
+       Cada passo espera a resposta do sistema (ajaxComplete do jQuery da página). */
+    const ccb = { rodando: false, parar: false };
+    const normalizarNome = v => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('pt-BR');
+    const filaPronta = () => {
+      try {
+        const o = PAGINA.objFilaPropostas;
+        return !!(PAGINA.jQuery && o && typeof o.FilaPropostas === 'function' &&
+          typeof o.MostraDetalheProposta === 'function' && typeof o.DetalheProposta === 'function');
+      } catch (_) { return false; }
+    };
+    // colunas da fila (as mesmas do script antigo: 2 situação, 3 cliente, 9 assinatura); se o cabeçalho mostrar outra ordem, segue o cabeçalho
+    const COLS_FILA = { sit: 2, cli: 3, ass: 9 };
+    function colunasFila(tab) {
+      const ths = [...tab.querySelectorAll('thead th')].map(th => th.textContent.replace(/\s+/g, ' ').trim().toLowerCase());
+      if (!ths.length) return COLS_FILA;
+      if (/situa/.test(ths[2] || '') && /client|nome/.test(ths[3] || '')) return COLS_FILA;
+      const sit = ths.findIndex(x => /situa/.test(x)), cli = ths.findIndex(x => /client|nome/.test(x)), ass = ths.findIndex(x => /assina/.test(x));
+      return sit >= 0 && cli >= 0 && ass >= 0 ? { sit, cli, ass } : COLS_FILA;
+    }
+    function linhasFila() {
+      const tab = document.querySelector('#tabPropostasLista');
+      if (!tab) return [];
+      const ci = colunasFila(tab);
+      return [...tab.querySelectorAll('tbody tr')].map(tr => {
+        const cels = [...tr.cells].map(td => td.textContent.replace(/\s+/g, ' ').trim());
+        const alvo = tr.querySelector('[onclick*="MostraDetalheProposta"]');
+        const cmd = alvo ? alvo.getAttribute('onclick') || '' : '';
+        const id = (cmd.match(/MostraDetalheProposta\(\s*['"]([^'"]+)['"]/) || [])[1] || '';
+        const numero = cels.find(c => /^\d{3,9}$/.test(c)) || '';
+        return { id, numero, sit: cels[ci.sit] || '', nome: cels[ci.cli] || '', ass: cels[ci.ass] || '', cels };
+      }).filter(l => l.id);
+    }
+    const ehEfetivada = sit => /^(\d+\s*-\s*)?EFETIVADA$/i.test(String(sit || '').trim());
+    const elegivelCCB = l => ehEfetivada(l.sit) && /assinado digitalmente/i.test(l.ass);
+
+    class ErroCCB extends Error { constructor(m, parar) { super(m); this.parar = !!parar; } }
+    // registra a espera ANTES de chamar a ação (a resposta pode chegar muito rápido)
+    const aguardarResposta = (trecho, acao) => new Promise((resolve, reject) => {
+      const jq = PAGINA.jQuery;
+      let timer = null, feito = false;
+      const handler = (_ev, xhr, settings) => {
+        if (feito || !String((settings && settings.url) || '').includes(trecho)) return;
+        fim();
+        const st = xhr ? xhr.status : 0;
+        if (st === 200) resolve(); else reject(new ErroCCB('O sistema retornou uma resposta inesperada (' + st + ') em ' + trecho.split('/').pop() + '.', true));
+      };
+      const fim = () => { feito = true; clearTimeout(timer); try { jq(PAGINA.document).off('ajaxComplete', handler); } catch (_) {} };
+      try { jq(PAGINA.document).on('ajaxComplete', handler); } catch (e) { return reject(new ErroCCB('Não foi possível acompanhar as respostas do sistema.', true)); }
+      timer = setTimeout(() => { if (feito) return; fim(); reject(new ErroCCB('Tempo limite aguardando o sistema (' + trecho.split('/').pop() + ').', true)); }, CONFIG.TIMEOUT_CCB * 1000);
+      try { acao(); } catch (e) { fim(); reject(new ErroCCB('Falha ao acionar o sistema: ' + e.message, true)); }
+    });
+    const fecharDetalhe = () => { try { PAGINA.jQuery('#dlgDetalheProposta').modal('hide'); } catch (_) {} };
+    const funcaoDownload = () => {
+      try { if (PAGINA.DetalhePropostaDocumentos && typeof PAGINA.DetalhePropostaDocumentos.Download === 'function') return PAGINA.DetalhePropostaDocumentos; } catch (_) {}
+      try {   // declarado com let/const no script da página: não fica em window
+        const o = PAGINA.eval('typeof DetalhePropostaDocumentos !== "undefined" ? DetalhePropostaDocumentos : null');
+        if (o && typeof o.Download === 'function') return o;
+      } catch (_) {}
+      return null;
+    };
+
+    async function baixarUmaCCB(item, ign, jaBaixadas) {
+      const porNumero = /^\d+$/.test(item);
+      const casa = l => (porNumero ? l.numero === item || l.id === item : normalizarNome(l.nome) === normalizarNome(item));
+      let linhas = linhasFila();
+      if (!linhas.some(casa)) {
+        // 1. pesquisa no sistema
+        const campo = PAGINA.document.querySelector('#txtPropostasPesquisa');
+        if (!campo) throw new ErroCCB('Campo de pesquisa da fila não encontrado.', true);
+        await aguardarResposta('/FilaPropostas/FilaPropostasLista', () => {
+          campo.value = item;
+          PAGINA.jQuery(campo).trigger('input');
+          PAGINA.objFilaPropostas.FilaPropostas('X');
+        });
+        linhas = linhasFila();
+      }
+      // 2. exatamente uma proposta efetivada e assinada
+      const corresp = linhas.filter(casa);
+      if (!corresp.length) throw new ErroCCB('não encontrada na fila');
+      if (ign && corresp.some(l => motivoIgnorar(l.cels))) throw new ErroCCB('proposta de teste ou cancelada (ignorada)');
+      const eleg = corresp.filter(elegivelCCB);
+      if (eleg.length !== 1) throw new ErroCCB(eleg.length ? 'mais de uma proposta efetivada e assinada' : 'nenhuma proposta efetivada e assinada digitalmente');
+      const l = eleg[0];
+      // a mesma proposta informada duas vezes (ex.: pelo nome e pelo número) não é baixada de novo
+      if (jaBaixadas.has(l.id)) throw new ErroCCB('repetida: a proposta ' + (l.numero || l.id) + ' já foi baixada neste lote');
+
+      // 3. cadastro: confere nome e CPF
+      await aguardarResposta('/FilaPropostas/DetalhePropostaCadastro', () => PAGINA.objFilaPropostas.MostraDetalheProposta(l.id, 'C'));
+      const raiz = document.querySelector('#divDetalhePropostaBody');
+      const linhaCad = [...(raiz ? raiz.querySelectorAll('tr') : [])].find(tr => {
+        const rot = [...tr.querySelectorAll('small')].map(el => el.textContent.trim());
+        return rot.includes('Nome do Cliente') && rot.includes('CPF');
+      });
+      if (!linhaCad) throw new ErroCCB('não encontrei nome e CPF no cadastro');
+      const tds = [...linhaCad.querySelectorAll('td')];
+      const valorDe = rot => { const td = tds.find(x => (x.querySelector('small') || {}).textContent?.trim() === rot); const b = td && td.querySelector('b'); return b ? b.textContent.trim() : ''; };
+      const nomeCad = valorDe('Nome do Cliente');
+      const cpf = valorDe('CPF').replace(/\D/g, '');
+      if (!nomeCad || normalizarNome(nomeCad) !== normalizarNome(l.nome) || (!porNumero && normalizarNome(nomeCad) !== normalizarNome(item))) {
+        throw new ErroCCB('o nome do cadastro não corresponde à proposta', true);
+      }
+      if (!/^\d{11}$/.test(cpf)) throw new ErroCCB('CPF ausente ou inválido no cadastro');
+
+      // 4. documentos: somente a CCB assinada
+      await aguardarResposta('/FilaPropostas/DetalhePropostaDocumentos', () => PAGINA.objFilaPropostas.DetalheProposta('D'));
+      const docs = [...(document.querySelector('#divDetalhePropostaBody') || document).querySelectorAll('.product-info[documento][nome]')];
+      const ccbs = docs.filter(el => /^CCB ASSINADA_.*\.PDF$/i.test(el.getAttribute('nome') || ''));
+      if (ccbs.length !== 1) throw new ErroCCB(ccbs.length ? 'mais de uma CCB assinada' : 'CCB assinada não encontrada nos documentos');
+      const idDoc = ccbs[0].getAttribute('documento');
+      if (!/^\d+$/.test(idDoc || '')) throw new ErroCCB('identificador do documento inválido');
+
+      // 5. nome do arquivo: CPF_NOME_COMPLETO.pdf
+      const nomeSeguro = nomeCad.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
+        .replace(/\s+/g, '_').replace(/^_+|_+$/g, '').toUpperCase();
+      const nomeArquivo = cpf + '_' + nomeSeguro + '.pdf';
+
+      // 6. download pelo próprio sistema
+      const dl = funcaoDownload();
+      if (dl) {
+        await aguardarResposta('/Documentos/BaixaDocumento', () => dl.Download(Number(idDoc), nomeArquivo));
+      } else {
+        // reserva: o botão de download do próprio documento (o nome do arquivo fica o do sistema)
+        const btn = ccbs[0].matches('[onclick*="Download"]') ? ccbs[0] : ccbs[0].querySelector('[onclick*="Download"], a, button');
+        if (!btn) throw new ErroCCB('função de download do sistema não encontrada', true);
+        await aguardarResposta('/Documentos/BaixaDocumento', () => btn.click());
+      }
+      jaBaixadas.add(l.id);
+      fecharDetalhe();
+      await sleep(700);
+      return { proposta: l.numero || l.id, arquivo: nomeArquivo };
+    }
+
+    const ccbStatus = t => ($('#mf-ccb-st').textContent = t);
+    $('#mf-ccb-ler').onclick = () => {
+      if (ccb.rodando) return;
+      const ls = linhasFila();
+      if (!ls.length) return msg('Não achei a lista da Fila de Propostas nesta tela (#tabPropostasLista). Abra a Fila de Propostas.');
+      const ign = cfg('ignorarCanceladasTestes');
+      const eleg = ls.filter(l => elegivelCCB(l) && !(ign && motivoIgnorar(l.cels)));
+      $('#mf-ccb-lista').value = [...new Set(eleg.map(l => l.numero || l.id))].join('\n');
+      msg(eleg.length + ' de ' + ls.length + ' propostas da fila estão efetivadas e assinadas. Revise a lista e clique em Baixar CCBs.');
+    };
+    $('#mf-ccb-parar').onclick = () => { if (ccb.rodando) { ccb.parar = true; ccbStatus('Parando depois do download atual...'); } };
+    $('#mf-ccb-baixar').onclick = async () => {
+      if (ccb.rodando) return;
+      if (executando) return msg('Há uma coleta de relatório rodando. Pause antes de baixar CCBs.');
+      if (!filaPronta()) return msg('A Fila de Propostas não está pronta nesta tela. Abra a Fila de Propostas (com a lista carregada) e tente de novo.');
+      const brutos = $('#mf-ccb-lista').value.split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+      if (!brutos.length) return msg('Informe os nomes ou números das propostas (um por linha), ou clique em "Ler propostas elegíveis da fila".');
+      const vistos = new Set(), itens = [];
+      brutos.forEach(x => { const k = /^\d+$/.test(x) ? x : normalizarNome(x); if (!vistos.has(k)) { vistos.add(k); itens.push(x); } });
+      const ign = cfg('ignorarCanceladasTestes');
+      ccb.rodando = true; ccb.parar = false;
+      $('#mf-ccb-baixar').disabled = true; $('#mf-ccb-parar').disabled = false; $('#mf-ccb-ler').disabled = true;
+      const ok = [], erros = [], jaBaixadas = new Set();
+      let interrompido = '';
+      fecharDetalhe();
+      try {
+        for (let i = 0; i < itens.length; i++) {
+          if (ccb.parar) { interrompido = 'parado pelo usuário'; break; }
+          ccbStatus('Baixando ' + (i + 1) + ' de ' + itens.length + '...');
+          try {
+            const r = await baixarUmaCCB(itens[i], ign, jaBaixadas);
+            ok.push(r.proposta);
+          } catch (e) {
+            fecharDetalhe();
+            erros.push((i + 1) + '. ' + itens[i] + ': ' + e.message);
+            // erro de comunicação com o sistema: o estado da tela é incerto, então para o lote
+            if (e.parar) { interrompido = 'interrompido no item ' + (i + 1); break; }
+          }
+        }
+      } finally {
+        ccb.rodando = false;
+        $('#mf-ccb-baixar').disabled = false; $('#mf-ccb-parar').disabled = true; $('#mf-ccb-ler').disabled = false;
+      }
+      ccbStatus(ok.length + ' baixada(s), ' + erros.length + ' com problema' + (interrompido ? ' · ' + interrompido : '') + '.');
+      msg('CCBs: ' + ok.length + ' de ' + itens.length + ' download(s) solicitado(s)' + (ok.length ? ' (propostas ' + ok.join(', ') + ')' : '') + '.' +
+        (erros.length ? '\nNão baixadas:\n' + erros.join('\n') : '') + (interrompido ? '\nLote ' + interrompido + '.' : ''));
     };
 
     // ao recarregar a página, restaura a fila salva (permite continuar depois de fechar/recarregar)

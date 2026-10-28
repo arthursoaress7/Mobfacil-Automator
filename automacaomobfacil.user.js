@@ -2,6 +2,7 @@
 // @name         MobFacil -> Planilha (automático)
 // @namespace    mobfacil-planilha
 // @version      11.23
+// @vauthor      Arthur 
 // @description  Coleta restritivos, score e consultas do MobFacil e copia para a planilha
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*

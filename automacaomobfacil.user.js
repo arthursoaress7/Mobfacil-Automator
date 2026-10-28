@@ -1,9 +1,11 @@
 // ==UserScript==
 // @name         PaymobiFin - Relatório
+// @name:pt-BR   PaymobiFin - Assistente
+// @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.25
+// @version      11.27
 // @author       Arthur
-// @description  Auditoria de crédito, relatórios PaymobiFin para planilhas e download de CCBs
+// @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*
 // @homepageURL  https://github.com/arthursoaress7/Mobfacil-Automator/tree/main
@@ -20,7 +22,9 @@
 (function () {
   'use strict';
 
-  const VERSAO = 'v11.25';
+  // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.27');
+  const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
     MARGEM: 8,              // s: o iframe encerra sozinho antes do limite acima
@@ -873,7 +877,6 @@
     const ignoradas = () => GM_getValue('ignoradas', {});          // { id: 'teste' | 'cancelada' }
     const verificadas = () => GM_getValue('verificadas', []);      // conferidas na tabela da tela
     const pendentes = () => { const f = new Set(feitas()); return fila().filter(id => !f.has(id)); };
-    const linha = d => (d ? [d.qtd, d.val, d.score, d.consultas].map(x => (x == null ? '' : x)).join('\t') : '\t\t\t');
 
     /* ---------- interface ---------- */
     const painel = document.createElement('div');
@@ -885,10 +888,11 @@
         #mf-p *{box-sizing:border-box;font-family:inherit}
         #mf-p .mf-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e293b;color:#fff;font-size:15px;
           cursor:move;user-select:none;touch-action:none}
-        #mf-p .mf-top small{opacity:.6;margin-left:6px;font-size:12px}
+        #mf-p .mf-top small{opacity:.6;margin-left:6px;font-size:12px;font-weight:400}
+        #mf-p.mf-min .mf-top{border-radius:11px}
         #mf-p.mf-arrastando{opacity:.93;box-shadow:0 14px 40px #0007}
         #mf-p .mf-abas{display:flex;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
-        #mf-p .mf-abas button{flex:1;background:transparent;color:#64748b;border-radius:0;padding:9px 4px;font-size:13px;border-bottom:2px solid transparent}
+        #mf-p .mf-abas button{flex:1;background:transparent;color:#64748b;border-radius:0;padding:9px 2px;font-size:12.5px;border-bottom:2px solid transparent}
         #mf-p .mf-abas button.ativa{background:#fff;color:#1e293b;border-bottom-color:#2563eb}
         #mf-p .mf-sec{padding:10px 14px;border-bottom:1px solid #e2e8f0}
         #mf-p .mf-tit{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px}
@@ -898,7 +902,7 @@
         #mf-p .mf-linha{display:flex;align-items:center;gap:10px;margin-bottom:8px}
         #mf-p .mf-info{font-size:12px;color:#64748b}
         #mf-p textarea{width:100%;height:80px;resize:vertical;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:13px;color:#1f2937;background:#fff}
-        #mf-p select,#mf-p input[type=url]{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;color:#1f2937}
+        #mf-p select,#mf-p input[type=text]{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;background:#fff;color:#1f2937}
         #mf-p .mf-grade{display:grid;grid-template-columns:1fr 1fr;gap:8px}
         #mf-p .mf-cheia{grid-column:1/-1}
         #mf-p button{cursor:pointer;border:0;border-radius:8px;padding:10px 8px;font-size:14px;font-weight:600;color:#fff;background:#475569;line-height:1.2}
@@ -913,20 +917,25 @@
         #mf-p .mf-opc{display:flex;gap:8px;align-items:flex-start;margin:8px 0;font-size:13px;color:#1f2937;cursor:pointer}
         #mf-p .mf-opc input{margin-top:3px;flex:none}
         #mf-p .mf-opc small{display:block;color:#64748b;font-size:12px;margin-top:1px}
-        #mf-p .mf-foot{padding:6px 14px;text-align:right;font-size:11px;color:#64748b;border-top:1px solid #e2e8f0}
         #mf-p #mf-versao{cursor:default;user-select:none}
+        #mf-p .mf-fmt{display:grid;grid-template-columns:96px 1fr;gap:6px;align-items:center;margin:6px 0;font-size:13px}
+        #mf-p .mf-fmt select{padding:6px}
+        #mf-p .mf-conta{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+        #mf-p .mf-conta span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #mf-p .mf-conta button{padding:4px 8px;font-size:12px}
         #mf-p #mf-msg{margin:10px 14px 14px;padding:10px;background:#f1f5f9;border-radius:8px;font-size:13px;max-height:130px;overflow:auto;white-space:pre-wrap}
         #mf-p #mf-msg:empty{display:none}
         #mf-p .mf-corpo{max-height:calc(100vh - 140px);overflow-y:auto;overscroll-behavior:contain}
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
       </style>
-      <div class="mf-top" title="Arraste para mover o painel"><div><b>PaymobiFin - Relatório</b></div>
+      <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small></div>
         <button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-corpo">
         <div class="mf-abas">
           <button data-aba="rel">Relatórios</button>
           <button data-aba="ccb">CCBs</button>
+          <button data-aba="cta">Contas</button>
           <button data-aba="cfg">Configurações</button>
         </div>
 
@@ -986,6 +995,29 @@
           </div>
         </div>
 
+        <div data-pag="cta">
+          <div class="mf-sec">
+            <div class="mf-tit">Conta ativa</div>
+            <div id="mf-conta-ativa" style="font-weight:600">—</div>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Trocar de conta</div>
+            <select id="mf-conta-sel"></select>
+            <button id="mf-conta-trocar" class="azul" style="width:100%;margin-top:8px">Trocar para esta conta</button>
+            <div class="mf-info" style="margin-top:6px">Sai pelo botão "Sair" do próprio sistema (a sessão é do navegador: vale para todas as abas) e, na tela de login, preenche o usuário. A senha fica com você ou com o gerenciador de senhas do navegador.</div>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Contas cadastradas</div>
+            <div id="mf-contas"></div>
+            <div class="mf-grade" style="margin-top:8px">
+              <input id="mf-conta-apelido" type="text" placeholder="Apelido (opcional)" autocomplete="off">
+              <input id="mf-conta-usuario" type="text" placeholder="Usuário de login" autocomplete="off" spellcheck="false">
+            </div>
+            <button id="mf-conta-salvar" class="cinza" style="width:100%;margin-top:8px">Adicionar / atualizar conta</button>
+            <div class="mf-info" style="margin-top:6px">Fica só neste navegador (armazenamento local do Tampermonkey). Nenhuma senha é guardada pelo script.</div>
+          </div>
+        </div>
+
         <div data-pag="cfg">
           <div class="mf-sec">
             <div class="mf-tit">Coleta</div>
@@ -1000,12 +1032,10 @@
             <div class="mf-tit">Formato de cópia</div>
             <label class="mf-opc"><input type="checkbox" id="mf-formato-auto"><span><b>Formato automático por modo</b>
               <small>Auditoria e Valor de transação: texto com tabulação (Excel). Reprovadas, Efetivadas e Aprovadas: tabela com parágrafos (Canva).</small></span></label>
-            <div id="mf-formato-manual" style="display:none;margin:6px 0 4px">
-              <div class="mf-info" id="mf-formato-rot" style="margin-bottom:4px"></div>
-              <select id="mf-estilo"></select>
-            </div>
             <label class="mf-opc"><input type="checkbox" id="mf-formatos-antigos"><span><b>Mostrar formatos antigos</b>
-              <small>Tabela estilo Excel, quebra &lt;br&gt;, blocos div, 2 colunas e Google Sheets, na escolha manual.</small></span></label>
+              <small>Tabela estilo Excel, quebra &lt;br&gt;, blocos div, 2 colunas e Google Sheets.</small></span></label>
+            <div id="mf-formatos"></div>
+            <div class="mf-info" id="mf-formato-dica"></div>
           </div>
           <div class="mf-sec">
             <div class="mf-tit">Painel</div>
@@ -1019,16 +1049,10 @@
               <button id="mf-dbg" class="cinza">Diagnóstico</button>
             </div>
           </div>
-          <div class="mf-sec">
-            <div class="mf-tit">Tutorial</div>
-            <input id="mf-video-url" type="url" placeholder="Link do tutorial no YouTube" style="margin-bottom:8px">
-            <div class="mf-grade"><button id="mf-video-salvar" class="cinza">Salvar link</button><button id="mf-video-abrir" class="azul" disabled>Abrir tutorial</button></div>
-            <div class="mf-info" style="margin-top:6px">O link fica salvo somente neste navegador; não é incluído no código público.</div>
-          </div>
         </div>
         <div id="mf-msg"></div>
       </div>
-      <div class="mf-foot"><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small></div>`;
+`;
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
     const msg = t => ($('#mf-msg').textContent = t);
@@ -1036,7 +1060,7 @@
 
     /* ---------- abas ---------- */
     const mostrarAba = a => {
-      if (!['rel', 'ccb', 'cfg'].includes(a)) a = 'rel';
+      if (!['rel', 'ccb', 'cta', 'cfg'].includes(a)) a = 'rel';
       painel.querySelectorAll('[data-pag]').forEach(p => { p.style.display = p.dataset.pag === a ? 'block' : 'none'; });
       painel.querySelectorAll('.mf-abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === a));
       GM_setValue('abaPainel', a);
@@ -1064,7 +1088,7 @@
     };
     let arraste = null;
     topo.addEventListener('pointerdown', e => {
-      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label')) return;
+      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, #mf-versao')) return;
       const r = painel.getBoundingClientRect();
       arraste = { dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, id: e.pointerId, moveu: false };
       try { topo.setPointerCapture(e.pointerId); } catch (_) {}
@@ -1131,9 +1155,12 @@
       $('#mf-res').disabled = false;
     }
 
+    // minimizado = só a barra do título (com nome e versão); nenhum outro elemento fica visível
     const aplicarMin = m => {
       $('.mf-corpo').style.display = m ? 'none' : 'block';
+      painel.classList.toggle('mf-min', !!m);
       $('#mf-min').textContent = m ? '+' : '—';
+      $('#mf-min').title = m ? 'Expandir' : 'Minimizar';
     };
     $('#mf-min').onclick = () => { const m = !GM_getValue('min', false); GM_setValue('min', m); aplicarMin(m); };
     aplicarMin(GM_getValue('min', false));
@@ -1215,59 +1242,74 @@
     const FORMATOS = {
       canva:     { rot: 'Tabela com parágrafos (Canva)', est: 'p' },
       excel:     { rot: 'Excel (texto com tabulação)', est: 'tsv' },
-      canvaxl:   { rot: 'Tabela estilo Excel (antigo)', est: 'xl', antigo: true },
-      canvabr:   { rot: 'Tabela com quebra br (antigo)', est: 'br', antigo: true },
-      canvadiv:  { rot: 'Tabela com blocos div (antigo)', est: 'div', antigo: true },
-      canva2col: { rot: 'Valor e quantidade em 2 colunas (antigo)', est: 'p2col', antigo: true },
-      sheets:    { rot: 'Google Sheets (texto com tabulação, antigo)', est: 'tsv', antigo: true },
+      canvaxl:   { rot: 'Tabela estilo Excel', est: 'xl', antigo: true },
+      canvabr:   { rot: 'Tabela com quebra br', est: 'br', antigo: true },
+      canvadiv:  { rot: 'Tabela com blocos div', est: 'div', antigo: true },
+      canva2col: { rot: 'Valor e quantidade em 2 colunas', est: 'p2col', antigo: true, so: 'reprovadas' },
+      sheets:    { rot: 'Google Sheets (texto com tabulação)', est: 'tsv', antigo: true },
     };
+    const MODOS = ['coleta', 'reprovadas', 'efetivadas', 'aprovadas', 'valortransacao'];
     // formato automático: cada modo usa o mais adequado ao destino
     const FORMATO_AUTO = { coleta: 'excel', reprovadas: 'canva', efetivadas: 'canva', aprovadas: 'canva', valortransacao: 'excel' };
-    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Valor de transação' };
-    // a escolha manual é guardada POR MODO: mudar o formato de um relatório não altera os outros
+    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Valor transação' };
+    const formatoValido = (m, k) => {
+      const f = FORMATOS[k];
+      return !!f && (!f.antigo || cfg('formatosAntigos')) && (!f.so || f.so === m);
+    };
+    // Automático ligado: formato do modo. Desligado: a escolha manual DAQUELE modo (guardada por modo,
+    // então mudar um relatório não altera os outros); escolha vazia ou indisponível = formato automático.
     const formatoDoModo = m => {
-      if (m === 'coleta') return 'excel';   // a auditoria é colada em colunas fixas da planilha: sempre texto tabulado
       if (cfg('formatoAuto')) return FORMATO_AUTO[m] || 'canva';
       const esc = (GM_getValue('formatoPorModo', {}) || {})[m];
-      const f = FORMATOS[esc];
-      if (!f || (f.antigo && !cfg('formatosAntigos'))) return FORMATO_AUTO[m] || 'canva';
-      return esc;
+      return esc && formatoValido(m, esc) ? esc : FORMATO_AUTO[m] || 'canva';
     };
     const estilo = () => FORMATOS[formatoDoModo(modo())].est;
 
-    function atualizarConfigUI() {
-      const m = modo();
+    // um seletor por modo de relatório, sempre visível; desabilitado enquanto o automático estiver ligado
+    function montarFormatos() {
+      const caixa = $('#mf-formatos');
+      caixa.innerHTML = '';
       const auto = cfg('formatoAuto');
-      $('#mf-formato-manual').style.display = auto ? 'none' : 'block';
-      const sel = $('#mf-estilo');
-      if (m === 'coleta') {
-        $('#mf-formato-rot').textContent = 'Modo Auditoria: sempre texto com tabulação (colunas fixas da planilha).';
-        sel.style.display = 'none';
-      } else {
-        $('#mf-formato-rot').textContent = 'Formato do modo atual (' + NOME_MODO[m] + '):';
-        sel.style.display = 'block';
-        sel.innerHTML = '';
+      MODOS.forEach(m => {
+        const lin = document.createElement('label');
+        lin.className = 'mf-fmt';
+        const rot = document.createElement('span');
+        rot.textContent = NOME_MODO[m];
+        const sel = document.createElement('select');
+        sel.dataset.modo = m;
         Object.entries(FORMATOS).forEach(([k, f]) => {
-          if (f.antigo && !cfg('formatosAntigos')) return;
+          if (!formatoValido(m, k)) return;
           const o = document.createElement('option');
-          o.value = k; o.textContent = f.rot;
+          o.value = k;
+          o.textContent = f.rot + (k === FORMATO_AUTO[m] ? ' (padrão)' : '');
           sel.appendChild(o);
         });
         sel.value = formatoDoModo(m);
-      }
-      $('#mf-formato-info').textContent = '· ' + FORMATOS[formatoDoModo(m)].rot + (auto && m !== 'coleta' ? ' (auto)' : '');
+        sel.disabled = auto;
+        sel.addEventListener('change', () => {
+          const pm = GM_getValue('formatoPorModo', {}) || {};
+          pm[m] = sel.value;
+          GM_setValue('formatoPorModo', pm);
+          atualizarConfigUI();
+        });
+        lin.append(rot, sel);
+        caixa.appendChild(lin);
+      });
+      $('#mf-formato-dica').textContent = auto
+        ? 'Desative o formato automático para escolher o formato de cada relatório.'
+        : 'Cada relatório usa o formato escolhido acima.' + (cfg('formatosAntigos') ? '' : ' Marque "Mostrar formatos antigos" para ver as demais opções.');
+    }
+
+    function atualizarConfigUI() {
+      const m = modo();
+      montarFormatos();
+      $('#mf-formato-info').textContent = '· ' + FORMATOS[formatoDoModo(m)].rot + (cfg('formatoAuto') ? ' (auto)' : '');
       const coleta = m === 'coleta';
       $('#mf-colr').style.display = coleta ? '' : 'none';
       $('#mf-cfull').style.display = coleta && cfg('auditoriaCompleta') ? '' : 'none';
       $('#mf-filtro').textContent = cfg('ignorarCanceladasTestes') ? 'Ignorando canceladas e testes' : 'Incluindo canceladas e testes';
     }
     $('#mf-modo').addEventListener('change', () => { GM_setValue('modo', modo()); atualizarConfigUI(); });
-    $('#mf-estilo').addEventListener('change', () => {
-      const pm = GM_getValue('formatoPorModo', {}) || {};
-      pm[modo()] = $('#mf-estilo').value;
-      GM_setValue('formatoPorModo', pm);
-      atualizarConfigUI();
-    });
     const ligarOpcao = (sel, chave) => {
       $(sel).checked = cfg(chave);
       $(sel).addEventListener('change', () => { GM_setValue(chave, $(sel).checked); atualizarConfigUI(); });
@@ -1278,15 +1320,7 @@
     ligarOpcao('#mf-formato-auto', 'formatoAuto');
     ligarOpcao('#mf-formatos-antigos', 'formatosAntigos');
     atualizarConfigUI();
-
-    const urlVideoSalva = GM_getValue('urlVideoAjuda', '');
-    $('#mf-video-url').value = urlVideoSalva;
-    const urlVideoValida = v => { try { const u = new URL(v); return u.protocol === 'https:' && /(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname); } catch (_) { return false; } };
-    const atualizarVideo = () => { const v = $('#mf-video-url').value.trim(); $('#mf-video-abrir').disabled = !urlVideoValida(v); };
-    $('#mf-video-url').addEventListener('input', atualizarVideo);
-    $('#mf-video-salvar').onclick = () => { const v = $('#mf-video-url').value.trim(); if (v && !urlVideoValida(v)) return msg('Informe um link https válido do YouTube.'); GM_setValue('urlVideoAjuda', v); atualizarVideo(); msg(v ? 'Link de ajuda salvo neste navegador.' : 'Link de ajuda removido.'); };
-    $('#mf-video-abrir').onclick = () => { const v = $('#mf-video-url').value.trim(); if (urlVideoValida(v)) window.open(v, '_blank', 'noopener,noreferrer'); };
-    atualizarVideo();
+    GM_deleteValue('urlVideoAjuda');   // o tutorial do YouTube saiu do painel: limpa o link que ficou salvo
 
     const FILTROS = {
       reprovadas: sit => /\brep\b|reprov/i.test(sit),
@@ -1396,6 +1430,13 @@
     const situacaoLimpa = s => String(s || '').replace(/^\s*\d+\s*-\s*/, '').trim();          // "17 - PRE PROP REP" -> "PRE PROP REP"
     const dataDe = s => (String(s || '').match(/\d{2}\/\d{2}\/\d{4}/) || [])[0] || '';
     const valorCompra = v => (v ? String(v).replace(/^R\$\s*/, 'R$ ') : '');
+    // Valor entrada (coluna M) em percentual, como no modelo (ex.: 37,51%): o da página, ou entrada ÷ valor da compra
+    const percentualEntrada = e => {
+      if (e.entradaPct) return String(num(e.entradaPct)).replace(/^(\d+)$/, '$1,00') + '%';
+      const en = e.entrada != null ? aNum(num(e.entrada)) : NaN, co = e.compra != null ? aNum(num(e.compra)) : NaN;
+      if (!(en >= 0) || !(co > 0)) return '';
+      return (en / co * 100).toFixed(2).replace('.', ',') + '%';
+    };
     // Manual/Auto: mesma regra do relatório de Reprovadas (analista MASTER = automática); textos como no modelo
     const manualAuto = mt => {
       if (!mt || !mt.sit) return '';
@@ -1414,10 +1455,11 @@
         v(d.cpf),                        // C CPF
         v(e.imei),                       // D IMEI
         v(d.qtd), v(d.val), v(d.score), v(d.consultas),   // E–H crédito
-        '', '',                          // I Número, J E-mail (não coletados)
+        e.telefone || '',                // I Número
+        e.email || '',                   // J E-mail
         dataDe(m.dh),                    // K Data da Proposta
-        valorCompra(e.valor),            // L Valor da compra (aba Garantias)
-        '',                              // M Valor entrada (não coletado)
+        valorCompra(e.compra || e.valor),   // L Valor da compra ("Valor da Compra"; reserva: Valor da aba Garantias)
+        percentualEntrada(e),            // M Valor entrada (%)
         m.loja || '',                    // N Loja
         e.vendedor || '',                // O Vendedor
         situacaoLimpa(m.sit),            // P Situação
@@ -1479,11 +1521,28 @@
     const htmlTabela = (linhas, est) => '<table border="1" cellspacing="0" cellpadding="4">' + linhas.map(cols =>
       '<tr>' + cols.map(c => '<td>' + celulaHtml(c, est) + '</td>').join('') + '</tr>').join('') + '</table>';
 
-    /* ---------- detalhe da proposta (Vendedor, Valor, IMEI, Cliente, Situação) ---------- */
+    /* ---------- detalhe da proposta (Vendedor, Valor, IMEI, Cliente, Situação, contato e entrada) ---------- */
+    // "(11) 91437-7547" / "11914377547" / "+55 11 ..." -> "(11) 914377547" (formato da planilha)
+    const fmtTelefone = t => {
+      let d = String(t).replace(/\D/g, '');
+      if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+      return d.length === 10 || d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2) : null;
+    };
     const DETALHES = ['/MesaCredito/MesaAnaliseProposta?lngProposta=', '/MesaCredito/DetalheProposta?lngProposta='];
     const proprio = el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
     const normRot = t => t.replace(/:$/, '').trim().toLowerCase();
 
+    // texto de um elemento; se ele for (ou contiver) um campo de formulário, o valor do campo
+    // (páginas que mostram os dados em <input readonly> não têm o valor no texto)
+    const textoOuCampo = n => {
+      if (!n) return '';
+      const t = n.textContent.replace(/\s+/g, ' ').trim();
+      if (t || n.nodeType !== 1) return t;
+      const c = n.matches('input, textarea, select') ? n : n.querySelector('input, textarea, select');
+      if (!c) return '';
+      if (c.tagName === 'SELECT') { const o = c.querySelector('option[selected]'); return o ? o.textContent.replace(/\s+/g, ' ').trim() : ''; }
+      return String(c.getAttribute('value') || c.textContent || '').replace(/\s+/g, ' ').trim();
+    };
     // acha o "rótulo" (ex.: Digitador) e devolve o texto do valor que vem logo depois dele
     function acharRotulo(doc, rotulo, depoisDeTitulo) {
       const todos = [...doc.querySelectorAll('body *')];
@@ -1495,11 +1554,8 @@
       for (const el of cands) {
         let n = el.nextSibling;
         while (n && ((n.nodeType === 3 && !n.textContent.trim()) || n.nodeName === 'BR')) n = n.nextSibling;
-        let t = n ? n.textContent.replace(/\s+/g, ' ').trim() : '';
-        if (!t && el.parentElement) {
-          let q = el.parentElement.nextElementSibling;
-          t = q ? q.textContent.replace(/\s+/g, ' ').trim() : '';
-        }
+        let t = textoOuCampo(n);
+        if (!t && el.parentElement) t = textoOuCampo(el.parentElement.nextElementSibling);
         if (t) return t;
       }
       return null;
@@ -1526,7 +1582,7 @@
           info.push(nome + ': ' + html.length + ' bytes');
           doc.querySelectorAll('body *').forEach(el => {
             const t = proprio(el);
-            if (t.length < 30 && /digitador|vendedor|valor|imei|garantia|cliente|nome|situa/i.test(t)) rotulos.add(t);
+            if (t.length < 30 && /digitador|vendedor|valor|imei|garantia|cliente|nome|situa|telefone|celular|fone|contato|mail|entrada|percent|%/i.test(t)) rotulos.add(t);
           });
         } catch (e) { info.push(nome + ': erro'); }
         finally { clearTimeout(tm); }
@@ -1543,11 +1599,24 @@
       const imei = imeiTxt ? imeiTxt.replace(/\D/g, '') : null;
       const cliente = primeiroRotulo(docs, ['Nome do Cliente', 'Cliente', 'Nome'], t => /^[A-Za-zÀ-ÿ'.\s-]{3,120}$/.test(t));
       const situacao = primeiroRotulo(docs, ['Situação', 'Situacao', 'Status'], t => t.length <= 60);
+      // auditoria completa (colunas I, J, L e M): só aceita valores no formato esperado
+      const telTxt = primeiroRotulo(docs, ['Celular', 'Telefone Celular', 'Tel. Celular', 'Telefone', 'Fone', 'Telefone 1', 'Telefone Residencial', 'Contato'],
+        t => /^\D*(55)?\d{10,11}\D*$/.test(t.replace(/[\s().-]/g, '')));
+      const telefone = telTxt ? fmtTelefone(telTxt) : null;
+      const email = primeiroRotulo(docs, ['E-mail', 'Email', 'E-Mail do Cliente', 'E-mail do Cliente', 'Endereço de E-mail'],
+        t => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t));
+      const compraTxt = primeiroRotulo(docs, ['Valor da Compra'], t => num(t) != null);
+      const compra = compraTxt ? 'R$' + compraTxt.replace(/^R\$\s*/, '') : null;
+      const entradaPct = primeiroRotulo(docs, ['% Entrada', 'Percentual de Entrada', 'Percentual Entrada', 'Entrada (%)'], t => /%/.test(t) && num(t) != null);
+      const entradaTxt = primeiroRotulo(docs, ['Valor da Entrada', 'Entrada'], t => num(t) != null);
+      const entrada = entradaTxt ? 'R$' + entradaTxt.replace(/^R\$\s*/, '') : null;
       const extra = GM_getValue('extra', {});
-      extra[id] = { vendedor: vendedor || null, valor: valor || null, imei, cliente: cliente || null, situacao: situacao || null };
+      extra[id] = { vendedor: vendedor || null, valor: valor || null, imei, cliente: cliente || null, situacao: situacao || null,
+        telefone, email: email || null, compra, entrada, entradaPct: entradaPct || null };
       GM_setValue('extra', extra);
       const dbg = GM_getValue('extraDbg', {});
-      dbg[id] = { paginas: info, achouVendedor: !!vendedor, achouValor: !!valor, achouImei: !!imei, achouCliente: !!cliente, achouSituacao: !!situacao, rotulosVistos: [...rotulos].slice(0, 30) };
+      dbg[id] = { paginas: info, achouVendedor: !!vendedor, achouValor: !!valor, achouImei: !!imei, achouCliente: !!cliente, achouSituacao: !!situacao,
+        achouTelefone: !!telefone, achouEmail: !!email, achouCompra: !!compra, achouEntrada: !!(entrada || entradaPct), rotulosVistos: [...rotulos].slice(0, 40) };
       GM_setValue('extraDbg', dbg);
     }
 
@@ -1557,9 +1626,11 @@
       if (!GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
       const e = GM_getValue('extra', {})[id] || {};
       if (e.situacao && /cancelad/i.test(e.situacao)) return 'cancelada';
-      if (e.cliente && ehTeste([e.cliente])) return 'teste';
+      if (ehTeste([e.cliente, e.vendedor])) return 'teste';
       return null;
     }
+    // depois de ler o detalhe (auditoria completa e relatórios): cliente ou digitador "TESTE" = proposta de teste
+    const motivoDetalhe = e => (e && e.situacao && /cancelad/i.test(e.situacao) ? 'cancelada' : e && ehTeste([e.cliente, e.vendedor]) ? 'teste' : null);
     const marcarIgnorada = (id, motivo) => { const ig = ignoradas(); ig[id] = motivo; GM_setValue('ignoradas', ig); };
 
     /* ---------- cópia ---------- */
@@ -1578,31 +1649,38 @@
     };
     // Propostas ignoradas (teste/cancelada): nas listas coladas linha a linha na planilha (Auditoria e Valor de transação)
     // viram linha em branco, para não desalinhar as linhas seguintes; nas tabelas dos relatórios (Canva) saem da lista.
+    // TODAS as cópias passam por aqui: o formato escolhido (automático ou manual) decide como as linhas vão para a área de transferência
+    const textoTab = linhas => linhas.map(c => c.map(v => cel(String(v == null ? '' : v))).join('\t')).join('\n');
+    function emitir(linhas) {
+      const est = estilo();
+      if (est === 'tsv') GM_setClipboard(textoTab(linhas), 'text');
+      else if (est === 'xl') copiarHtmlETexto(htmlTabela(linhas, 'xl'), textoTab(linhas));
+      else GM_setClipboard(htmlTabela(linhas, est), { type: 'html', mimetype: 'text/html' });
+    }
     function copiar(comId) {
       const dados = GM_getValue('dados', {});
       const ig = ignoradas();
       if (modo() !== 'coleta') {
         const alinhado = modo() === 'valortransacao';
         const ids = alinhado ? fila() : fila().filter(id => !ig[id]);
-        const linhasRel = ids.map(id => (ig[id] ? [''] : relatorioCols(modo(), id, dados[id])));
-        const est = estilo();
-        if (est === 'tsv') GM_setClipboard(linhasRel.map(c => c.map(cel).join('\t')).join('\n'), 'text');
-        else if (est === 'xl') copiarHtmlETexto(htmlTabela(linhasRel, 'xl'), linhasRel.map(c => c.map(cel).join('\t')).join('\n'));
-        else GM_setClipboard(htmlTabela(linhasRel, est), { type: 'html', mimetype: 'text/html' });
+        emitir(ids.map(id => (ig[id] ? [''] : relatorioCols(modo(), id, dados[id]))));
         return false;
       }
       const usarId = comId !== undefined ? comId : GM_getValue('origem', 'manual') === 'tela';
-      const sep = '\t'.repeat(CONFIG.VAZIAS_APOS_ID + 1);   // id + colunas vazias até a coluna E
-      GM_setClipboard(fila().map(id => (usarId ? id + sep : '') + (ig[id] ? '\t\t\t' : linha(dados[id]))).join('\n'), 'text');
+      const vazias = Array(CONFIG.VAZIAS_APOS_ID).fill('');   // Nome, CPF, IMEI: entre a Proposta (A) e a coluna E
+      emitir(fila().map(id => {
+        const d = ig[id] ? null : dados[id];
+        const cred = d ? [d.qtd, d.val, d.score, d.consultas].map(x => (x == null ? '' : x)) : ['', '', '', ''];
+        return usarId ? [id, ...vazias, ...cred] : cred;
+      }));
       return usarId;
     }
     function copiarCompleta() {
       const dados = GM_getValue('dados', {}), meta = GM_getValue('meta', {}), extra = GM_getValue('extra', {}), ig = ignoradas();
-      const linhas = fila().map(id => (ig[id] ? [id, ...Array(COLUNAS_AUDITORIA.length - 1).fill('')] : linhaCompleta(id, dados[id], meta[id], extra[id])));
-      GM_setClipboard(linhas.map(c => c.map(v => cel(String(v))).join('\t')).join('\n'), 'text');
+      emitir(fila().map(id => (ig[id] ? [id, ...Array(COLUNAS_AUDITORIA.length - 1).fill('')] : linhaCompleta(id, dados[id], meta[id], extra[id]))));
     }
     const AVISO_COMPLETA = 'Copiado no modelo Auditoria 2 Completo (colunas A a R). Cole na coluna A (Proposta), na primeira linha da lista. ' +
-      'Número, E-mail e Valor entrada não são coletados e vão em branco (IMEI também, quando não encontrado).';
+      'Campos que a página da proposta não informar (ex.: telefone, e-mail, entrada, IMEI) vão em branco.';
 
     const avisoCopia = usouId => modo() === 'valortransacao'
       ? (estilo() === 'tsv'
@@ -1610,6 +1688,8 @@
         : 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem da lista.')
       : modo() !== 'coleta'
       ? 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem do relatório.'
+      : estilo() !== 'tsv'
+      ? 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + '. ' + (usouId ? 'Cole na coluna A.' : 'Cole na coluna E.')
       : usouId
       ? 'Cole na coluna A (proposta). Atenção: Nome, CPF e IMEI das linhas coladas serão sobrescritos por células vazias.'
       : 'Cole na coluna E.';
@@ -1647,6 +1727,12 @@
         const f = completo(dados[id]) ? [] : faltaCampos(dados[id]);
         if (full && !meta[id]) f.push('nome/loja/situação (proposta fora da tabela da tela)');
         if (full && !(ex[id] && ex[id].vendedor)) f.push('vendedor');
+        if (full && ex[id]) {
+          const e = ex[id];
+          if (!e.telefone) f.push('telefone');
+          if (!e.email) f.push('e-mail');
+          if (!e.entrada && !e.entradaPct) f.push('entrada');
+        }
         return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
       }).filter(Boolean);
     }
@@ -1660,6 +1746,10 @@
       // dados da página de detalhe: Vendedor e Valor (aba Garantias); na auditoria completa também IMEI/cliente
       const precisaDetalhe = m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao' || (m === 'coleta' && cfg('auditoriaCompleta'));
       if (precisaDetalhe && !GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
+      if (cfg('ignorarCanceladasTestes')) {
+        const mot = motivoDetalhe(GM_getValue('extra', {})[id]);
+        if (mot) { marcarIgnorada(id, mot); return null; }
+      }
       if (m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao') {
         const extra = GM_getValue('extra', {})[id] || {};
         if (m === 'valortransacao' && !extra.valor) return 'valor de transação não localizado';
@@ -1802,6 +1892,7 @@
       if (outraAbaRodando()) return msg('Já existe uma coleta rodando em outra aba.');
       let ids = [...new Set(idsDaCaixa())];
       if (!ids.length) return msg('Clique em "Ler da tela" ou cole a lista de propostas.');
+      if (!contaConfirmada()) return msg('Coleta não iniciada: confirme a conta ativa na aba Contas.');
       GM_setValue('modo', modo());
       // confere cada proposta na tabela da Mesa de Crédito que está na tela (situação e células da linha)
       const linhasTela = lerLinhas();
@@ -1869,6 +1960,7 @@
         return msg('A lista da caixa é diferente da fila salva. Clique em Iniciar para usar a lista nova, ou em Resetar para limpar tudo.');
       }
       if (!pendentes().length) return msg('Não há nada pendente para continuar.');
+      if (!contaConfirmada()) return msg('Coleta não retomada: confirme a conta ativa na aba Contas.');
       GM_setValue('rodando', true);
       executando = true;
       iniciarBatida();
@@ -1938,7 +2030,7 @@
       const f = fila();
       if (!f.length) return msg('Não há propostas na fila. Leia a tela ou cole a lista e faça a coleta antes.');
       const motivos = f.map(id => (ig[id] ? '' : motivoColunaR(dados[id], meta[id])));
-      GM_setClipboard(motivos.join('\n'), 'text');
+      emitir(motivos.map(x => [x]));
       const sem = f.filter(id => !ig[id] && !completo(dados[id])).length;
       const com = motivos.filter(Boolean).length;
       msg((executando ? 'Cópia PARCIAL. ' : '') + 'Motivo copiado na ordem da lista: ' + com + ' com motivo, ' + (f.length - com) + ' em branco' +
@@ -1965,6 +2057,7 @@
       GM_setClipboard(JSON.stringify({
         versao: VERSAO, modo: modo(),
         config: Object.fromEntries(Object.keys(PADRAO).map(k => [k, cfg(k)])),
+        contasCadastradas: contas().length, trocaPendente: !!GM_getValue('trocaConta', null),
         dados, fila: fila(), faltam: faltantes(), falhas, ignoradas: ignoradas(), verificadas: verificadas().length,
         extraDbg: GM_getValue('extraDbg', {}),
         // horário/loja/analista da tabela da tela: só mostra se o campo existe (sem nomes de clientes)
@@ -2126,6 +2219,7 @@
     $('#mf-ccb-baixar').onclick = async () => {
       if (ccb.rodando) return;
       if (executando) return msg('Há uma coleta de relatório rodando. Pause antes de baixar CCBs.');
+      if (!contaConfirmada()) return msg('Download não iniciado: confirme a conta ativa na aba Contas.');
       if (!filaPronta()) return msg('A Fila de Propostas não está pronta nesta tela. Abra a Fila de Propostas (com a lista carregada) e tente de novo.');
       const brutos = $('#mf-ccb-lista').value.split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
       if (!brutos.length) return msg('Informe os nomes ou números das propostas (um por linha), ou clique em "Ler propostas elegíveis da fila".');
@@ -2159,6 +2253,154 @@
       msg('CCBs: ' + ok.length + ' de ' + itens.length + ' download(s) solicitado(s)' + (ok.length ? ' (propostas ' + ok.join(', ') + ')' : '') + '.' +
         (erros.length ? '\nNão baixadas:\n' + erros.join('\n') : '') + (interrompido ? '\nLote ' + interrompido + '.' : ''));
     };
+
+
+    /* ================= CONTAS (troca rápida) =================
+       Sem senhas: o script guarda só apelido + usuário (local, por navegador). A troca usa o fluxo oficial:
+       botão "Sair" do sistema -> tela de login (usuário preenchido; senha pelo usuário ou pelo gerenciador de
+       senhas do navegador) -> depois do login, confere a conta ativa no topo da página. */
+    const contas = () => GM_getValue('contas', []);
+    const rotuloConta = c => (c.apelido ? c.apelido + ' (' + c.usuario + ')' : c.usuario);
+    const escRe = t => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const visivel = el => !!el && !painel.contains(el) && el.offsetParent !== null;
+    // tela de login do sistema: #txtUsuario ("Código de Usuário") e #txtSenha; os genéricos ficam de reserva
+    const campoSenha = () => [document.querySelector('#frmLogin #txtSenha'), ...document.querySelectorAll('input[type=password]')].find(visivel) || null;
+    const campoUsuario = senha => {
+      const id = document.querySelector('#frmLogin #txtUsuario');
+      if (visivel(id)) return id;
+      const raiz = senha.form || senha.closest('form') || document;
+      const cands = [...raiz.querySelectorAll('input')].filter(i => visivel(i) && /^(text|email|)$/i.test(i.getAttribute('type') || ''));
+      const antes = cands.filter(i => i.compareDocumentPosition(senha) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return antes[antes.length - 1] || cands[0] || null;
+    };
+    // conta ativa: procura o usuário (ou o apelido) cadastrado no topo/menu da página — nunca nas tabelas de propostas
+    // usuário logado, no topo do menu lateral: <div id="divNomeCliente"><p>ARTHUR MESA</p><a><i class="fa fa-user"></i> ARTHURMESA</a>
+    const usuarioLogado = () => {
+      const box = document.querySelector('#divNomeCliente');
+      if (!box) return null;
+      const a = [...box.querySelectorAll('a')].find(x => x.querySelector('.fa-user'));
+      const codigo = a ? a.textContent.replace(/\s+/g, ' ').trim() : '';
+      if (!/^\S{2,80}$/.test(codigo)) return null;
+      const p = box.querySelector('p');
+      return { codigo, nome: p ? p.textContent.replace(/\s+/g, ' ').trim() : '' };
+    };
+    function contaAtiva() {
+      const lista = contas();
+      const log = usuarioLogado();
+      if (log) {   // fonte oficial: o código do usuário mostrado pelo sistema
+        const c = lista.find(x => x.usuario.toLowerCase() === log.codigo.toLowerCase());
+        return c || { usuario: log.codigo, apelido: log.nome, naoCadastrada: true };
+      }
+      if (!lista.length) return null;
+      const SEL = 'header, nav, .navbar, .navbar-header, .navbar-right, .user-info, .user-panel, .dropdown-user, [class*="usuario" i], [id*="usuario" i], [class*="user" i], [id*="user" i]';
+      const textos = [...document.querySelectorAll(SEL)].filter(el => !painel.contains(el) && !el.closest('table'))
+        .map(el => el.textContent.replace(/\s+/g, ' ').trim()).filter(t => t && t.length < 600);
+      const achadas = lista.filter(c => [c.usuario, c.apelido].filter(Boolean)
+        .some(n => textos.some(t => new RegExp('(^|[^\\wÀ-ÿ])' + escRe(n) + '($|[^\\wÀ-ÿ])', 'i').test(t))));
+      return achadas.length === 1 ? achadas[0] : null;   // nenhuma ou mais de uma: não dá para afirmar
+    }
+    const linkSair = () => {
+      const els = [...document.querySelectorAll('a, button, [onclick]')].filter(el => !painel.contains(el));
+      return els.find(el => /^(sair|logout|log ?off|desconectar|encerrar sess[ãa]o)$/i.test((el.textContent || '').replace(/\s+/g, ' ').trim() || el.getAttribute('title') || ''))
+        || els.find(el => el.tagName === 'A' && /(logout|logoff|signout|\/sair\b)/i.test(el.getAttribute('href') || '')) || null;
+    };
+
+    function desenharContas() {
+      const lista = contas();
+      const sel = $('#mf-conta-sel');
+      sel.innerHTML = '';
+      lista.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = rotuloConta(c); sel.appendChild(o); });
+      $('#mf-conta-trocar').disabled = !lista.length;
+      const caixa = $('#mf-contas');
+      caixa.innerHTML = lista.length ? '' : '<div class="mf-info">Nenhuma conta cadastrada.</div>';
+      lista.forEach((c, i) => {
+        const lin = document.createElement('div');
+        lin.className = 'mf-conta';
+        const nome = document.createElement('span');
+        nome.textContent = rotuloConta(c);
+        const ed = document.createElement('button'); ed.className = 'cinza'; ed.textContent = 'Editar';
+        ed.onclick = () => { $('#mf-conta-apelido').value = c.apelido || ''; $('#mf-conta-usuario').value = c.usuario; };
+        const ex = document.createElement('button'); ex.className = 'vermelho'; ex.textContent = 'Excluir';
+        ex.onclick = () => {
+          if (!confirm('Excluir a conta ' + rotuloConta(c) + ' deste navegador?')) return;
+          GM_setValue('contas', contas().filter((_, k) => k !== i));
+          desenharContas();
+        };
+        lin.append(nome, ed, ex);
+        caixa.appendChild(lin);
+      });
+      const a = contaAtiva();
+      const t = GM_getValue('trocaConta', null);
+      $('#mf-conta-ativa').textContent = (a ? rotuloConta(a) : 'não identificada na página') + (t ? ' · troca para ' + t.usuario + ' pendente' : '');
+    }
+    $('#mf-conta-salvar').onclick = () => {
+      const usuario = $('#mf-conta-usuario').value.trim();
+      const apelido = $('#mf-conta-apelido').value.trim().slice(0, 40);
+      if (!usuario || usuario.length > 80 || /\s/.test(usuario)) return msg('Informe o usuário de login (sem espaços).');
+      const lista = contas();
+      const i = lista.findIndex(c => c.usuario.toLowerCase() === usuario.toLowerCase());
+      if (i >= 0) lista[i] = { usuario, apelido }; else lista.push({ usuario, apelido });
+      GM_setValue('contas', lista);
+      $('#mf-conta-usuario').value = ''; $('#mf-conta-apelido').value = '';
+      desenharContas();
+      msg('Conta ' + usuario + (i >= 0 ? ' atualizada.' : ' adicionada.'));
+    };
+    $('#mf-conta-trocar').onclick = () => {
+      if (executando || ccb.rodando) return msg('Pause a coleta ou o download de CCBs antes de trocar de conta.');
+      const c = contas()[$('#mf-conta-sel').value];
+      if (!c) return msg('Cadastre uma conta primeiro.');
+      if (!confirm('Trocar para ' + rotuloConta(c) + '?\nA sessão atual será encerrada pelo "Sair" do sistema, em todas as abas deste navegador.')) return;
+      GM_setValue('trocaConta', { usuario: c.usuario, quando: Date.now(), etapa: 'saindo' });
+      const senha = campoSenha();
+      if (senha) return processarTroca();   // já está na tela de login
+      const sair = linkSair();
+      if (sair) { msg('Encerrando a sessão atual...'); sair.click(); }
+      else msg('Não encontrei o botão "Sair" nesta tela. Saia pelo menu do sistema; na tela de login o usuário ' + c.usuario + ' será preenchido.');
+    };
+    // roda a cada carregamento de página: tela de login = preenche o usuário; depois do login = confere a conta
+    function processarTroca() {
+      const t = GM_getValue('trocaConta', null);
+      if (!t) return;
+      if (Date.now() - t.quando > 15 * 60 * 1000) { GM_deleteValue('trocaConta'); return; }
+      const senha = campoSenha();
+      if (senha) {
+        const u = campoUsuario(senha);
+        if (u && u.value !== t.usuario) {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(u, t.usuario);
+          u.dispatchEvent(new Event('input', { bubbles: true }));
+          u.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        GM_setValue('trocaConta', { ...t, etapa: 'login' });
+        setTimeout(() => { try { senha.focus(); } catch (_) {} }, 300);
+        mostrarAba('cta');
+        msg(u ? 'Tela de login: usuário ' + t.usuario + ' preenchido. Digite a senha (ou escolha no gerenciador de senhas do navegador) e entre.'
+          : 'Tela de login: não achei o campo de usuário. Entre com ' + t.usuario + '.');
+        return;
+      }
+      if (t.etapa === 'saindo' && Date.now() - t.quando < 3000) return;   // ainda é a página de onde saiu
+      const a = contaAtiva();
+      if (a && a.usuario.toLowerCase() === t.usuario.toLowerCase()) {
+        GM_deleteValue('trocaConta');
+        msg('Troca concluída: conta ativa ' + rotuloConta(a) + '.');
+      } else {
+        GM_setValue('trocaConta', { ...t, etapa: 'conferir' });
+        msg(a ? 'ATENÇÃO: a conta ativa é ' + rotuloConta(a) + ', não ' + t.usuario + '. Saia e entre com a conta certa.'
+          : 'Não consegui confirmar na página se a conta ativa é ' + t.usuario + '. Confira no topo do sistema antes de rodar relatórios.');
+      }
+    }
+    // antes de rodar relatórios ou baixar CCBs: troca pendente/não confirmada exige a confirmação do usuário
+    const contaConfirmada = () => {
+      const t = GM_getValue('trocaConta', null);
+      if (!t) return true;
+      const a = contaAtiva();
+      if (a && a.usuario.toLowerCase() === t.usuario.toLowerCase()) { GM_deleteValue('trocaConta'); return true; }
+      if (!confirm('A troca para a conta ' + t.usuario + ' não foi confirmada (conta ativa: ' + (a ? rotuloConta(a) : 'não identificada') + ').\nContinuar mesmo assim?')) return false;
+      GM_deleteValue('trocaConta');
+      return true;
+    };
+    desenharContas();
+    processarTroca();
+    desenharContas();
 
     // ao recarregar a página, restaura a fila salva (permite continuar depois de fechar/recarregar)
     if (fila().length) $('#mf-lista').value = fila().join('\n');

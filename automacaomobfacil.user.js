@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.29
+// @version      11.31
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.29');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.31');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -66,6 +66,8 @@
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
+    trocaSemConfirmacao: true,
+    lerAbaCliente: true,             // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
   };
   const cfg = k => GM_getValue(k, PADRAO[k]);
 
@@ -835,6 +837,7 @@
     let relogio = null;
     let ctlAtual = null;   // AbortController do fetch em andamento (para a pausa ser imediata)
     let atual = null;      // proposta sendo coletada agora
+    let etapaAtual = '';   // etapa da proposta em andamento (aparece no status)
     // Mantém a aba "ativa" para o navegador (áudio inaudível + Web Lock): evita que ele deixe a coleta lenta
     // quando você está em outra aba/janela. Só liga durante a coleta; precisa começar num clique (Iniciar/Continuar).
     let audioCtx = null, osc = null, soltarLock = null, lockPedido = false;
@@ -918,6 +921,13 @@
         #mf-p .mf-opc input{margin-top:3px;flex:none}
         #mf-p .mf-opc small{display:block;color:#64748b;font-size:12px;margin-top:1px}
         #mf-p #mf-versao{cursor:default;user-select:none}
+        #mf-p .mf-grupo{padding:4px 14px;border-bottom:1px solid #e2e8f0}
+        #mf-p .mf-grupo>summary{cursor:pointer;padding:6px 0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;list-style:none}
+        #mf-p .mf-grupo>summary::-webkit-details-marker{display:none}
+        #mf-p .mf-grupo>summary::before,#mf-p .mf-dobra::before{content:'▸ ';color:#94a3b8}
+        #mf-p .mf-grupo[open]>summary::before,#mf-p .mf-dobra.aberta::before{content:'▾ '}
+        #mf-p .mf-grupo[open]{padding-bottom:10px}
+        #mf-p .mf-dobra{cursor:pointer;user-select:none}
         #mf-p .mf-fmt{display:grid;grid-template-columns:96px 1fr;gap:6px;align-items:center;margin:6px 0;font-size:13px}
         #mf-p .mf-fmt select{padding:6px}
         #mf-p .mf-conta{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
@@ -952,8 +962,14 @@
               <option value="reprovadas">Relatório - Reprovadas</option>
               <option value="efetivadas">Relatório - Efetivadas (Boleto+)</option>
               <option value="aprovadas">Relatório - Aprovadas não efetivadas</option>
-              <option value="valortransacao">Relatório - Valor de transação (Excel)</option>
+              <option value="valortransacao">Relatório - Diário</option>
             </select>
+            <div id="mf-diario" style="display:none;margin-bottom:8px">
+              <select id="mf-diario-saida" title="Só muda a saída do Relatório Diário">
+                <option value="completo">Relatório completo (linhas A–L + valores N)</option>
+                <option value="valores">Somente valores de transação (coluna N)</option>
+              </select>
+            </div>
             <div class="mf-linha">
               <button id="mf-tela" class="cinza">Ler da tela</button>
               <span id="mf-filtro" class="mf-info"></span>
@@ -975,6 +991,8 @@
               <button id="mf-cop">Copiar resultado</button>
               <button id="mf-cid">Copiar c/ proposta</button>
               <button id="mf-cfull" class="azul mf-cheia" title="Linha inteira do modelo Auditoria 2 Completo, da coluna A (Proposta) à R (Motivo Reprovação)">Copiar auditoria completa (A–R)</button>
+              <button id="mf-dlin" class="azul mf-cheia" title="Colunas A a L da planilha do Relatório Diário (a M, Situação Relatório, não é tocada)">Copiar linhas (A–L)</button>
+              <button id="mf-dval" class="verde mf-cheia" title="Só os valores de transação, um por linha, para colar na coluna N">Copiar somente valores (coluna N)</button>
               <button id="mf-colr" class="cinza mf-cheia" title="Só a coluna do motivo de reprovação, para colar na coluna R">Copiar motivo (coluna R)</button>
             </div>
           </div>
@@ -1007,10 +1025,11 @@
             <div class="mf-info" style="margin-top:6px">Sai pelo botão "Sair" do próprio sistema (a sessão é do navegador: vale para todas as abas). Na tela de login preenche o usuário e, se a conta tiver senha salva, entra sozinho.</div>
           </div>
           <div class="mf-sec">
-            <div class="mf-tit">Contas cadastradas</div>
+            <div class="mf-tit mf-dobra" id="mf-contas-tit" title="Mostrar / esconder as contas cadastradas">Contas cadastradas <span id="mf-contas-qtd"></span></div>
+            <div id="mf-contas-corpo">
             <div id="mf-contas"></div>
             <div class="mf-grade" style="margin-top:8px">
-              <input id="mf-conta-apelido" type="text" placeholder="Apelido (opcional)" autocomplete="off">
+              <input id="mf-conta-apelido" type="text" placeholder="Nome da conta (ex.: Caio Mesa)" autocomplete="off">
               <input id="mf-conta-usuario" type="text" placeholder="Usuário de login" autocomplete="off" spellcheck="false">
             </div>
             <div style="display:flex;gap:6px;margin-top:8px">
@@ -1020,40 +1039,33 @@
             <button id="mf-conta-salvar" class="cinza" style="width:100%;margin-top:8px">Adicionar / atualizar conta</button>
             <div class="mf-info" style="margin-top:6px">Usuário e senha ficam só neste navegador, no armazenamento local do Tampermonkey: não vão para o código, o GitHub, o Diagnóstico nem para outros funcionários.
               <b>Esse armazenamento não é criptografado</b>: quem usar este perfil do navegador ou um backup do Tampermonkey consegue ler. Ao editar, senha em branco mantém a atual.</div>
+            </div>
           </div>
         </div>
 
         <div data-pag="cfg">
-          <div class="mf-sec">
-            <div class="mf-tit">Coleta</div>
-            <label class="mf-opc"><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b>
-              <small>Coleta também CPF, motivo da reprovação (coluna R) e os dados da proposta (nome, loja, vendedor, situação...) no modelo Auditoria 2 Completo. Desative quando esses dados já estiverem na planilha: os dados de crédito continuam sendo coletados.</small></span></label>
-            <label class="mf-opc"><input type="checkbox" id="mf-canc"><span><b>Ignorar canceladas e testes</b>
-              <small>Proposta cancelada ou de teste (ex.: cliente "TESTE") nunca é processada, qualquer que seja a situação.</small></span></label>
-            <label class="mf-opc"><input type="checkbox" id="mf-auto-copia"><span><b>Copiar ao concluir</b>
-              <small>Copia o resultado sozinho quando a fila termina.</small></span></label>
-          </div>
-          <div class="mf-sec">
-            <div class="mf-tit">Formato de cópia</div>
-            <label class="mf-opc"><input type="checkbox" id="mf-formato-auto"><span><b>Formato automático por modo</b>
-              <small>Auditoria e Valor de transação: texto com tabulação (Excel). Reprovadas, Efetivadas e Aprovadas: tabela com parágrafos (Canva).</small></span></label>
-            <label class="mf-opc"><input type="checkbox" id="mf-formatos-antigos"><span><b>Mostrar formatos antigos</b>
-              <small>Tabela estilo Excel, quebra &lt;br&gt;, blocos div, 2 colunas e Google Sheets.</small></span></label>
+          <details class="mf-grupo" data-grupo="coleta" open><summary>Coleta</summary>
+            <label class="mf-opc" title="Coleta também CPF, motivo (coluna R) e os dados da proposta (nome, loja, vendedor, contato...) no modelo Auditoria 2 Completo. Desligada: só os dados de crédito."><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b><small>CPF, motivo e dados da proposta (A–R)</small></span></label>
+            <label class="mf-opc" title="Abre a aba Cliente da Análise de Proposta (oculta) para ler telefone e e-mail. Desligue se ela deixar a coleta lenta ou falhar: o resto da auditoria continua."><input type="checkbox" id="mf-aba-cliente"><span><b>Telefone e e-mail (aba Cliente)</b></span></label>
+            <label class="mf-opc" title="Proposta cancelada ou de teste (cliente ou digitador TESTE) nunca é processada, qualquer que seja a situação."><input type="checkbox" id="mf-canc"><span><b>Ignorar canceladas e testes</b></span></label>
+            <label class="mf-opc" title="Copia o resultado sozinho quando a fila termina."><input type="checkbox" id="mf-auto-copia"><span><b>Copiar ao concluir</b></span></label>
+          </details>
+          <details class="mf-grupo" data-grupo="formato"><summary>Formato de cópia</summary>
+            <label class="mf-opc" title="Auditoria e Diário: texto com tabulação (Excel). Reprovadas, Efetivadas e Aprovadas: tabela com parágrafos (Canva)."><input type="checkbox" id="mf-formato-auto"><span><b>Automático por modo</b></span></label>
+            <label class="mf-opc" title="Tabela estilo Excel, quebra br, blocos div, 2 colunas e Google Sheets."><input type="checkbox" id="mf-formatos-antigos"><span><b>Mostrar formatos antigos</b></span></label>
             <div id="mf-formatos"></div>
             <div class="mf-info" id="mf-formato-dica"></div>
-          </div>
-          <div class="mf-sec">
-            <div class="mf-tit">Painel</div>
-            <button id="mf-pos" class="cinza" style="width:100%">Restaurar posição original do painel</button>
-            <div class="mf-info" style="margin-top:6px">Arraste o painel pela barra escura do título. A posição fica salva.</div>
-          </div>
-          <div class="mf-sec">
-            <div class="mf-tit">Diagnóstico</div>
-            <div class="mf-grade">
+          </details>
+          <details class="mf-grupo" data-grupo="contas"><summary>Contas</summary>
+            <label class="mf-opc" title="Desligado: pede confirmação antes de sair da conta atual."><input type="checkbox" id="mf-troca-direta"><span><b>Trocar de conta sem confirmação</b></span></label>
+          </details>
+          <details class="mf-grupo" data-grupo="painel"><summary>Painel e diagnóstico</summary>
+            <button id="mf-pos" class="cinza" style="width:100%" title="Arraste o painel pela barra escura do título; a posição fica salva.">Restaurar posição original do painel</button>
+            <div class="mf-grade" style="margin-top:8px">
               <button id="mf-fal" class="cinza">Faltantes</button>
               <button id="mf-dbg" class="cinza">Diagnóstico</button>
             </div>
-          </div>
+          </details>
         </div>
         <div id="mf-msg"></div>
       </div>
@@ -1145,7 +1157,7 @@
       const f = total - pend;
       const nIg = Object.keys(ignoradas()).filter(id => fila().includes(id)).length;
       let st;
-      if (executando) st = 'Rodando: ' + f + ' de ' + total + ' processadas · ' + completas() + ' completas' + (atual ? ' (em andamento: ' + atual + ')' : '');
+      if (executando) st = 'Rodando: ' + f + ' de ' + total + ' processadas · ' + completas() + ' completas' + (atual ? ' (em andamento: ' + atual + (etapaAtual ? ' · ' + etapaAtual : '') + ')' : '');
       else if (!total) st = 'Pronto';
       else if (!pend) st = 'Concluído: ' + f + ' de ' + total;
       else st = 'Parado: ' + f + ' de ' + total + ' coletadas';
@@ -1167,7 +1179,18 @@
       $('#mf-min').textContent = m ? '+' : '—';
       $('#mf-min').title = m ? 'Expandir' : 'Minimizar';
     };
-    $('#mf-min').onclick = () => { const m = !GM_getValue('min', false); GM_setValue('min', m); aplicarMin(m); };
+    // ao expandir: se o painel ficou (parcial ou totalmente) fora da tela, sobe para dentro dela e salva a nova posição;
+    // se já cabe, a posição não muda. Só se aplica à posição escolhida pelo usuário (a original já cresce para cima).
+    const trazerParaTela = () => {
+      if (!painel.style.top) return;
+      corpo.style.maxHeight = '';   // mede o painel no tamanho natural (o limite antigo foi calculado para a posição minimizada)
+      const r = painel.getBoundingClientRect(), MARGEM = 8;
+      if (r.top >= 0 && r.bottom <= window.innerHeight - MARGEM / 2) { aplicarPosicao({ left: r.left, top: r.top }); return; }
+      const topo2 = r.height >= window.innerHeight - 2 * MARGEM ? MARGEM : Math.max(MARGEM, window.innerHeight - r.height - MARGEM);
+      const q = aplicarPosicao({ left: r.left, top: topo2 });
+      if (q) GM_setValue('posPainel', q);
+    };
+    $('#mf-min').onclick = () => { const m = !GM_getValue('min', false); GM_setValue('min', m); aplicarMin(m); if (!m) trazerParaTela(); };
     aplicarMin(GM_getValue('min', false));
     let toquesVersao = 0, resetToquesVersao = null;
     $('#mf-versao').addEventListener('click', () => {
@@ -1256,7 +1279,7 @@
     const MODOS = ['coleta', 'reprovadas', 'efetivadas', 'aprovadas', 'valortransacao'];
     // formato automático: cada modo usa o mais adequado ao destino
     const FORMATO_AUTO = { coleta: 'excel', reprovadas: 'canva', efetivadas: 'canva', aprovadas: 'canva', valortransacao: 'excel' };
-    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Valor transação' };
+    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Diário' };
     const formatoValido = (m, k) => {
       const f = FORMATOS[k];
       return !!f && (!f.antigo || cfg('formatosAntigos')) && (!f.so || f.so === m);
@@ -1311,6 +1334,12 @@
       $('#mf-formato-info').textContent = '· ' + FORMATOS[formatoDoModo(m)].rot + (cfg('formatoAuto') ? ' (auto)' : '');
       const coleta = m === 'coleta';
       $('#mf-colr').style.display = coleta ? '' : 'none';
+      const diario = m === 'valortransacao';
+      $('#mf-diario').style.display = diario ? '' : 'none';
+      $('#mf-diario-saida').value = GM_getValue('diarioSaida', 'completo');
+      $('#mf-dlin').style.display = diario && $('#mf-diario-saida').value === 'completo' ? '' : 'none';
+      $('#mf-dval').style.display = diario ? '' : 'none';
+      $('#mf-cop').style.display = $('#mf-cid').style.display = diario ? 'none' : '';
       $('#mf-cfull').style.display = coleta && cfg('auditoriaCompleta') ? '' : 'none';
       $('#mf-filtro').textContent = cfg('ignorarCanceladasTestes') ? 'Ignorando canceladas e testes' : 'Incluindo canceladas e testes';
     }
@@ -1324,6 +1353,15 @@
     ligarOpcao('#mf-auto-copia', 'copiarAoConcluir');
     ligarOpcao('#mf-formato-auto', 'formatoAuto');
     ligarOpcao('#mf-formatos-antigos', 'formatosAntigos');
+    ligarOpcao('#mf-troca-direta', 'trocaSemConfirmacao');
+    ligarOpcao('#mf-aba-cliente', 'lerAbaCliente');
+    // saída do Relatório Diário: preferência só deste modo
+    $('#mf-diario-saida').addEventListener('change', () => { GM_setValue('diarioSaida', $('#mf-diario-saida').value); atualizarConfigUI(); });
+    const gruposAbertos = GM_getValue('gruposCfg', {}) || {};
+    painel.querySelectorAll('.mf-grupo').forEach(g => {
+      if (g.dataset.grupo in gruposAbertos) g.open = !!gruposAbertos[g.dataset.grupo];
+      g.addEventListener('toggle', () => { const x = GM_getValue('gruposCfg', {}) || {}; x[g.dataset.grupo] = g.open; GM_setValue('gruposCfg', x); });
+    });
     atualizarConfigUI();
     GM_deleteValue('urlVideoAjuda');   // o tutorial do YouTube saiu do painel: limpa o link que ficou salvo
 
@@ -1340,18 +1378,20 @@
       if (!t) return [];
       const ths = [...t.querySelectorAll('thead th')].map(th => th.textContent.trim().toLowerCase());
       const col = n => ths.findIndex(x => x.startsWith(n));
-      const ci = { id: col('proposta'), sit: col('situa'), dh: col('data/hora'), cli: col('cliente'), ana: col('analista'), loja: col('pto') };
+      const ci = { id: col('proposta'), sit: col('situa'), dh: col('data/hora'), cli: col('cliente'), ana: col('analista'), loja: col('pto'),
+        acoes: col('aç'), ind: col('indicador'), dts: col('dt situa') >= 0 ? col('dt situa') : col('data/situa'), prod: col('produto') };
       const out = [];
       t.querySelectorAll('tbody tr').forEach(tr => {
         const c = celulas(tr);
         const id = (c[ci.id] || '').replace(/\D/g, '');
         if (!id) return;
-        out.push({ id, sit: c[ci.sit] || '', dh: c[ci.dh] || '', cli: c[ci.cli] || '', ana: c[ci.ana] || '', loja: c[ci.loja] || '', cels: c, texto: c.join(' | ') });
+        out.push({ id, sit: c[ci.sit] || '', dh: c[ci.dh] || '', cli: c[ci.cli] || '', ana: c[ci.ana] || '', loja: c[ci.loja] || '',
+          acoes: c[ci.acoes] || '', ind: c[ci.ind] || '', dts: c[ci.dts] || '', prod: c[ci.prod] || '', cels: c, texto: c.join(' | ') });
       });
       return out;
     }
     // o que fica guardado da tabela (sem o texto da linha inteira)
-    const metaDe = l => ({ id: l.id, sit: l.sit, dh: l.dh, cli: l.cli, ana: l.ana, loja: l.loja });
+    const metaDe = l => ({ id: l.id, sit: l.sit, dh: l.dh, cli: l.cli, ana: l.ana, loja: l.loja, acoes: l.acoes, ind: l.ind, dts: l.dts, prod: l.prod });
 
     const hora = s => (String(s || '').match(/(\d{1,2}:\d{2})\s*$/) || [])[1] || '';
     const lojaNome = s => String(s || '').replace(/^.*?\s-\s/, '').trim();       // "XPANSE NEGOCIOS LTDA - GRAND PLAZA" -> "GRAND PLAZA"
@@ -1453,7 +1493,7 @@
       return '';
     };
     // N/A: o campo foi procurado (proposta já processada) e não existe. Vazio: ainda não processada, ou a busca
-    // falhou (ex.: a aba Cliente não carregou) — aí aparece em Faltantes para tentar de novo, em vez de virar N/A.
+    // falhou (ex.: a aba Cliente não carregou) — aí aparece em Faltantes com o motivo, em vez de virar N/A.
     const NA = 'N/A';
     function linhaCompleta(id, d, mt, e, processada) {
       d = d || {}; mt = mt || null; e = e || {};
@@ -1651,17 +1691,20 @@
       const fr = document.createElement('iframe');
       fr.src = base.replace(/\/$/, '') + DETALHES[0] + id;
       fr.style.cssText = 'position:fixed;left:-4000px;top:0;width:1300px;height:900px;opacity:0;pointer-events:none;border:0';
+      // sandbox SEM allow-top-navigation: se a página tentar "sair do iframe" (top.location = ...), o navegador bloqueia.
+      // Sem isso a janela principal era levada para a Análise da proposta e a coleta morria no meio (regressão da v11.29).
+      fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
       document.body.appendChild(fr);
       const doc = () => { try { return fr.contentDocument; } catch (_) { return null; } };
       const ate = async (cond, seg) => { const fim = Date.now() + seg * 1000; while (Date.now() < fim) { try { if (cond()) return true; } catch (_) {} await sleep(150); } return false; };
       const temTitulo = () => { const d = doc(); return !!d && [...d.querySelectorAll('body *')].some(el => !/^(SCRIPT|STYLE)$/.test(el.tagName) && /^identifica[çc][ãa]o do cliente$/i.test(el.textContent.replace(/\s+/g, ' ').trim())); };
       try {
         const link = () => { const d = doc(); return d && d.querySelector('a[onclick*="MesaAnaliseDados"][onclick*="Cliente"]'); };
-        if (!await ate(() => doc() && doc().location.href !== 'about:blank' && doc().readyState === 'complete', 25)) { r.motivo = 'página da análise não carregou'; return r; }
+        if (!await ate(() => doc() && doc().location.href !== 'about:blank' && doc().readyState === 'complete', 20)) { r.motivo = 'página da análise não carregou'; return r; }
         if (!await ate(link, 5)) { r.motivo = 'link da aba Cliente não encontrado'; return r; }
         if (!temTitulo()) {
           link().click();   // o próprio link do sistema (o onclick roda na página)
-          if (!await ate(temTitulo, 20)) { r.motivo = 'aba Cliente não carregou'; return r; }
+          if (!await ate(temTitulo, 12)) { r.motivo = 'aba Cliente não carregou'; return r; }
         }
         await ate(() => acharRotulo(doc(), 'Nome do Cliente', 'Identificação do Cliente', true), 3);
         await sleep(300);
@@ -1706,7 +1749,7 @@
       } catch (_) {}
       GM_setClipboard(html, { type: 'html', mimetype: 'text/html' });
     };
-    // Propostas ignoradas (teste/cancelada): nas listas coladas linha a linha na planilha (Auditoria e Valor de transação)
+    // Propostas ignoradas (teste/cancelada): nas listas coladas linha a linha na planilha (Auditoria e Diário)
     // viram linha em branco, para não desalinhar as linhas seguintes; nas tabelas dos relatórios (Canva) saem da lista.
     // TODAS as cópias passam por aqui: o formato escolhido (automático ou manual) decide como as linhas vão para a área de transferência
     const textoTab = linhas => linhas.map(c => c.map(v => cel(String(v == null ? '' : v))).join('\t')).join('\n');
@@ -1716,9 +1759,52 @@
       else if (est === 'xl') copiarHtmlETexto(htmlTabela(linhas, 'xl'), textoTab(linhas));
       else GM_setClipboard(htmlTabela(linhas, est), { type: 'html', mimetype: 'text/html' });
     }
+    /* ---------- Relatório Diário (planilha "Relatório Diário - PaymobiFin") ----------
+       A–L: as colunas da tabela da Mesa (Ações ... Ponto de Atendimento), K Status e L vazia.
+       M (Situação Relatório) é fórmula da planilha: NUNCA entra na cópia (colar texto por cima apagaria a fórmula).
+       N: valor de transação, colado à parte. As duas cópias usam a MESMA lista (fila), na mesma ordem:
+       uma linha por proposta, sem descartar nenhuma (sem valor = N/A; ignorada ou ainda não processada = vazia). */
+    const statusDiario = mt => {
+      if (!mt || !mt.sit) return '';
+      const manual = (!!mt.ana && !/master/i.test(mt.ana)) || /\bman\b/i.test(mt.sit);
+      if (/cancelad/i.test(mt.sit)) return 'Cancelada';
+      if (ehConfCad(mt.sit)) return 'Em digitação';
+      if (ehReprovada(mt.sit)) return manual ? 'Reprovada Manual' : 'Reprovada Automática';
+      if (/efetivad|\bapr\b|aprovad/i.test(mt.sit)) return manual ? 'Aprovada Manual' : 'Aprovada Automática';
+      return 'Pendente';
+    };
+    const linhaDiario = (id, mt, processada) => {
+      const v = x => (x ? x : processada && !mt ? NA : '');
+      const m = mt || {};
+      return [m.acoes || '', id, v(m.sit), m.ind || '', v(m.dh), v(m.dts), v(m.cli), v(m.ana), v(m.prod), v(m.loja), v(statusDiario(mt)), ''];
+    };
+    // "R$1.864,00" -> "R$ 1.864,00" (o Excel em português reconhece como moeda)
+    const valorDiario = (e, processada) => {
+      const n = e && e.valor ? num(e.valor) : null;
+      return n ? moeda(n).replace(/^R\$/, 'R$ ') : processada ? NA : '';
+    };
+    function copiarDiario(qual) {
+      const ig = ignoradas(), fe = new Set(feitas()), meta = GM_getValue('meta', {}), extra = GM_getValue('extra', {});
+      const f = fila();
+      if (qual === 'valores') {
+        const vals = f.map(id => (ig[id] ? '' : valorDiario(extra[id], fe.has(id))));
+        emitir(vals.map(x => [x]));
+        const comValor = vals.filter(x => x && x !== NA).length, na = vals.filter(x => x === NA).length;
+        return 'Valores de transação copiados: ' + f.length + ' linhas (' + comValor + ' com valor' + (na ? ', ' + na + ' N/A' : '') +
+          (f.length - comValor - na ? ', ' + (f.length - comValor - na) + ' em branco: ignoradas ou ainda não processadas' : '') +
+          '). ' + fe.size + ' propostas processadas. Cole na coluna N, na primeira linha da lista (mesma ordem).';
+      }
+      emitir(f.map(id => (ig[id] ? ['', id, ...Array(10).fill('')] : linhaDiario(id, meta[id], fe.has(id)))));
+      return 'Linhas copiadas (A–L, ' + f.length + ' propostas). Cole na coluna A. A coluna M (Situação Relatório) não é alterada; ' +
+        'depois clique em "Copiar somente valores" e cole na coluna N.';
+    }
+    $('#mf-dlin').onclick = () => { atualizarFila(); if (!fila().length) return msg('Não há propostas na fila.'); msg((executando ? 'Cópia PARCIAL. ' : '') + copiarDiario('linhas')); };
+    $('#mf-dval').onclick = () => { atualizarFila(); if (!fila().length) return msg('Não há propostas na fila.'); msg((executando ? 'Cópia PARCIAL. ' : '') + copiarDiario('valores')); };
+
     function copiar(comId) {
       const dados = GM_getValue('dados', {});
       const ig = ignoradas();
+      if (modo() === 'valortransacao') { copiarDiario('valores'); return false; }
       if (modo() !== 'coleta') {
         const alinhado = modo() === 'valortransacao';
         const ids = alinhado ? fila() : fila().filter(id => !ig[id]);
@@ -1747,7 +1833,7 @@
 
     const avisoCopia = usouId => modo() === 'valortransacao'
       ? (estilo() === 'tsv'
-        ? 'Cole na coluna Valor de transação, na mesma ordem da lista (linha em branco = sem valor ou ignorada).'
+        ? 'Cole na coluna N (Valor de transação), na mesma ordem da lista.'
         : 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem da lista.')
       : modo() !== 'coleta'
       ? 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem do relatório.'
@@ -1792,7 +1878,7 @@
         if (full && !(ex[id] && ex[id].vendedor)) f.push('vendedor');
         if (full && ex[id]) {
           const e = ex[id], d = dados[id] || {};
-          if (e.abaCliente === false) f.push('telefone/e-mail (aba Cliente não carregou: Continuar tenta de novo)');
+          if (e.abaCliente === false) f.push('telefone/e-mail (aba Cliente: ' + ((GM_getValue('extraDbg', {})[id] || {}).abaCliente || 'não carregou') + ')');
           else if (e.cpfCliente && d.cpf && e.cpfCliente !== d.cpf) f.push('telefone/e-mail (CPF da aba Cliente diferente: não usados)');
         }
         return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
@@ -1800,16 +1886,38 @@
     }
 
     /* ---------- coleta ---------- */
+    // etapas de cada proposta, para o Diagnóstico mostrar ONDE parou (só nome da etapa, tempo e resultado; nada pessoal)
+    const etapa = (id, nome, resultado) => {
+      etapaAtual = resultado == null ? nome : '';
+      const dbg = GM_getValue('extraDbg', {});
+      const d = dbg[id] || {};
+      d.etapas = [...(d.etapas || []), { etapa: nome, quando: new Date().toLocaleTimeString(), ...(resultado != null ? { resultado: String(resultado).slice(0, 80) } : {}) }].slice(-14);
+      dbg[id] = d;
+      GM_setValue('extraDbg', dbg);
+      atualizarUI();
+    };
     async function coletar(id) {
+      try { const r = await coletarEtapas(id); if (r) etapa(id, 'falha', r); return r; }
+      catch (e) { etapa(id, 'erro', e && e.message); return 'erro no script: ' + (e && e.message); }
+      finally { etapaAtual = ''; }
+    }
+    async function coletarEtapas(id) {
       const base = (document.getElementById('txtCaminhoSistema') || {}).value || '';
       const url = base.replace(/\/$/, '') + '/MesaCredito/MesaAnaliseMobFacil?lngProposta=' + id;
       const m = modo();
 
       // dados da página de detalhe: Vendedor e Valor (aba Garantias); na auditoria completa também IMEI/cliente
       const precisaDetalhe = m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao' || (m === 'coleta' && cfg('auditoriaCompleta'));
-      if (precisaDetalhe && !GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
-      if (m === 'coleta' && cfg('auditoriaCompleta')) {
+      if (precisaDetalhe && !GM_getValue('extra', {})[id]) {
+        etapa(id, 'detalhe da proposta');
+        await buscarDetalhe(base, id);
+        const pg = (GM_getValue('extraDbg', {})[id] || {}).paginas || [];
+        etapa(id, 'detalhe da proposta', pg.some(x => /erro/.test(x)) ? 'erro ao abrir página' : 'ok');
+      }
+      if (m === 'coleta' && cfg('auditoriaCompleta') && cfg('lerAbaCliente')) {
+        etapa(id, 'aba Cliente');
         const cli = await dadosCliente(base, id);
+        etapa(id, 'aba Cliente', cli.ok ? 'ok' : cli.motivo);
         const ex1 = GM_getValue('extra', {});
         ex1[id] = { ...(ex1[id] || {}), abaCliente: cli.ok, telefone: cli.telefone, email: cli.email, cpfCliente: cli.cpf, clienteAba: cli.nome || null };
         GM_setValue('extra', ex1);
@@ -1824,12 +1932,14 @@
       }
       if (m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao') {
         const extra = GM_getValue('extra', {})[id] || {};
-        if (m === 'valortransacao' && !extra.valor) return 'valor de transação não localizado';
+        // Diário: página lida e sem valor = N/A (não é falha); página que não carregou = falha (Continuar tenta de novo)
+        if (m === 'valortransacao' && !extra.valor && ((GM_getValue('extraDbg', {})[id] || {}).paginas || []).some(x => /erro/.test(x))) return 'página da proposta não carregou';
         if (m === 'efetivadas' && !extra.vendedor) return 'vendedor não localizado';
         if (m === 'aprovadas' && (!extra.vendedor || !extra.valor)) return 'vendedor ou valor não localizado';
         if (m !== 'aprovadas') return null;
       }
       if (!GM_getValue('rodando', false)) return 'pausado';
+      etapa(id, 'motor MobFacil');
 
       const ctl = new AbortController();
       ctlAtual = ctl;
@@ -1859,8 +1969,8 @@
       fr.remove();
       GM_setValue('atualId', '');
       const coletados = GM_getValue('dados', {})[id] || {};
+      etapa(id, 'motor MobFacil', completo(coletados) ? 'ok' : 'faltou: ' + faltaCampos(coletados).join(', '));
       if (!completo(coletados)) return 'auditoria incompleta: ' + faltaCampos(coletados).join(', ');
-      if (m === 'coleta' && cfg('auditoriaCompleta') && (GM_getValue('extra', {})[id] || {}).abaCliente === false) return 'aba Cliente não carregou (telefone/e-mail)';
       return null;
     }
 
@@ -1906,6 +2016,7 @@
       let aviso = 'Fila concluída.';
       if (cfg('copiarAoConcluir')) {
         if (modo() === 'coleta' && cfg('auditoriaCompleta')) { copiarCompleta(); aviso = 'Fila concluída e resultado COPIADO. ' + AVISO_COMPLETA; }
+        else if (modo() === 'valortransacao') aviso = 'Fila concluída e COPIADO. ' + copiarDiario(GM_getValue('diarioSaida', 'completo') === 'completo' ? 'linhas' : 'valores');
         else aviso = 'Fila concluída e resultado COPIADO. ' + avisoCopia(copiar(false));
       } else aviso += ' Use os botões de cópia.';
       const f = faltantes();
@@ -1974,7 +2085,7 @@
       const ign = cfg('ignorarCanceladasTestes');
       const novasIgnoradas = {};
       if (ign) ids.forEach(id => { const l = porId[id]; const mot = l && motivoIgnorar(l.cels); if (mot) novasIgnoradas[id] = mot; });
-      // lista colada da planilha (Auditoria) e Valor de transação: a proposta ignorada continua na fila como linha em branco,
+      // lista colada da planilha (Auditoria) e Relatório Diário: a proposta ignorada continua na fila como linha em branco,
       // para a cópia ficar alinhada com as linhas da planilha. Nos outros casos ela sai da lista.
       const alinhado = (modo() === 'coleta' && GM_getValue('origem', 'manual') !== 'tela') || modo() === 'valortransacao';
       let removidas = 0;
@@ -2353,7 +2464,7 @@
       if (!box) return null;
       const a = [...box.querySelectorAll('a')].find(x => x.querySelector('.fa-user'));
       const codigo = a ? a.textContent.replace(/\s+/g, ' ').trim() : '';
-      if (!/^\S{2,80}$/.test(codigo)) return null;
+      if (!codigo || codigo.length > 80) return null;
       const p = box.querySelector('p');
       return { codigo, nome: p ? p.textContent.replace(/\s+/g, ' ').trim() : '' };
     };
@@ -2399,6 +2510,9 @@
         lin.className = 'mf-conta';
         const nome = document.createElement('span');
         nome.textContent = rotuloConta(c);
+        const tr = document.createElement('button'); tr.className = 'azul'; tr.textContent = 'Trocar';
+        tr.title = 'Trocar para esta conta';
+        tr.onclick = () => trocarPara(c);
         const ed = document.createElement('button'); ed.className = 'cinza'; ed.textContent = 'Editar';
         ed.onclick = () => { $('#mf-conta-apelido').value = c.apelido || ''; $('#mf-conta-usuario').value = c.usuario; };
         const ex = document.createElement('button'); ex.className = 'vermelho'; ex.textContent = 'Excluir';
@@ -2413,19 +2527,22 @@
         nome.title = temSenha ? 'Senha salva neste navegador: login automático' : 'Sem senha salva: login manual';
         const rs = document.createElement('button'); rs.className = 'cinza'; rs.textContent = 'Tirar senha';
         rs.onclick = () => { guardarSenha(c.usuario, null); desenharContas(); msg('Senha de ' + c.usuario + ' removida deste navegador.'); };
-        lin.append(nome, ed);
+        lin.append(nome, tr, ed);
         if (temSenha) lin.append(rs);
         lin.append(ex);
         caixa.appendChild(lin);
       });
       const a = contaAtiva();
       const t = GM_getValue('trocaConta', null);
+      $('#mf-contas-qtd').textContent = '(' + lista.length + ')';
+      aplicarDobraContas();
       $('#mf-conta-ativa').textContent = (a ? rotuloConta(a) : 'não identificada na página') + (t ? ' · troca para ' + t.usuario + ' pendente' : '');
     }
     $('#mf-conta-salvar').onclick = () => {
       const usuario = $('#mf-conta-usuario').value.trim();
       const apelido = $('#mf-conta-apelido').value.trim().slice(0, 40);
-      if (!usuario || usuario.length > 80 || /\s/.test(usuario)) return msg('Informe o usuário de login (sem espaços).');
+      // nome da conta (apelido) e usuário de login são campos distintos; espaços e acentos são mantidos como digitados
+      if (!usuario || usuario.length > 80) return msg('Informe o usuário de login.');
       const lista = contas();
       const i = lista.findIndex(c => c.usuario.toLowerCase() === usuario.toLowerCase());
       if (i >= 0) lista[i] = { usuario, apelido }; else lista.push({ usuario, apelido });
@@ -2436,18 +2553,27 @@
       desenharContas();
       msg('Conta ' + usuario + (i >= 0 ? ' atualizada.' : ' adicionada.'));
     };
-    $('#mf-conta-trocar').onclick = () => {
+    // lista de contas recolhível (lembra a última escolha)
+    const aplicarDobraContas = () => {
+      const aberta = !GM_getValue('contasRecolhidas', true);
+      $('#mf-contas-corpo').style.display = aberta ? '' : 'none';
+      $('#mf-contas-tit').classList.toggle('aberta', aberta);
+    };
+    $('#mf-contas-tit').onclick = () => { GM_setValue('contasRecolhidas', !GM_getValue('contasRecolhidas', true)); aplicarDobraContas(); };
+    $('#mf-conta-trocar').onclick = () => trocarPara(contas()[$('#mf-conta-sel').value]);
+    // só roda por clique explícito (botão Trocar); a confirmação do script é opcional (Configurações > Contas)
+    function trocarPara(c) {
       if (executando || ccb.rodando) return msg('Pause a coleta ou o download de CCBs antes de trocar de conta.');
-      const c = contas()[$('#mf-conta-sel').value];
       if (!c) return msg('Cadastre uma conta primeiro.');
-      if (!confirm('Trocar para ' + rotuloConta(c) + '?\nA sessão atual será encerrada pelo "Sair" do sistema, em todas as abas deste navegador.')) return;
+      if (!cfg('trocaSemConfirmacao') &&
+          !confirm('Trocar para ' + rotuloConta(c) + '?\nA sessão atual será encerrada pelo "Sair" do sistema, em todas as abas deste navegador.')) return;
       GM_setValue('trocaConta', { usuario: c.usuario, quando: Date.now(), etapa: 'saindo' });
       const senha = campoSenha();
       if (senha) return processarTroca();   // já está na tela de login
       const sair = linkSair();
       if (sair) { msg('Encerrando a sessão atual...'); sair.click(); }
       else msg('Não encontrei o botão "Sair" nesta tela. Saia pelo menu do sistema; na tela de login o usuário ' + c.usuario + ' será preenchido.');
-    };
+    }
     // roda a cada carregamento de página: tela de login = preenche o usuário; depois do login = confere a conta
     function processarTroca() {
       const t = GM_getValue('trocaConta', null);

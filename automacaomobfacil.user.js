@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.34
+// @version      11.35
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.34');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.35');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -68,6 +68,7 @@
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
     lerAbaCliente: true, 
+    tmExpedienteAuto: true,          // Timers: inicia os agendamentos "próximo expediente" ao entrar no ER
     cacTrocaAuto: true,              // Consulta CAC: troca sozinho para a conta master quando a atual não tem acesso
     cacVoltarConta: true,            // Consulta CAC: volta para a conta anterior depois da consulta
     cacPosicaoGeral: true,           // Consulta CAC: abre a Posição Geral (o sistema registra protocolo, como na tela)            // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
@@ -961,7 +962,7 @@
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
       </style>
-      <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span></div>
+      <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
         <button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-corpo">
         <div class="mf-abas">
@@ -971,6 +972,7 @@
           <button data-aba="cta">Contas</button>
           <button data-aba="neg">Negociações</button>
           <button data-aba="lem">Lembretes <span id="mf-lb-badge" class="mf-badge" style="display:none"></span></button>
+          <button data-aba="tim">Timers <span id="mf-tm-badge" class="mf-badge" style="display:none"></span></button>
           <button data-aba="cfg">Configurações</button>
         </div>
 
@@ -1176,6 +1178,42 @@
           </details>
         </div>
 
+        <div data-pag="tim">
+          <div id="mf-tm-resumo" class="mf-sec" style="display:none;background:#fff7ed;font-size:12px"></div>
+          <details class="mf-grupo" open><summary>Novo timer</summary>
+            <input id="mf-tm-titulo" type="text" placeholder="Título (ex.: Retornar ligação)" autocomplete="off">
+            <input id="mf-tm-desc" type="text" placeholder="Descrição (opcional)" autocomplete="off" style="margin-top:6px">
+            <div class="mf-grade" style="grid-template-columns:1fr 1fr 1fr;margin-top:6px">
+              <label class="mf-lb-rot">Horas<input id="mf-tm-h" type="text" inputmode="numeric" value="0"></label>
+              <label class="mf-lb-rot">Minutos<input id="mf-tm-m" type="text" inputmode="numeric" value="15"></label>
+              <label class="mf-lb-rot">Segundos<input id="mf-tm-s" type="text" inputmode="numeric" value="0"></label>
+            </div>
+            <div class="mf-grade" style="margin-top:6px">
+              <label class="mf-lb-rot mf-cheia">Quando começa
+                <select id="mf-tm-quando"><option value="agora">Agora</option><option value="expediente">No próximo expediente (ao entrar no ER)</option><option value="horario">Em data e horário</option></select></label>
+              <label class="mf-lb-rot" id="mf-tm-data-rot" style="display:none">Data<input id="mf-tm-data" type="date"></label>
+              <label class="mf-lb-rot" id="mf-tm-hora-rot" style="display:none">Horário<input id="mf-tm-hora" type="time"></label>
+            </div>
+            <button id="mf-tm-criar" class="verde" style="width:100%;margin-top:8px">Criar timer</button>
+          </details>
+          <div class="mf-sec">
+            <div class="mf-lb-filtros mf-tm-filtros">
+              <button data-filtro="ativos">Ativos</button><button data-filtro="agendados">Agendados</button><button data-filtro="encerrados">Encerrados</button><button data-filtro="todos">Todos</button>
+            </div>
+            <input id="mf-tm-busca" type="text" placeholder="Buscar timer" autocomplete="off" style="margin-top:8px">
+            <div id="mf-tm-lista" style="margin-top:8px"></div>
+          </div>
+          <details class="mf-grupo"><summary>Som e expediente</summary>
+            <label class="mf-lb-rot">Volume do alarme<input id="mf-tm-volume" type="range" min="0" max="100" step="5"></label>
+            <div class="mf-grade" style="margin-top:6px">
+              <button id="mf-tm-testar" class="cinza">Testar som</button>
+              <button id="mf-tm-expediente" class="cinza" title="Inicia agora os timers agendados para o expediente de hoje">Iniciar expediente</button>
+            </div>
+            <label class="mf-opc"><input type="checkbox" id="mf-tm-auto"><span><b>Iniciar o expediente ao entrar no ER</b><small>1ª página do dia com você logado (não conta a tela de login nem sessão expirada).</small></span></label>
+            <div class="mf-info">Os timers ficam salvos neste navegador e continuam após atualizar o script. Só tocam com uma página do ER aberta: com o navegador fechado não há alarme; ao reabrir, o que venceu aparece num resumo, sem tocar.</div>
+          </details>
+        </div>
+
         <div data-pag="cfg">
           <details class="mf-grupo" data-grupo="coleta" open><summary>Coleta</summary>
             <label class="mf-opc" title="Coleta também CPF, motivo (coluna R) e os dados da proposta (nome, loja, vendedor, contato...) no modelo Auditoria 2 Completo. Desligada: só os dados de crédito."><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b><small>CPF, motivo e dados da proposta (A–R)</small></span></label>
@@ -1234,7 +1272,7 @@
 
     /* ---------- abas ---------- */
     const mostrarAba = a => {
-      if (!['rel', 'ccb', 'cac', 'cta', 'neg', 'lem', 'cfg'].includes(a)) a = 'rel';
+      if (!['rel', 'ccb', 'cac', 'cta', 'neg', 'lem', 'tim', 'cfg'].includes(a)) a = 'rel';
       painel.querySelectorAll('[data-pag]').forEach(p => { p.style.display = p.dataset.pag === a ? 'block' : 'none'; });
       painel.querySelectorAll('.mf-abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === a));
       GM_setValue('abaPainel', a);
@@ -1262,7 +1300,7 @@
     };
     let arraste = null;
     topo.addEventListener('pointerdown', e => {
-      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, #mf-versao, .mf-badge')) return;
+      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, #mf-versao, .mf-badge, #mf-tm-topo')) return;
       const r = painel.getBoundingClientRect();
       arraste = { dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, id: e.pointerId, moveu: false };
       try { topo.setPointerCapture(e.pointerId); } catch (_) {}
@@ -3771,6 +3809,343 @@
       if (vazio) { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; }
     }));
     $('#mf-ng-modelo').addEventListener('change', () => { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; });
+
+
+    /* ================= TIMERS E LEMBRETES ATIVOS =================
+       Base própria e versionada: GM 'mfTimers' = { versao, itens, invalidos } (não se mistura com os lembretes de pagamento).
+       Horários em epoch (ms); datas de ativação 'AAAA-MM-DD' e hora 'HH:MM' no fuso de Brasília (America/Sao_Paulo, -03:00).
+       Estados: agendado · rodando · pausado · disparado (terminou, alarme aguardando) · concluido · cancelado · expirado.
+       Entrada no ER (início do expediente) = 1ª página do dia com o usuário logado: #divNomeCliente com o código do usuário
+       (só existe com sessão ativa) e sem o aviso de sessão expirada (#dlgRelogin). Tela de login (#frmLogin) não conta.
+       Abrir o painel em outra página, ou com a sessão expirada, NÃO inicia nada. Alternativa manual: "Iniciar expediente".
+       Alarme sem duplicar: quem marca "disparado" grava o id da aba; só essa aba toca. As outras só mostram o aviso.
+       Navegador fechado: nada toca. Ao reabrir, o que venceu nesse tempo aparece num único resumo, sem som. */
+    const TM_VERSAO = 1, TM_CHAVE = 'mfTimers', TM_EXPIRA_DIAS = 7;
+    const tmAba = 'aba' + Math.random().toString(36).slice(2, 10);
+    const TZ = 'America/Sao_Paulo';
+    const tmHoje = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const tmEpoch = (data, hora) => Date.parse(data + 'T' + (hora || '00:00') + ':00-03:00');
+    const tmFmtDataHora = ms => ms ? new Intl.DateTimeFormat('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(ms)) : '';
+    const tmDur = ms => { ms = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(ms / 3600), m = Math.floor(ms % 3600 / 60), s = ms % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+    const tmDiasEntre = (a, b) => Math.round((tmEpoch(b) - tmEpoch(a)) / 864e5);
+    const tmValido = x => x && typeof x === 'object' && typeof x.id === 'string' && Number.isFinite(x.duracaoMs) && typeof x.status === 'string';
+    function tmCarregar() {
+      let raw = GM_getValue(TM_CHAVE, null);
+      if (raw == null) return { versao: TM_VERSAO, itens: [], invalidos: [] };
+      if (Array.isArray(raw)) raw = { versao: 0, itens: raw };
+      if (typeof raw !== 'object') return { versao: TM_VERSAO, itens: [], invalidos: [raw], somenteLeitura: true };
+      const base = { versao: raw.versao | 0, itens: Array.isArray(raw.itens) ? raw.itens : [], invalidos: Array.isArray(raw.invalidos) ? raw.invalidos : [] };
+      if (base.versao > TM_VERSAO) return { ...base, somenteLeitura: true };
+      if (base.versao < TM_VERSAO) GM_setValue('mfTimersBackup_v' + base.versao, raw);   // cópia antes de migrar
+      const vistos = new Set(), ok = [];
+      base.itens.forEach(x => {
+        if (!tmValido(x)) { base.invalidos.push(x); return; }
+        if (vistos.has(x.id)) return;
+        vistos.add(x.id); ok.push(x);
+      });
+      base.itens = ok;
+      if (base.versao < TM_VERSAO) { base.versao = TM_VERSAO; GM_setValue(TM_CHAVE, { versao: TM_VERSAO, itens: base.itens, invalidos: base.invalidos }); }
+      return base;
+    }
+    let tmBase = tmCarregar();
+    const tmSalvar = () => {
+      if (tmBase.somenteLeitura) { msg('Os timers salvos são de uma versão mais nova do script: atualize antes de alterar.'); return false; }
+      GM_setValue(TM_CHAVE, { versao: TM_VERSAO, itens: tmBase.itens, invalidos: tmBase.invalidos });
+      return true;
+    };
+    // altera um item relendo a base antes (outra aba pode ter mudado)
+    const tmAlterar = (id, fn) => {
+      tmBase = tmCarregar();
+      const it = tmBase.itens.find(x => x.id === id);
+      if (!it) return null;
+      if (fn(it) === false) return null;
+      it.atualizadoEm = Date.now();
+      return tmSalvar() ? it : null;
+    };
+    const tmHist = (it, t) => { it.historico = [...(it.historico || []), { em: Date.now(), t }].slice(-20); };
+    const tmRestante = it => it.status === 'rodando' ? it.fimEm - Date.now() : it.status === 'pausado' ? it.restanteMs : it.duracaoMs;
+
+    /* ---- som (Web Audio, sem arquivos externos) ---- */
+    let tmAudio = null;
+    const tmLiberarAudio = () => {
+      try {
+        tmAudio = tmAudio || new (window.AudioContext || window.webkitAudioContext)();
+        if (tmAudio.state === 'suspended') tmAudio.resume();
+      } catch (_) {}
+      return !!tmAudio && tmAudio.state === 'running';
+    };
+    painel.addEventListener('pointerdown', () => tmLiberarAudio(), true);   // o navegador só libera áudio depois de um clique
+    const tmBip = () => {
+      if (!tmLiberarAudio()) return false;
+      const vol = Math.max(0, Math.min(100, GM_getValue('tmVolume', 70))) / 100;
+      if (!vol) return true;
+      const t0 = tmAudio.currentTime;
+      [0, 0.25, 0.5].forEach(d => {
+        const o = tmAudio.createOscillator(), g = tmAudio.createGain();
+        o.type = 'square'; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, t0 + d); g.gain.exponentialRampToValueAtTime(0.25 * vol, t0 + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.18);
+        o.connect(g); g.connect(tmAudio.destination); o.start(t0 + d); o.stop(t0 + d + 0.2);
+      });
+      return true;
+    };
+
+    /* ---- criação e ações ---- */
+    function tmCriar() {
+      const h = parseInt($('#mf-tm-h').value || '0', 10), mi = parseInt($('#mf-tm-m').value || '0', 10), se = parseInt($('#mf-tm-s').value || '0', 10);
+      const dur = ((h * 60 + mi) * 60 + se) * 1000;
+      if (!(dur > 0) || [h, mi, se].some(x => x < 0 || isNaN(x)) || mi > 59 || se > 59 || h > 99) return msg('Informe a duração (horas, minutos 0–59, segundos 0–59).');
+      const titulo = limpoTxt($('#mf-tm-titulo').value).slice(0, 80) || 'Timer';
+      const quando = $('#mf-tm-quando').value, data = $('#mf-tm-data').value, hora = $('#mf-tm-hora').value;
+      const it = { id: 'tm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), titulo, descricao: $('#mf-tm-desc').value.trim().slice(0, 300),
+        duracaoMs: dur, tipo: quando, status: 'agendado', criadoEm: Date.now(), historico: [] };
+      if (quando === 'agora') { it.status = 'rodando'; it.ativadoEm = Date.now(); it.fimEm = Date.now() + dur; }
+      else if (quando === 'expediente') {
+        it.ativarData = data || new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(tmEpoch(tmHoje(), '12:00') + 864e5));   // padrão: amanhã
+        if (it.ativarData < tmHoje()) return msg('A data do expediente já passou.');
+        // para HOJE e o expediente de hoje já começou: inicia agora
+        if (it.ativarData === tmHoje() && (GM_getValue('tmExpediente', {}) || {}).dia === tmHoje()) { it.status = 'rodando'; it.ativadoEm = Date.now(); it.fimEm = Date.now() + dur; }
+      } else {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || !/^\d{2}:\d{2}$/.test(hora)) return msg('Informe a data e o horário de início.');
+        if (tmEpoch(data, hora) <= Date.now()) return msg('Esse horário já passou. Escolha um horário futuro.');
+        it.ativarData = data; it.ativarHora = hora;
+      }
+      tmHist(it, 'criado');
+      tmBase = tmCarregar(); tmBase.itens.push(it);
+      if (!tmSalvar()) return;
+      ['#mf-tm-titulo', '#mf-tm-desc'].forEach(s => { $(s).value = ''; });
+      tmFiltro = 'ativos';
+      tmDesenhar();
+      msg(it.status === 'rodando' ? 'Timer "' + titulo + '" iniciado (' + tmDur(dur) + ').'
+        : it.tipo === 'expediente' ? 'Timer "' + titulo + '" agendado: começa quando você entrar no ER a partir de ' + ngData(it.ativarData) + '.'
+        : 'Timer "' + titulo + '" agendado para ' + ngData(it.ativarData) + ' às ' + it.ativarHora + '.');
+    }
+    const TM_ACOES = {
+      pausar: it => { if (it.status !== 'rodando') return false; it.restanteMs = Math.max(0, it.fimEm - Date.now()); it.status = 'pausado'; delete it.fimEm; tmHist(it, 'pausado'); },
+      retomar: it => { if (it.status !== 'pausado') return false; it.fimEm = Date.now() + it.restanteMs; it.status = 'rodando'; delete it.restanteMs; tmHist(it, 'retomado'); },
+      reiniciar: it => { if (!['rodando', 'pausado', 'disparado', 'concluido', 'expirado'].includes(it.status)) return false; it.status = 'rodando'; it.fimEm = Date.now() + it.duracaoMs; it.ativadoEm = Date.now(); delete it.restanteMs; delete it.alarmeAba; delete it.silenciado; delete it.perdido; tmHist(it, 'reiniciado'); },
+      iniciar: it => { if (it.status !== 'agendado') return false; it.status = 'rodando'; it.ativadoEm = Date.now(); it.fimEm = Date.now() + it.duracaoMs; tmHist(it, 'iniciado manualmente'); },
+      cancelar: it => { if (['concluido', 'cancelado'].includes(it.status)) return false; it.status = 'cancelado'; it.silenciado = true; delete it.fimEm; tmHist(it, 'cancelado'); },
+      concluir: it => { if (['concluido', 'cancelado'].includes(it.status)) return false; it.status = 'concluido'; it.silenciado = true; it.concluidoEm = Date.now(); delete it.fimEm; tmHist(it, 'concluído'); },
+      silenciar: it => { if (it.silenciado) return false; it.silenciado = true; tmHist(it, 'alarme silenciado'); },
+      adiar5: it => { it.status = 'rodando'; it.fimEm = Date.now() + 5 * 60000; it.ativadoEm = Date.now(); delete it.alarmeAba; delete it.silenciado; delete it.perdido; tmHist(it, 'adiado 5 min'); },
+    };
+    const tmAcao = (id, acao) => {
+      if (acao === 'cancelar' && !confirm('Cancelar este timer?')) return;
+      const it = tmAlterar(id, TM_ACOES[acao]);
+      if (it) msg('Timer "' + it.titulo + '": ' + { pausar: 'pausado', retomar: 'retomado', reiniciar: 'reiniciado', iniciar: 'iniciado', cancelar: 'cancelado', concluir: 'concluído', silenciar: 'alarme silenciado', adiar5: 'toca de novo em 5 minutos' }[acao] + '.');
+      tmTick(true);
+    };
+    function tmEditar(id) {
+      const it = tmBase.itens.find(x => x.id === id);
+      if (!it) return;
+      const t = prompt('Título do timer:', it.titulo);
+      if (t == null) return;
+      let novaDur = null;
+      if (['agendado', 'pausado'].includes(it.status)) {
+        const d = prompt('Duração (h:mm:ss ou minutos):', tmDur(it.status === 'pausado' ? it.restanteMs : it.duracaoMs));
+        if (d == null) return;
+        const p = d.trim().split(':').map(x => parseInt(x, 10));
+        novaDur = (p.length === 1 ? p[0] * 60 : p.length === 2 ? p[0] * 60 + p[1] : (p[0] * 60 + p[1]) * 60 + p[2]) * 1000;
+        if (!(novaDur > 0) || p.some(isNaN)) return msg('Duração inválida.');
+      }
+      tmAlterar(id, x => {
+        x.titulo = limpoTxt(t).slice(0, 80) || x.titulo;
+        if (novaDur) { if (x.status === 'pausado') x.restanteMs = novaDur; else x.duracaoMs = novaDur; }
+        tmHist(x, 'editado');
+      });
+      tmTick(true);
+    }
+
+    /* ---- início do expediente ---- */
+    const tmLogado = () => {
+      const u = usuarioLogado();
+      if (!u) return null;
+      const relogin = document.querySelector('#dlgRelogin');
+      if (relogin && (relogin.classList.contains('in') || getComputedStyle(relogin).display === 'block')) return null;   // sessão expirada
+      return u;
+    };
+    // ativa os agendamentos "próximo expediente" (uma vez por dia; o mesmo agendamento nunca duas vezes)
+    function tmIniciarExpediente(manual) {
+      const hoje = tmHoje(), u = tmLogado();
+      if (!manual && !cfg('tmExpedienteAuto')) return;
+      if (!manual && !u) return;
+      const ex = GM_getValue('tmExpediente', {}) || {};
+      if (!manual && ex.dia === hoje) return;   // já começou hoje (ex.: troca de conta, recarregar a página)
+      GM_setValue('tmExpediente', { dia: hoje, em: Date.now(), usuario: u ? u.codigo : '', manual: !!manual });
+      tmBase = tmCarregar();
+      const iniciados = [], expirados = [];
+      tmBase.itens.forEach(it => {
+        if (it.status !== 'agendado' || it.tipo !== 'expediente' || it.ativadoEm) return;
+        if (it.ativarData > hoje) return;
+        if (tmDiasEntre(it.ativarData, hoje) > TM_EXPIRA_DIAS) { it.status = 'expirado'; tmHist(it, 'expirado: não houve expediente até ' + ngData(hoje)); expirados.push(it.titulo); return; }
+        it.status = 'rodando'; it.ativadoEm = Date.now(); it.fimEm = Date.now() + it.duracaoMs; tmHist(it, 'iniciado no expediente de ' + ngData(hoje) + (manual ? ' (manual)' : ''));
+        iniciados.push(it.titulo);
+      });
+      if (iniciados.length || expirados.length) { tmSalvar(); tmMostrarResumo((iniciados.length ? 'Expediente iniciado: ' + iniciados.length + ' timer(s) começaram: ' + iniciados.join(', ') + '.' : '') + (expirados.length ? ' Expirados sem iniciar (mais de ' + TM_EXPIRA_DIAS + ' dias sem expediente): ' + expirados.join(', ') + '.' : '')); }
+      else if (manual) msg('Expediente marcado como iniciado hoje. Nenhum timer agendado para iniciar.');
+    }
+
+    /* ---- relógio (via Web Worker: não fica lento com a aba em segundo plano) ---- */
+    let tmUltimaCarga = 0;
+    function tmTick(forcar) {
+      const agora = Date.now();
+      // com alarme pendente relê a base a cada volta (silenciar/concluir em outra aba para o som aqui na hora)
+      // sem nada ativo, relê só a cada 5 s (outra aba pode ter criado um timer); com timers ativos, a cada 1 s
+      const ativo = tmBase.itens.some(x => x.status === 'rodando' || (x.status === 'agendado' && x.tipo === 'horario'));
+      if (forcar || agora - tmUltimaCarga > (ativo ? 1000 : 5000) || tmBase.itens.some(x => x.status === 'disparado' && !x.silenciado)) { tmBase = tmCarregar(); tmUltimaCarga = agora; }
+      else if (!ativo && !tmBase.itens.some(x => x.status === 'pausado')) return;   // nada para atualizar na tela
+      let mudou = false;
+      tmBase.itens.forEach(it => {
+        // agendado por data/hora: a linha do tempo é a real (não recomeça do zero se o navegador esteve fechado)
+        if (it.status === 'agendado' && it.tipo === 'horario') {
+          const ini = tmEpoch(it.ativarData, it.ativarHora);
+          if (agora >= ini) { it.status = 'rodando'; it.ativadoEm = ini; it.fimEm = ini + it.duracaoMs; tmHist(it, 'iniciado no horário agendado'); mudou = true; }
+        }
+        if (it.status === 'rodando' && agora >= it.fimEm) {
+          const atrasado = agora - it.fimEm > 60000;   // terminou com o navegador/página fechados
+          it.status = 'disparado'; it.disparadoEm = agora; it.perdido = atrasado; it.alarmeAba = atrasado ? '' : tmAba; it.silenciado = atrasado;
+          tmHist(it, atrasado ? 'terminou às ' + tmFmtDataHora(it.fimEm) + ' sem página aberta' : 'terminou');
+          mudou = true;
+        }
+      });
+      if (mudou) {
+        // relê e só grava as transições que ninguém fez antes (evita duas abas tocarem o mesmo alarme)
+        const salvo = tmCarregar(), meus = tmBase.itens;
+        salvo.itens = salvo.itens.map(s => { const m = meus.find(x => x.id === s.id); return m && (s.status === 'agendado' || s.status === 'rodando') && m.status !== s.status ? m : s; });
+        tmBase = salvo; tmSalvar();
+        const perdidos = tmBase.itens.filter(x => x.perdido && !x.resumoVisto);
+        if (perdidos.length) {
+          tmMostrarResumo(perdidos.length + ' timer(s) terminaram enquanto o navegador ou o ER estavam fechados: ' + perdidos.map(x => x.titulo + ' (' + tmFmtDataHora(x.fimEm) + ')').join(', ') + '. O alarme não tocou; eles estão na lista como vencidos.');
+          perdidos.forEach(x => { x.resumoVisto = true; }); tmSalvar();
+        }
+      }
+      tmAlarme();
+      tmAtualizarVisual();
+    }
+
+    /* ---- aviso de alarme (fica visível até silenciar/tratar, mesmo com o painel minimizado) ---- */
+    let tmPop = null, tmUltimoBip = 0, tmTocandoDesde = 0;
+    function tmAlarme() {
+      const tocando = tmBase.itens.filter(x => x.status === 'disparado' && !x.silenciado);
+      if (!tocando.length) { if (tmPop) { tmPop.remove(); tmPop = null; } tmTocandoDesde = 0; return; }
+      if (!tmPop) {
+        tmPop = document.createElement('div'); tmPop.id = 'mf-tm-alarme'; document.body.appendChild(tmPop);
+        if (window.Notification && Notification.permission === 'granted') { try { new Notification('PaymobiFin - Assistente', { body: 'Timer terminou: ' + tocando.map(x => x.titulo).join(', ') }); } catch (_) {} }
+      }
+      const chave = tocando.map(x => x.id).join(',') + '|' + (tmAudio && tmAudio.state);
+      if (tmPop.dataset.chave !== chave) {
+        tmPop.dataset.chave = chave;
+        tmPop.innerHTML = '';
+        const st = document.createElement('style');
+        st.textContent = '#mf-tm-alarme{position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:2147483647;width:360px;max-width:calc(100vw - 24px);background:#fff;color:#1f2937;border:2px solid #dc2626;border-radius:12px;box-shadow:0 12px 40px #0006;font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif;padding:12px;animation:mftmpisca 1s infinite}' +
+          '@keyframes mftmpisca{50%{box-shadow:0 0 0 6px #fecaca}}#mf-tm-alarme *{box-sizing:border-box;font-family:inherit}#mf-tm-alarme h4{margin:0 0 6px;font-size:15px;color:#b91c1c}' +
+          '#mf-tm-alarme .it{border-top:1px solid #fee2e2;padding:6px 0}#mf-tm-alarme button{cursor:pointer;border:0;border-radius:6px;padding:5px 9px;margin:4px 4px 0 0;font-size:12px;font-weight:600;background:#e2e8f0;color:#1e293b}#mf-tm-alarme button.pri{background:#dc2626;color:#fff}';
+        tmPop.appendChild(st);
+        const h = document.createElement('h4'); h.textContent = '⏰ Timer terminou'; tmPop.appendChild(h);
+        if (!(tmAudio && tmAudio.state === 'running')) {
+          const a = document.createElement('button'); a.className = 'pri'; a.textContent = '🔊 Clique para ativar o som';
+          a.onclick = () => { tmLiberarAudio(); tmPop.dataset.chave = ''; tmBip(); tmAlarme(); };
+          tmPop.appendChild(a);
+        }
+        tocando.forEach(it => {
+          const d = document.createElement('div'); d.className = 'it';
+          const t = document.createElement('div'); t.style.fontWeight = '700'; t.textContent = it.titulo; d.appendChild(t);
+          if (it.descricao) { const s = document.createElement('div'); s.textContent = it.descricao; s.style.color = '#475569'; d.appendChild(s); }
+          const b = (txt, cls, ac) => { const x = document.createElement('button'); x.textContent = txt; if (cls) x.className = cls; x.onclick = () => tmAcao(it.id, ac); d.appendChild(x); };
+          b('Silenciar', 'pri', 'silenciar'); b('Concluir', '', 'concluir'); b('+5 min', '', 'adiar5'); b('Reiniciar', '', 'reiniciar');
+          tmPop.appendChild(d);
+        });
+      }
+      // som: só a aba que disparou; bipes a cada 1 s nos primeiros 2 min, depois a cada 5 s, até silenciar
+      // só toca depois de reconfirmar (na volta seguinte, relendo a base) que esta aba é a dona do alarme
+      if (!tocando.some(x => x.alarmeAba === tmAba && Date.now() - x.disparadoEm >= 400)) return;
+      if (!tmTocandoDesde) tmTocandoDesde = Date.now();
+      const intervalo = Date.now() - tmTocandoDesde < 120000 ? 1000 : 5000;
+      if (Date.now() - tmUltimoBip >= intervalo) { tmUltimoBip = Date.now(); tmBip(); }
+    }
+    function tmMostrarResumo(texto) {
+      msg(texto);
+      const bx = $('#mf-tm-resumo');
+      bx.textContent = (bx.style.display === 'none' ? '' : bx.textContent + '\n') + texto;   // acumula; clique para fechar
+      bx.style.display = ''; bx.style.whiteSpace = 'pre-wrap'; bx.style.cursor = 'pointer'; bx.title = 'Clique para fechar';
+      bx.onclick = () => { bx.style.display = 'none'; bx.textContent = ''; };
+    }
+
+    /* ---- lista ---- */
+    let tmFiltro = 'ativos', tmChaveLista = '';
+    const TM_ESTADO = { agendado: 'agendado', rodando: 'em andamento', pausado: 'pausado', disparado: 'vencido', concluido: 'concluído', cancelado: 'cancelado', expirado: 'expirado' };
+    function tmDesenhar() {
+      const busca = $('#mf-tm-busca').value.trim().toLowerCase();
+      const grupo = it => ({ rodando: 0, disparado: 1, pausado: 2, agendado: 3 }[it.status] ?? 4);
+      let lista = tmBase.itens.filter(it => tmFiltro === 'todos' ? true : tmFiltro === 'ativos' ? ['rodando', 'pausado', 'disparado'].includes(it.status)
+        : tmFiltro === 'agendados' ? it.status === 'agendado' : ['concluido', 'cancelado', 'expirado'].includes(it.status));
+      if (busca) lista = lista.filter(it => (it.titulo + ' ' + (it.descricao || '')).toLowerCase().includes(busca));
+      lista.sort((a, b) => grupo(a) - grupo(b) || (a.fimEm || tmEpoch(a.ativarData || '2999-01-01', a.ativarHora)) - (b.fimEm || tmEpoch(b.ativarData || '2999-01-01', b.ativarHora)) || b.criadoEm - a.criadoEm);
+      painel.querySelectorAll('.mf-tm-filtros button').forEach(b => b.classList.toggle('ativa', b.dataset.filtro === tmFiltro));
+      const caixa = $('#mf-tm-lista');
+      caixa.innerHTML = '';
+      if (!lista.length) { const v = document.createElement('div'); v.className = 'mf-info'; v.textContent = 'Nada aqui.'; caixa.appendChild(v); }
+      lista.slice(0, 60).forEach(it => {
+        const el = document.createElement('div');
+        el.className = 'mf-lb-item' + (it.status === 'disparado' ? ' atrasado' : it.status === 'rodando' ? ' hoje' : '') + (['concluido', 'cancelado', 'expirado'].includes(it.status) ? ' encerrado' : '');
+        const l1 = document.createElement('div'); l1.className = 'mf-lb-l1';
+        const tempo = document.createElement('span'); tempo.className = 'mf-tm-tempo'; tempo.dataset.id = it.id;
+        l1.append(it.titulo + ' · ' + TM_ESTADO[it.status] + ' ', tempo);
+        const l2 = document.createElement('div'); l2.className = 'mf-lb-l2';
+        l2.textContent = 'Criado ' + tmFmtDataHora(it.criadoEm) + ' · duração ' + tmDur(it.duracaoMs) +
+          (it.status === 'agendado' ? (it.tipo === 'expediente' ? ' · inicia no expediente a partir de ' + ngData(it.ativarData) : ' · inicia ' + ngData(it.ativarData) + ' ' + it.ativarHora) : '') +
+          (it.ativadoEm ? ' · ativado ' + tmFmtDataHora(it.ativadoEm) : '') + (it.perdido ? ' · terminou sem página aberta' : '');
+        el.append(l1, l2);
+        if (it.descricao) { const d = document.createElement('div'); d.className = 'mf-lb-det'; d.textContent = it.descricao; el.appendChild(d); }
+        const ac = document.createElement('div'); ac.className = 'mf-lb-acoes';
+        const bt = (t, cls, fn) => { const b = document.createElement('button'); b.className = cls; b.textContent = t; b.onclick = e => { e.stopPropagation(); fn(); }; ac.appendChild(b); };
+        const s = it.status;
+        if (s === 'rodando') bt('Pausar', 'laranja', () => tmAcao(it.id, 'pausar'));
+        if (s === 'pausado') bt('Retomar', 'verde', () => tmAcao(it.id, 'retomar'));
+        if (s === 'agendado') bt('Iniciar agora', 'verde', () => tmAcao(it.id, 'iniciar'));
+        if (['rodando', 'pausado', 'disparado', 'concluido', 'expirado'].includes(s)) bt('Reiniciar', 'cinza', () => tmAcao(it.id, 'reiniciar'));
+        if (['agendado', 'rodando', 'pausado'].includes(s)) bt('Editar', 'cinza', () => tmEditar(it.id));
+        if (!['concluido', 'cancelado'].includes(s)) { bt('Concluir', 'azul', () => tmAcao(it.id, 'concluir')); bt('Cancelar', 'vermelho', () => tmAcao(it.id, 'cancelar')); }
+        el.appendChild(ac);
+        caixa.appendChild(el);
+      });
+      tmChaveLista = tmBase.itens.map(x => x.id + x.status + (x.atualizadoEm || '')).join('|') + tmFiltro + busca;
+    }
+    function tmAtualizarVisual() {
+      const chave = tmBase.itens.map(x => x.id + x.status + (x.atualizadoEm || '')).join('|') + tmFiltro + $('#mf-tm-busca').value.trim().toLowerCase();
+      if (chave !== tmChaveLista) tmDesenhar();
+      painel.querySelectorAll('.mf-tm-tempo').forEach(el => {
+        const it = tmBase.itens.find(x => x.id === el.dataset.id);
+        el.textContent = it && ['rodando', 'pausado'].includes(it.status) ? '⏱ ' + tmDur(tmRestante(it)) : '';
+      });
+      // contadores: aba (vencidos) e título (o timer que termina primeiro, visível com o painel minimizado)
+      const venc = tmBase.itens.filter(x => x.status === 'disparado' && !x.silenciado).length;
+      $('#mf-tm-badge').textContent = venc; $('#mf-tm-badge').style.display = venc ? '' : 'none';
+      const prox = tmBase.itens.filter(x => x.status === 'rodando').sort((a, b) => a.fimEm - b.fimEm)[0];
+      const topo = $('#mf-tm-topo');
+      topo.textContent = prox ? '⏱ ' + tmDur(prox.fimEm - Date.now()) : '';
+      topo.title = prox ? prox.titulo : '';
+      topo.style.display = prox ? '' : 'none';
+    }
+    $('#mf-tm-quando').addEventListener('change', () => {
+      const q = $('#mf-tm-quando').value;
+      $('#mf-tm-data-rot').style.display = q === 'agora' ? 'none' : '';
+      $('#mf-tm-hora-rot').style.display = q === 'horario' ? '' : 'none';
+    });
+    $('#mf-tm-criar').onclick = tmCriar;
+    painel.querySelectorAll('.mf-tm-filtros button').forEach(b => b.addEventListener('click', () => { tmFiltro = b.dataset.filtro; tmDesenhar(); tmAtualizarVisual(); }));
+    $('#mf-tm-busca').addEventListener('input', () => { tmDesenhar(); tmAtualizarVisual(); });
+    $('#mf-tm-volume').value = GM_getValue('tmVolume', 70);
+    $('#mf-tm-volume').addEventListener('change', () => GM_setValue('tmVolume', +$('#mf-tm-volume').value));
+    $('#mf-tm-testar').onclick = () => { if (!tmBip()) msg('O navegador bloqueou o som: clique de novo em "Testar som".'); };
+    $('#mf-tm-expediente').onclick = () => tmIniciarExpediente(true);
+    $('#mf-tm-topo').addEventListener('click', e => { e.stopPropagation(); if (GM_getValue('min', false)) { GM_setValue('min', false); aplicarMin(false); trazerParaTela(); } tmFiltro = 'ativos'; mostrarAba('tim'); tmDesenhar(); });
+    ligarOpcao('#mf-tm-auto', 'tmExpedienteAuto');
+    tmTick(true);
+    tmIniciarExpediente(false);
+    tmDesenhar(); tmAtualizarVisual();
+    let tmVoltas = 0;
+    (async () => { for (;;) { await sleep(500); try { tmTick(false); if (++tmVoltas % 120 === 0) tmIniciarExpediente(false); } catch (e) { console.warn('[PaymobiFin] timers', e && e.message); } } })();
 
     // ao recarregar a página, restaura a fila salva (permite continuar depois de fechar/recarregar)
     if (fila().length) $('#mf-lista').value = fila().join('\n');

@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.35
+// @version      11.37
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.35');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.37');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -65,6 +65,7 @@
     ignorarCanceladasTestes: true,   // canceladas e testes nunca são processadas
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
+    aparencia: 'nova',               // 'nova' (padrão) ou 'antiga'
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
     lerAbaCliente: true, 
@@ -926,6 +927,86 @@
         #mf-p .mf-opc small{display:block;color:#64748b;font-size:12px;margin-top:1px}
         #mf-p #mf-versao{cursor:default;user-select:none}
         #mf-p .mf-grupo{padding:4px 14px;border-bottom:1px solid #e2e8f0}
+
+        /* ===== Nova UI: só vale com data-ui="nova". A UI Antiga usa as regras acima, sem nenhuma alteração ===== */
+        #mf-p .mf-ui-nova{display:none}
+        #mf-p[data-ui=nova] .mf-ui-nova{display:revert}
+        #mf-p[data-ui=nova]{width:min(360px,calc(100vw - 16px));border-color:#e2e8f0;border-radius:14px;box-shadow:0 10px 30px #0f172a33;font-size:13.5px}
+        #mf-p[data-ui=nova] .mf-top{padding:8px 10px 8px 14px;gap:6px}
+        #mf-p[data-ui=nova] .mf-top>div:first-child{display:flex;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+        #mf-p[data-ui=nova] .mf-top>div:first-child>b{overflow:hidden;text-overflow:ellipsis;min-width:0}
+        #mf-p[data-ui=nova] .mf-top>div:first-child>small,#mf-p[data-ui=nova] .mf-top>div:first-child>span{flex:none}
+        #mf-p[data-ui=nova] .mf-top .mf-ui-acoes{display:flex;align-items:center;gap:2px;margin-left:auto}
+        /* expandido, o contador do título fica só na aba Agenda; minimizado, volta a aparecer no título */
+        #mf-p[data-ui=nova]:not(.mf-min) #mf-lb-badge-topo{display:none !important}
+        #mf-p[data-ui=nova].mf-min .mf-ui-chip{display:none}
+        #mf-p[data-ui=nova] .mf-ui-chip{border:0;background:#334155;color:#e2e8f0;border-radius:99px;padding:3px 9px;font-size:11.5px;font-weight:600;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #mf-p[data-ui=nova] .mf-ui-chip:empty{display:none}
+        #mf-p[data-ui=nova] .mf-ui-icone{border:0;background:transparent;color:#cbd5e1;padding:3px 7px;font-size:15px;border-radius:6px}
+        #mf-p[data-ui=nova] .mf-ui-icone:hover{background:#334155;color:#fff;filter:none}
+        /* abas: uma linha; as secundárias ficam no menu "Mais" */
+        #mf-p[data-ui=nova] .mf-abas{flex-wrap:nowrap;position:relative;background:#fff;padding:0 6px;border-bottom:1px solid #e2e8f0}
+        #mf-p[data-ui=nova] .mf-abas button{flex:1 1 auto;padding:10px 4px 8px;font-size:13px;font-weight:600;color:#64748b;border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;white-space:nowrap}
+        #mf-p[data-ui=nova] .mf-abas button:hover:not(:disabled){background:#f8fafc}
+        #mf-p[data-ui=nova] .mf-abas button.ativa{color:#1d4ed8;border-bottom-color:#2563eb;background:transparent}
+        #mf-p[data-ui=nova] .mf-abas button[data-aba=ccb],#mf-p[data-ui=nova] .mf-abas button[data-aba=cac],#mf-p[data-ui=nova] .mf-abas button[data-aba=cta],
+        #mf-p[data-ui=nova] .mf-abas button[data-aba=lem],#mf-p[data-ui=nova] .mf-abas button[data-aba=tim],#mf-p[data-ui=nova] .mf-abas button[data-aba=cfg]{display:none}
+        #mf-p[data-ui=nova] .mf-ui-menu{position:absolute;right:6px;top:100%;z-index:5;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 24px #0f172a26;padding:4px;min-width:170px;display:none}
+        #mf-p[data-ui=nova] .mf-ui-menu.aberto{display:block}
+        #mf-p[data-ui=nova] .mf-ui-menu button{display:block;width:100%;text-align:left;background:transparent;color:#1e293b;font-weight:500;padding:8px 10px;border-radius:6px;border:0}
+        #mf-p[data-ui=nova] .mf-ui-menu button:hover,#mf-p[data-ui=nova] .mf-ui-menu button.ativa{background:#eff6ff;color:#1d4ed8;filter:none}
+        #mf-p[data-ui=nova] .mf-ui-seg{display:flex;background:#f1f5f9;border-radius:8px;padding:3px;margin:10px 14px 0;gap:3px}
+        #mf-p[data-ui=nova] .mf-ui-seg button{flex:1;background:transparent;color:#475569;padding:6px;font-size:12.5px;border-radius:6px;border:0}
+        #mf-p[data-ui=nova] .mf-ui-seg button.ativa{background:#fff;color:#1e293b;box-shadow:0 1px 3px #0f172a22}
+        /* espaçamento e títulos */
+        #mf-p[data-ui=nova] .mf-sec{padding:12px 14px;border-bottom:1px solid #f1f5f9}
+        #mf-p[data-ui=nova] .mf-tit{font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:#475569;margin-bottom:8px}
+        #mf-p[data-ui=nova] .mf-grupo{padding:6px 14px;border-bottom:1px solid #f1f5f9}
+        #mf-p[data-ui=nova] .mf-grupo>summary{font-size:12px;letter-spacing:0;text-transform:none;font-weight:600;color:#475569}
+        #mf-p[data-ui=nova] #mf-st{font-size:14px}
+        #mf-p[data-ui=nova] .mf-grade{gap:6px}
+        #mf-p[data-ui=nova] textarea,#mf-p[data-ui=nova] select,#mf-p[data-ui=nova] input[type=text],#mf-p[data-ui=nova] input[type=date],#mf-p[data-ui=nova] input[type=time],
+        #mf-p[data-ui=nova] input[type=password],#mf-p[data-ui=nova] .mf-lb-rot input,#mf-p[data-ui=nova] .mf-lb-rot select{border:1px solid #d6dde6;border-radius:8px;padding:7px 9px;font-size:13px;min-height:34px}
+        #mf-p[data-ui=nova] textarea:focus,#mf-p[data-ui=nova] select:focus,#mf-p[data-ui=nova] input:focus{outline:2px solid #bfdbfe;border-color:#2563eb}
+        #mf-p[data-ui=nova] .mf-lb-rot{gap:3px;font-size:12px}
+        /* botões: neutro com contorno por padrão; principal (azul cheio), cópia (verde cheio), perigo (vermelho só no texto) */
+        #mf-p[data-ui=nova] button{background:#fff;color:#1e293b;border:1px solid #d6dde6;font-weight:600;font-size:13px;padding:8px 10px}
+        #mf-p[data-ui=nova] button:hover:not(:disabled){filter:none;background:#f8fafc}
+        #mf-p[data-ui=nova] button:disabled{opacity:1;background:#f1f5f9;color:#94a3b8;border-color:#e2e8f0}
+        #mf-p[data-ui=nova] .vermelho{color:#dc2626;border-color:#fecaca}
+        #mf-p[data-ui=nova] .laranja{color:#c2410c;border-color:#fed7aa}
+        #mf-p[data-ui=nova] #mf-ini,#mf-p[data-ui=nova] #mf-ng-gerar,#mf-p[data-ui=nova] #mf-cac-buscar,#mf-p[data-ui=nova] #mf-tm-criar,#mf-p[data-ui=nova] #mf-lb-salvar,
+        #mf-p[data-ui=nova] #mf-ccb-baixar,#mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-bs-buscar{background:#2563eb;color:#fff;border-color:#2563eb}
+        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-cac-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin{background:#16a34a;color:#fff;border-color:#16a34a}
+        #mf-p[data-ui=nova] #mf-ini:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-gerar:hover,#mf-p[data-ui=nova] #mf-cac-buscar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-tm-criar:hover,
+        #mf-p[data-ui=nova] #mf-lb-salvar:hover,#mf-p[data-ui=nova] #mf-ccb-baixar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-conta-trocar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-frases:hover,#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled){background:#1d4ed8}
+        #mf-p[data-ui=nova] #mf-cop:hover,#mf-p[data-ui=nova] #mf-ng-copiar:hover,#mf-p[data-ui=nova] #mf-cac-copiar:hover,#mf-p[data-ui=nova] #mf-dval:hover,#mf-p[data-ui=nova] #mf-dlin:hover{background:#15803d}
+        #mf-p[data-ui=nova] .mf-mini{border:0;background:transparent;color:#fff;padding:2px 8px;font-size:18px}
+        #mf-p[data-ui=nova] .mf-mini:hover{background:#334155}
+        #mf-p[data-ui=nova] .mf-lb-filtros button{background:#f1f5f9;border:0;color:#475569;font-weight:600;padding:6px 2px}
+        #mf-p[data-ui=nova] .mf-lb-filtros button.ativa{background:#1e293b;color:#fff}
+        #mf-p[data-ui=nova] .mf-lb-acoes button,#mf-p[data-ui=nova] .mf-conta button{padding:4px 8px;font-size:11.5px}
+        #mf-p[data-ui=nova] .mf-lb-item{border-color:#e8edf3;border-radius:8px}
+        /* "Copiar ▾": as outras cópias da Auditoria num menu */
+        #mf-p[data-ui=nova] .mf-ui-copias{position:relative}
+        #mf-p[data-ui=nova] .mf-ui-copias:not(.aberto) .mf-ui-extra{display:none}
+        #mf-p[data-ui=nova] .mf-ui-copias.aberto .mf-ui-extra{background:#fff;color:#1e293b;border:1px solid #d6dde6}
+        /* ajuda: textos fixos viram ⓘ (o texto aparece ao passar o mouse) */
+        #mf-p .mf-ui-i{display:none}
+        #mf-p[data-ui=nova] .mf-ui-ajuda{display:none}
+        #mf-p[data-ui=nova] .mf-ui-i{display:inline-block;cursor:help;color:#94a3b8;font-size:13px;margin-left:4px;font-weight:400}
+        #mf-p[data-ui=nova] #mf-msg{margin:10px 14px 12px;background:#f8fafc;border:1px solid #e2e8f0}
+        #mf-p[data-ui=nova] .mf-badge{background:#ef4444}
+        #mf-p .mf-ui-prev{display:none}
+        #mf-p .mf-ng-bloco{margin-bottom:6px}
+        #mf-p .mf-ng-bloco>summary{cursor:pointer;font-size:12px;font-weight:600;color:#475569;padding:4px 0}
+        #mf-p .mf-ui-prev.ativo{display:flex;gap:6px;align-items:center;padding:8px 14px;background:#fef9c3;font-size:12.5px;border-bottom:1px solid #fde68a}
+        #mf-p .mf-bs{padding:8px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc}
+        #mf-p .mf-bs .mf-tit{margin-bottom:6px}
+        #mf-p .mf-bs-cand{display:block;width:100%;text-align:left;font-size:12px !important;padding:6px 8px !important;margin-top:4px}
+        #mf-p .mf-bs-cab{font-weight:700;font-size:13px;margin:6px 0 2px}
+        #mf-p .mf-bs-mini{padding:4px 9px !important;font-size:12px !important}
+        #mf-p #mf-bs-res{max-height:260px;overflow:auto}
         #mf-p .mf-cac-lin{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9}
         #mf-p .mf-cac-lin span{color:#64748b}
         #mf-p .mf-cac-lin b{text-align:right}
@@ -965,6 +1046,27 @@
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
         <button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-corpo">
+        <div id="mf-ui-prev" class="mf-ui-prev"><span id="mf-ui-prev-txt" style="flex:1"></span><button id="mf-ui-prev-manter" class="verde" style="padding:5px 9px">Manter</button><button id="mf-ui-prev-voltar" class="cinza" style="padding:5px 9px">Voltar</button></div>
+        <div class="mf-bs" id="mf-bs">
+          <div class="mf-tit mf-dobra aberta" id="mf-bs-tit" title="Mostrar / esconder a busca">Buscar cliente</div>
+          <div id="mf-bs-corpo">
+            <div class="mf-linha" style="margin-bottom:4px">
+              <input id="mf-bs-termo" type="text" placeholder="CPF, nº da proposta ou nome" autocomplete="off" style="flex:1">
+              <span id="mf-bs-tipo" class="mf-info" style="min-width:52px;text-align:center"></span>
+              <button id="mf-bs-buscar" class="azul" style="padding:8px 12px">Buscar</button>
+            </div>
+            <label class="mf-opc" style="margin:2px 0"><input type="checkbox" id="mf-bs-cac"><span>Incluir cobrança do CAC (troca para a conta master se precisar)</span></label>
+            <div id="mf-bs-st" class="mf-info"></div>
+            <div id="mf-bs-res" style="display:none"></div>
+            <div id="mf-bs-usar" class="mf-linha" style="display:none;flex-wrap:wrap;gap:4px;margin:6px 0 0">
+              <span class="mf-info" id="mf-bs-usar-rot">Usar em:</span>
+              <button id="mf-bs-usar-neg" class="cinza mf-bs-mini">Negociações</button>
+              <button id="mf-bs-usar-cac" class="cinza mf-bs-mini">CAC</button>
+              <button id="mf-bs-usar-lem" class="cinza mf-bs-mini">Lembretes</button>
+              <button id="mf-bs-limpar" class="vermelho mf-bs-mini">Limpar</button>
+            </div>
+          </div>
+        </div>
         <div class="mf-abas">
           <button data-aba="rel">Relatórios</button>
           <button data-aba="ccb">CCBs</button>
@@ -1254,6 +1356,11 @@
             </div>
             <button id="mf-ng-pag-salvar" class="cinza" style="width:100%;margin-top:6px">Salvar dados para pagamento</button>
           </details>
+          <details class="mf-grupo" data-grupo="aparencia" open><summary>Aparência da interface</summary>
+            <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="nova"><span><b>Nova UI</b><small>Abas reorganizadas (menu "Mais"), botões principais em destaque, ajuda em ⓘ.</small></span></label>
+            <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="antiga"><span><b>UI Antiga</b><small>O visual anterior, sem mudanças.</small></span></label>
+            <button id="mf-ui-previsualizar" class="cinza" style="width:100%">Pré-visualizar a outra aparência</button>
+          </details>
           <details class="mf-grupo" data-grupo="painel"><summary>Painel e diagnóstico</summary>
             <button id="mf-pos" class="cinza" style="width:100%" title="Arraste o painel pela barra escura do título; a posição fica salva.">Restaurar posição original do painel</button>
             <div class="mf-grade" style="margin-top:8px">
@@ -1265,6 +1372,7 @@
         <div id="mf-msg"></div>
       </div>
 `;
+    painel.dataset.ui = cfg('aparencia') === 'antiga' ? 'antiga' : 'nova';   // aparência aplicada antes de mostrar (sem "piscar")
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
     const msg = t => ($('#mf-msg').textContent = t);
@@ -3020,9 +3128,26 @@
         });
         if (def.tipo === 'check') { lab.style.flexDirection = 'row'; lab.style.alignItems = 'center'; lab.append(inp, document.createTextNode(' ' + rot)); }
         else lab.append(document.createTextNode(rot + (obrig ? ' *' : '')), inp);
+        lab.dataset.bloco = def.tipo === 'area' ? 'textos' : ['nome', 'proposta', 'cpf'].includes(c) ? 'cliente'
+          : (['pedido', 'solicitacao'].includes(k) && ['valor_parcela', 'parcelas_atraso', 'dias_atraso', 'vencimento_antigo', 'vencimento'].includes(c)) ? 'situacao' : 'condicoes';
         grade.appendChild(lab);
       });
-      caixa.appendChild(grade);
+      if (painel.dataset.ui !== 'nova') { caixa.appendChild(grade); return; }
+      // Nova UI: os mesmos campos em blocos recolhíveis; abre o bloco com campo obrigatório ou já preenchido
+      const nomes = { cliente: 'Cliente', situacao: 'Situação atual', condicoes: 'Condições', textos: 'Textos e observações' };
+      const essenciais = new Set([...m.obrig, ...(m.umDe || []).flat()]);
+      Object.keys(nomes).forEach(b => {
+        const labs = [...grade.children].filter(l => l.dataset.bloco === b);
+        if (!labs.length) return;
+        const det = document.createElement('details');
+        det.className = 'mf-ng-bloco';
+        det.open = labs.some(l => { const i = l.querySelector('[data-campo]'); return essenciais.has(i.dataset.campo) || (i.type !== 'checkbox' && i.value); }) || b === 'condicoes';
+        const sum = document.createElement('summary'); sum.textContent = nomes[b];
+        const g = document.createElement('div'); g.className = 'mf-grade';
+        labs.forEach(l => g.appendChild(l));
+        det.append(sum, g);
+        caixa.appendChild(det);
+      });
     }
     // campos essenciais que faltam (nomes para mostrar ao usuário)
     function ngFaltando() {
@@ -3051,6 +3176,7 @@
     $('#mf-ng-gerar').onclick = () => {
       const f = ngFaltando();
       painel.querySelectorAll('#mf-ng-campos [data-campo]').forEach(i => i.classList.toggle('mf-erro', f.some(x => x.startsWith((NG_MODELOS[ngModeloAtual()].rotulos || {})[i.dataset.campo] || NG_CAMPOS[i.dataset.campo].rot))));
+      painel.querySelectorAll('#mf-ng-campos .mf-erro').forEach(i => { const d = i.closest('details'); if (d) d.open = true; });   // Nova UI: abre o bloco do campo com erro
       if (f.length) return msg('Preencha antes de gerar:\n- ' + f.join('\n- '));
       $('#mf-ng-texto').value = ngMontar(ngTextoModelo(ngModeloAtual()));
       msg('Texto gerado. Revise (pode editar) e clique em Copiar texto.');
@@ -3625,7 +3751,7 @@
           campos: calc.campos, origem: calc.origem,
         };
         const st = cacSS() || {};
-        cacSSSet({ etapa: 'resultado', resultado, voltar: extra.voltar || st.voltar || '', quando: Date.now(), abrirAba: true });
+        cacSSSet({ etapa: 'resultado', resultado, voltar: extra.voltar || st.voltar || '', quando: Date.now(), abrirAba: !(extra.origemBusca || st.origemBusca) });
         cacMostrar(resultado);
         cacStatus('');
         msg('CAC: dados de ' + resultado.cliente.nome + ' lidos. Confira, preencha os campos manuais e copie a linha.');
@@ -3661,7 +3787,7 @@
         return msg('CAC indisponível: ' + motivo + '.' + (!master ? ' Escolha a conta master em Configurações > Consulta CAC para trocar automaticamente.' : ''));
       }
       if (GM_getValue('trocaConta', null)) return msg('Já existe uma troca de conta em andamento. Aguarde terminar.');
-      cacSSSet({ etapa: 'trocando', termo, voltar: atual ? atual.usuario : '', quando: Date.now() });
+      cacSSSet({ etapa: 'trocando', termo, voltar: atual ? atual.usuario : '', quando: Date.now(), origemBusca: !!extra.origemBusca });
       cacStatus('Trocando para a conta master (' + rotuloConta(master) + ')...');
       msg('A conta atual não acessa o CAC (' + motivo + '). Trocando para a conta master; a consulta continua sozinha depois do login.');
       trocarPara(master);
@@ -3688,7 +3814,7 @@
         cacSSSet({ ...st, etapa: 'consultando' });
         mostrarAba('cac');
         $('#mf-cac-termo').value = st.termo;
-        cacConsultar(st.termo, { voltar: st.voltar, jaTrocou: true });
+        cacConsultar(st.termo, { voltar: st.voltar, jaTrocou: true, origemBusca: !!st.origemBusca });
       } else if (st.etapa === 'trocando') {
         cacSSSet(null);
         msg('A troca para a conta master não foi confirmada (conta ativa: ' + (a ? rotuloConta(a) : 'não identificada') + '). Consulta CAC cancelada.');
@@ -4146,6 +4272,404 @@
     tmDesenhar(); tmAtualizarVisual();
     let tmVoltas = 0;
     (async () => { for (;;) { await sleep(500); try { tmTick(false); if (++tmVoltas % 120 === 0) tmIniciarExpediente(false); } catch (e) { console.warn('[PaymobiFin] timers', e && e.message); } } })();
+
+
+    /* ================= APARÊNCIA (Nova UI / UI Antiga) =================
+       Camada só visual: o painel recebe data-ui="nova" ou "antiga". A Nova UI é CSS escopado + este organizador,
+       que usa OS MESMOS botões de aba e as mesmas páginas (nada é duplicado nem removido). Na UI Antiga,
+       os elementos .mf-ui-nova ficam ocultos e o visual é exatamente o anterior. Módulos novos entram nas duas. */
+    const UI_MAIS = [['cac', 'CAC'], ['ccb', 'CCBs'], ['cta', 'Contas'], ['cfg', 'Configurações']];
+    const uiAtual = () => painel.dataset.ui;
+    // menu "Mais ▾" e o botão "Agenda" (Pagamentos | Timers)
+    const abas = $('.mf-abas');
+    const btAgenda = document.createElement('button');
+    btAgenda.className = 'mf-ui-nova'; btAgenda.dataset.uiAba = 'agenda';
+    btAgenda.innerHTML = 'Agenda <span class="mf-badge" style="display:none"></span>';
+    const btMais = document.createElement('button');
+    btMais.className = 'mf-ui-nova'; btMais.dataset.uiAba = 'mais'; btMais.textContent = 'Mais ▾';
+    const menu = document.createElement('div');
+    menu.className = 'mf-ui-menu mf-ui-nova';
+    UI_MAIS.forEach(([a, rot]) => { const b = document.createElement('button'); b.dataset.vai = a; b.textContent = rot; b.onclick = () => { menu.classList.remove('aberto'); mostrarAba(a); }; menu.appendChild(b); });
+    abas.querySelector('[data-aba="neg"]').after(btAgenda);
+    abas.append(btMais, menu);
+    btAgenda.onclick = () => mostrarAba(GM_getValue('uiAgenda', 'lem') === 'tim' ? 'tim' : 'lem');
+    btMais.onclick = e => { e.stopPropagation(); menu.classList.toggle('aberto'); };
+    document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target !== btMais) menu.classList.remove('aberto'); }, true);
+    // sub-abas da Agenda, no topo das duas páginas
+    ['lem', 'tim'].forEach(pg => {
+      const seg = document.createElement('div');
+      seg.className = 'mf-ui-seg mf-ui-nova';
+      [['lem', 'Pagamentos'], ['tim', 'Timers']].forEach(([a, rot]) => {
+        const b = document.createElement('button'); b.textContent = rot; b.dataset.vai = a; b.classList.toggle('ativa', a === pg);
+        b.onclick = () => { GM_setValue('uiAgenda', a); mostrarAba(a); };
+        seg.appendChild(b);
+      });
+      painel.querySelector('[data-pag="' + pg + '"]').prepend(seg);
+    });
+    // título: conta ativa (abre Contas) e ⚙ (abre Configurações)
+    const acoesTopo = document.createElement('div');
+    acoesTopo.className = 'mf-ui-acoes mf-ui-nova';
+    const chip = document.createElement('button'); chip.className = 'mf-ui-chip'; chip.title = 'Conta ativa (abre Contas)'; chip.onclick = () => mostrarAba('cta');
+    const eng = document.createElement('button'); eng.className = 'mf-ui-icone'; eng.textContent = '⚙'; eng.title = 'Configurações'; eng.onclick = () => mostrarAba('cfg');
+    acoesTopo.append(chip, eng);
+    $('#mf-min').before(acoesTopo);
+    // "Copiar ▾" na Auditoria: o botão principal continua sendo "Copiar resultado"; os outros vão para o menu
+    const gradeCopia = $('#mf-cop').parentElement;
+    gradeCopia.classList.add('mf-ui-copias');
+    ['#mf-cid', '#mf-cfull', '#mf-colr'].forEach(s => $(s).classList.add('mf-ui-extra'));
+    const btCopMais = document.createElement('button');
+    btCopMais.className = 'mf-ui-nova'; btCopMais.textContent = 'Mais cópias ▾'; btCopMais.title = 'Copiar c/ proposta, auditoria completa (A–R), motivo (coluna R)';
+    btCopMais.onclick = () => { gradeCopia.classList.toggle('aberto'); btCopMais.textContent = gradeCopia.classList.contains('aberto') ? 'Menos cópias ▴' : 'Mais cópias ▾'; };
+    $('#mf-cop').after(btCopMais);
+    // textos de ajuda fixos: na Nova UI viram ⓘ ao lado do título da seção (mesmo texto, ao passar o mouse)
+    painel.querySelectorAll('.mf-info:not([id])').forEach(el => {
+      const txt = limpoTxt(el.textContent);
+      if (!txt || /não é criptografado/.test(txt)) return;   // aviso de segurança continua sempre visível
+      el.classList.add('mf-ui-ajuda');
+      const alvo = el.closest('.mf-sec, .mf-grupo');
+      const tit = alvo && (alvo.querySelector(':scope > .mf-tit') || alvo.querySelector(':scope > summary'));
+      const existente = tit && tit.querySelector(':scope > .mf-ui-i');
+      if (existente) { existente.title += '\n\n' + txt; return; }   // um ⓘ por título, com todos os textos
+      const i = document.createElement('span'); i.className = 'mf-ui-i'; i.textContent = 'ⓘ'; i.title = txt;
+      if (tit) { tit.appendChild(i); } else el.before(i);
+    });
+    // contadores e estado das abas (Agenda = lembretes + timers vencidos)
+    function uiSincronizar() {
+      const a = GM_getValue('abaPainel', 'rel');
+      btAgenda.classList.toggle('ativa', a === 'lem' || a === 'tim');
+      btMais.classList.toggle('ativa', UI_MAIS.some(([x]) => x === a));
+      btMais.textContent = (UI_MAIS.find(([x]) => x === a) || [, 'Mais'])[1] + ' ▾';
+      menu.querySelectorAll('button').forEach(b => b.classList.toggle('ativa', b.dataset.vai === a));
+      const n = ['#mf-lb-badge', '#mf-tm-badge'].reduce((s, sel) => s + ($(sel).style.display === 'none' ? 0 : +$(sel).textContent || 0), 0);
+      const bd = btAgenda.querySelector('.mf-badge'); bd.textContent = n; bd.style.display = n ? '' : 'none';
+      const c = contaAtiva(); chip.textContent = c ? (c.apelido && !c.naoCadastrada ? c.apelido : c.usuario) : '';
+    }
+    painel.querySelectorAll('.mf-abas button, .mf-ui-menu button, .mf-ui-seg button, .mf-ui-acoes button').forEach(b => b.addEventListener('click', () => setTimeout(uiSincronizar)));
+    setInterval(uiSincronizar, 1000);
+    // aplica a aparência (o Gerador redesenha os campos: na Nova UI em blocos recolhíveis)
+    function aplicarUI(modoUi) {
+      painel.dataset.ui = modoUi === 'antiga' ? 'antiga' : 'nova';
+      try { ngDesenharCampos(); } catch (_) {}
+      uiSincronizar();
+      $$ui('input[name="mf-ui-aparencia"]').forEach(r => { r.checked = r.value === cfg('aparencia'); });
+    }
+    function $$ui(s) { return [...painel.querySelectorAll(s)]; }
+    $$ui('input[name="mf-ui-aparencia"]').forEach(r => r.addEventListener('change', () => {
+      if (!r.checked) return;
+      GM_setValue('aparencia', r.value); aplicarUI(r.value);
+      msg('Aparência: ' + (r.value === 'nova' ? 'Nova UI' : 'UI Antiga') + '. Nenhum dado ou configuração foi alterado.');
+    }));
+    // pré-visualização: mostra a outra aparência; volta sozinha em 30 s se não confirmar
+    let uiPrevTimer = null;
+    const faixa = $('#mf-ui-prev');
+    $('#mf-ui-previsualizar').onclick = () => {
+      const outra = cfg('aparencia') === 'nova' ? 'antiga' : 'nova';
+      aplicarUI(outra);
+      faixa.classList.add('ativo');
+      $('#mf-ui-prev-txt').textContent = 'Pré-visualizando a ' + (outra === 'nova' ? 'Nova UI' : 'UI Antiga') + '.';
+      clearTimeout(uiPrevTimer);
+      uiPrevTimer = setTimeout(() => $('#mf-ui-prev-voltar').click(), 30000);
+    };
+    $('#mf-ui-prev-manter').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); GM_setValue('aparencia', painel.dataset.ui); aplicarUI(painel.dataset.ui); msg('Aparência mantida.'); };
+    $('#mf-ui-prev-voltar').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); aplicarUI(cfg('aparencia')); };
+    aplicarUI(cfg('aparencia'));
+
+
+    /* ================= BUSCA DE CLIENTE (central, somente leitura) =================
+       Aceita CPF (11 dígitos), nº da proposta (3 a 9 dígitos) ou nome (parte). Fontes, todas do próprio sistema:
+         · Mesa de Crédito: GET /MesaCredito/MesaCreditoLista?strDados={...strNomePesquisa} (busca no servidor por nº, CPF ou nome)
+         · Fila de Propostas: a MESMA requisição que a tela da Fila faz ao pesquisar (qualquer data). O formato é aprendido
+           quando você pesquisa na Fila (ou baixa CCBs) — nada é inventado; sem esse modelo, a Fila não é usada.
+         · Proposta escolhida: aba Cliente (/MesaCredito/MesaAnaliseCliente) e detalhe (/MesaCredito/MesaAnaliseProposta)
+         · Cobrança: Consulta CAC pelo CPF (conta master quando precisar; troca e volta como no módulo CAC)
+       Identidade: nada é preenchido antes de existir UM cliente escolhido; os dados do CAC só entram se o CPF bate.
+       O "cliente atual" fica no sessionStorage DESTA aba (some ao fechar a aba); nunca vai para o armazenamento do script. */
+    const BUSCA_SS = 'mfBuscaCliente';
+    const bsGet = () => { try { return JSON.parse(sessionStorage.getItem(BUSCA_SS) || 'null'); } catch (_) { return null; } };
+    const bsSet = v => { try { if (v) sessionStorage.setItem(BUSCA_SS, JSON.stringify(v)); else sessionStorage.removeItem(BUSCA_SS); } catch (_) {} };
+    const bsTipo = t => { const d = t.replace(/\D/g, ''); if (/^[\d.\-\s]+$/.test(t) && d.length === 11) return 'cpf'; if (/^\d{3,9}$/.test(t.trim())) return 'proposta'; return t.trim().length >= 3 ? 'nome' : ''; };
+    const bsHojeBR = () => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    let bsOcupado = false;
+    const bsStatus = t => { $('#mf-bs-st').textContent = t; };
+
+    // lista de propostas (Mesa ou Fila) a partir do HTML devolvido pelo servidor
+    function bsLinhasMesa(doc) {
+      const t = doc.querySelector('#tabMesaCreditoLista');
+      if (!t) return null;
+      const ths = [...t.querySelectorAll('thead th')].map(th => limpoTxt(th.textContent).toLowerCase());
+      const col = n => ths.findIndex(x => x.startsWith(n));
+      const ci = { id: col('proposta'), sit: col('situa'), dh: col('data/hora'), cli: col('cliente'), loja: col('pto') };
+      return [...t.querySelectorAll('tbody tr')].map(tr => {
+        const c = [...tr.children].map(td => limpoTxt(td.textContent));
+        const td = tr.querySelector('td[onclick*="DetalheProposta"]');
+        const idOc = td ? ((td.getAttribute('onclick') || '').match(/DetalheProposta\(\s*['"]?(\d+)/) || [])[1] : '';
+        const proposta = idOc || (c[ci.id] || '').replace(/\D/g, '');
+        return proposta ? { proposta, situacao: c[ci.sit] || '', data: c[ci.dh] || '', nome: c[ci.cli] || '', loja: c[ci.loja] || '', fonte: 'Mesa de Crédito' } : null;
+      }).filter(Boolean);
+    }
+    function bsLinhasFila(doc) {
+      const tab = doc.querySelector('#tabPropostasLista') || doc.querySelector('table');
+      if (!tab) return null;
+      const ci = colunasFila(tab);
+      return [...tab.querySelectorAll('tbody tr')].map(tr => {
+        const c = [...tr.cells].map(td => limpoTxt(td.textContent));
+        const numero = c.find(x => /^\d{3,9}$/.test(x)) || '';
+        return numero ? { proposta: numero, situacao: c[ci.sit] || '', data: '', nome: c[ci.cli] || '', loja: '', fonte: 'Fila de Propostas' } : null;
+      }).filter(Boolean);
+    }
+    async function bsMesa(termo) {
+      const pg = s => { const el = document.querySelector(s); return el ? el.value : null; };
+      // filtros como a tela manda; período amplo (desde 2020) para achar propostas antigas
+      const dados = {
+        strDataInicial: '01/01/2020', strDataFinal: bsHojeBR(), strProduto: '', strSituacao: pg('select#txtSituacao') || '00', strReanalise: 'T', strMesa: '',
+        strVisualizacao: 'N', strNomePesquisa: termo, strPromotora: '', strPromotoraFilial: '', strLojista: '', strLoja: '', strPontoAtendimento: '', strConveniada: '',
+        strParceiro: '', lstPlanos: [], strCodigoEmprestimo: '', strTipoData: 'INCLUSAO', strDataVencimentoLiberacaoInicial: '', strDataVencimentoLiberacaoFinal: '',
+      };
+      const r = await cacReq('/MesaCredito/MesaCreditoLista', { strDados: JSON.stringify(dados) });
+      if (!r.ok) return { erro: r.erro || 'Mesa de Crédito respondeu HTTP ' + r.status };
+      const linhas = bsLinhasMesa(cacDoc(r.texto));
+      return linhas ? { linhas } : { erro: ehLogin(r.texto) ? 'sessão expirada' : 'resposta da Mesa sem a lista de propostas' };
+    }
+    // Fila: só com o modelo aprendido da própria tela da Fila
+    async function bsFila(termo) {
+      const mod = GM_getValue('filaReqModelo', null);
+      if (!mod || !mod.url || !/\{\{termo\}\}/.test(mod.dados || '')) return { semModelo: true };
+      const dados = mod.dados.replace('{{termo}}', encodeURIComponent(termo)).replace(/(^|&)_=\d+/, '$1_=' + Date.now());   // anti-cache do jQuery renovado
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_REDE * 1000);
+      try {
+        const url = cacBase() + mod.url;
+        const r = await fetch(mod.metodo === 'POST' ? url : url + (url.includes('?') ? '&' : '?') + dados,
+          mod.metodo === 'POST' ? { method: 'POST', credentials: 'include', signal: ctl.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' }, body: dados }
+            : { credentials: 'include', signal: ctl.signal, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const t = await r.text();
+        const linhas = r.ok ? bsLinhasFila(cacDoc(t)) : null;
+        return linhas ? { linhas } : { erro: 'Fila respondeu HTTP ' + r.status };
+      } catch (_) { return { erro: 'Fila: erro de rede' }; } finally { clearTimeout(tm); }
+    }
+    // aprende o formato da pesquisa da Fila quando VOCÊ pesquisa nela (o termo vira {{termo}}; nada pessoal é guardado)
+    (() => {
+      try {
+        const jq = PAGINA.jQuery;
+        if (!jq || !PAGINA.objFilaPropostas) return;
+        jq(PAGINA.document).on('ajaxSend', (_e, _x, st) => {
+          const url = String((st && st.url) || '');
+          if (!/FilaPropostas\/FilaPropostasLista/i.test(url)) return;
+          const campo = document.querySelector('#txtPropostasPesquisa');
+          const termo = campo ? campo.value.trim() : '';
+          if (!termo) return;
+          const base = cacBase();
+          let caminho = url.startsWith(base) ? url.slice(base.length) : url.replace(/^https?:\/\/[^/]+/, '').replace(/^.*?(\/FilaPropostas\/)/i, '$1');
+          let dados = typeof st.data === 'string' ? st.data : '';
+          if (!dados && caminho.includes('?')) { dados = caminho.split('?')[1]; caminho = caminho.split('?')[0]; }
+          const variantes = [termo, encodeURIComponent(termo), encodeURIComponent(termo).replace(/%20/g, '+'), termo.toUpperCase(), encodeURIComponent(termo.toUpperCase())];
+          const v = variantes.find(x => dados.includes(x));
+          if (!v) return;
+          GM_setValue('filaReqModelo', { url: caminho.split('?')[0], metodo: String(st.type || 'GET').toUpperCase(), dados: dados.replace(v, '{{termo}}'), aprendidoEm: Date.now() });
+        });
+      } catch (_) {}
+    })();
+
+    // dados da proposta escolhida (sem gravar nada no armazenamento do script)
+    async function bsDetalheProposta(proposta) {
+      const base = cacBase(), out = { campos: {}, origem: {} };
+      const put = (k, v, s) => { if (v) { out.campos[k] = v; out.origem[k] = s; } };
+      const cli = await dadosCliente(base, proposta);
+      if (cli.ok) {
+        put('nome', cli.nome, 'Mesa · aba Cliente'); put('cpf', cli.cpf ? cacCpfFmt(cli.cpf) : '', 'Mesa · aba Cliente');
+        put('telefone', cli.telefone, 'Mesa · aba Cliente (Telefone 1/2)'); put('email', cli.email, 'Mesa · aba Cliente');
+      } else out.avisoCliente = cli.motivo;
+      const docs = [];
+      for (const a of DETALHES) {
+        const r = await cacReq(a.split('?')[0], { lngProposta: proposta });
+        if (r.ok && r.texto) docs.push(cacDoc(r.texto));
+      }
+      if (docs.length) {
+        const vend = docs.map(d => acharRotulo(d, 'Digitador')).find(Boolean);
+        put('vendedor', vend ? vend.replace(/^\d+\s+/, '').replace(/\s+-\s+.*$/, '').trim() : '', 'Mesa · detalhe (Digitador)');
+        put('valorCompra', dinheiro(primeiroRotulo(docs, ['Valor da Compra'], t => !!dinheiro(t))), 'Mesa · detalhe');
+        const ent = primeiroRotulo(docs, ['Valor da Entrada'], t => !!dinheiro(t) || !!pctDe(t));
+        if (ent) put('entrada', [dinheiro(ent), pctDe(ent)].filter(Boolean).join(' (') + (pctDe(ent) && dinheiro(ent) ? ')' : ''), 'Mesa · detalhe');
+        const imei = primeiroRotulo(docs, ['IMEI'], t => /^\d{14,16}$/.test(t.replace(/\D/g, '')));
+        put('imei', imei ? imei.replace(/\D/g, '') : '', 'Mesa · detalhe');
+      }
+      return out;
+    }
+
+    const BS_CAMPOS = [['nome', 'Nome'], ['cpf', 'CPF'], ['proposta', 'Proposta'], ['situacao', 'Situação da proposta'], ['telefone', 'Telefone'], ['email', 'E-mail'],
+      ['valorParcela', 'Valor da parcela'], ['entrada', 'Entrada'], ['valorCompra', 'Valor da compra'], ['vendedor', 'Vendedor'], ['imei', 'IMEI'], ['loja', 'Loja'],
+      ['dataProposta', 'Data da proposta'], ['filial', 'Filial (CAC)'], ['fpd', 'FPD'], ['parcelasAtraso', 'Parcelas em atraso'], ['diasAtraso', 'Dias de atraso'], ['vencMaisAntigo', 'Vencimento mais antigo']];
+    function bsMostrar() {
+      const st = bsGet(), caixa = $('#mf-bs-res');
+      $('#mf-bs-usar').style.display = st && st.cliente ? '' : 'none';
+      caixa.innerHTML = '';
+      caixa.style.display = st && (st.cliente || st.candidatos) ? '' : 'none';
+      if (!st) return;
+      if (st.candidatos && !st.cliente) {
+        const t = document.createElement('div'); t.className = 'mf-info'; t.textContent = st.candidatos.length + ' resultado(s) — escolha o cliente:'; caixa.appendChild(t);
+        st.candidatos.slice(0, 25).forEach((c, i) => {
+          const b = document.createElement('button'); b.className = 'cinza mf-bs-cand';
+          b.textContent = c.nome + ' · proposta ' + c.proposta + (c.situacao ? ' · ' + c.situacao : '') + (c.data ? ' · ' + c.data : '');
+          b.onclick = () => bsEscolher(i);
+          caixa.appendChild(b);
+        });
+        return;
+      }
+      const c = st.cliente;
+      if (!c) return;
+      const h = document.createElement('div'); h.className = 'mf-bs-cab';
+      h.textContent = (c.campos.nome || 'Cliente') + (c.campos.proposta ? ' · proposta ' + c.campos.proposta : '');
+      caixa.appendChild(h);
+      BS_CAMPOS.forEach(([k, rot]) => {
+        const d = document.createElement('div'); d.className = 'mf-cac-lin';
+        const a = document.createElement('span'); a.textContent = rot;
+        const b = document.createElement('b'); b.textContent = c.campos[k] || 'Não localizado';
+        if (!c.campos[k]) b.style.color = '#94a3b8'; else b.title = 'Origem: ' + (c.origem[k] || '') + ' · ' + c.consultadoEm;
+        d.append(a, b); caixa.appendChild(d);
+      });
+      const i = document.createElement('div'); i.className = 'mf-info'; i.style.marginTop = '4px';
+      i.textContent = 'Consultado em ' + c.consultadoEm + '. ' + (c.avisos || []).join(' ');
+      caixa.appendChild(i);
+    }
+
+    async function bsBuscar(termoBruto) {
+      if (bsOcupado || cacOcupado) return;
+      if (executando || ccb.rodando) return msg('Há uma coleta ou download em andamento. Aguarde para buscar.');
+      if (GM_getValue('trocaConta', null)) return msg('Há uma troca de conta em andamento. Aguarde.');
+      const termo = limpoTxt(termoBruto).toUpperCase(), tipo = bsTipo(termo);
+      if (!tipo) return msg('Digite o CPF, o nº da proposta ou pelo menos 3 letras do nome.');
+      const busca = tipo === 'cpf' ? termo.replace(/\D/g, '') : termo;
+      bsSet({ termo: busca, tipo, quando: Date.now() });   // nova busca: descarta tudo da anterior
+      cacSSSet(null);
+      bsMostrar();
+      bsOcupado = true; $('#mf-bs-buscar').disabled = true;
+      try {
+        bsStatus('Procurando ' + { cpf: 'o CPF', proposta: 'a proposta', nome: 'o nome' }[tipo] + ' na Mesa de Crédito...');
+        let res = await bsMesa(busca), fonte = 'Mesa';
+        let cands = res.linhas || [];
+        if (tipo === 'proposta') cands = cands.filter(c => c.proposta === busca);
+        if (!cands.length && tipo !== 'proposta') {
+          bsStatus('Procurando na Fila de Propostas...');
+          const f = await bsFila(busca);
+          if (f.linhas && f.linhas.length) { cands = f.linhas; fonte = 'Fila'; }
+        }
+        // sem proposta encontrada: pelo CPF/nome, só o CAC (cadastro e cobrança)
+        if (!cands.length) {
+          if (tipo === 'proposta') { bsSet(null); bsStatus(''); return msg('Proposta ' + busca + ' não encontrada' + (res.erro ? ' (' + res.erro + ')' : '') + '.'); }
+          if (!$('#mf-bs-cac').checked) { bsSet(null); bsStatus(''); return msg('Nenhum cliente encontrado na Mesa' + (GM_getValue('filaReqModelo', null) ? ' nem na Fila' : '') + ' para "' + termoBruto + '".'); }
+          bsSet({ termo: busca, tipo, quando: Date.now(), etapa: 'cac', soCac: true, cacDesde: Date.now() });
+          bsStatus('Nada na Mesa: consultando o CAC...');
+          $('#mf-cac-termo').value = busca;
+          await cacConsultar(busca, { origemBusca: true });
+          if ($('#mf-cac-escolha').children.length) { mostrarAba('cac'); msg('O CAC achou mais de um cliente: escolha na aba CAC.'); }
+          return;
+        }
+        const unicos = [...new Map(cands.map(c => [c.proposta, c])).values()];
+        if (unicos.length === 1 && (tipo === 'proposta' || tipo === 'cpf')) { bsSet({ ...bsGet(), candidatos: unicos }); return bsEscolher(0, true); }
+        bsSet({ ...bsGet(), candidatos: unicos, fonte });
+        bsStatus('');
+        bsMostrar();
+      } finally { bsOcupado = false; $('#mf-bs-buscar').disabled = false; }
+    }
+    async function bsEscolher(i, dentro) {
+      const st = bsGet();
+      if (!st || !st.candidatos || !st.candidatos[i]) return;
+      if (!dentro) { if (bsOcupado) return; bsOcupado = true; }
+      const c = st.candidatos[i];
+      try {
+        bsStatus('Lendo a proposta ' + c.proposta + '...');
+        const det = await bsDetalheProposta(c.proposta);
+        const cpfDig = (det.campos.cpf || '').replace(/\D/g, '');
+        if (st.tipo === 'cpf' && cpfDig && cpfDig !== st.termo) { bsStatus(''); return msg('A proposta ' + c.proposta + ' é de outro CPF. Nada foi preenchido.'); }
+        const campos = { ...det.campos, proposta: c.proposta, situacao: c.situacao, loja: c.loja || '', dataProposta: (c.data.match(/\d{2}\/\d{2}\/\d{4}/) || [''])[0] };
+        if (!campos.nome) campos.nome = c.nome;
+        const origem = { ...det.origem, proposta: c.fonte, situacao: c.fonte, loja: c.fonte, dataProposta: c.fonte };
+        if (!det.origem.nome) origem.nome = c.fonte;
+        const cliente = { campos, origem, consultadoEm: new Date().toLocaleString('pt-BR'), avisos: det.avisoCliente ? ['Aba Cliente: ' + det.avisoCliente + '.'] : [] };
+        bsSet({ ...st, candidatos: null, cliente });
+        bsMostrar();
+        // cobrança pelo CAC, com o CPF já confirmado
+        if ($('#mf-bs-cac').checked && cpfDig) {
+          bsSet({ ...bsGet(), etapa: 'cac', cacDesde: Date.now() });
+          bsStatus('Consultando a cobrança no CAC...');
+          $('#mf-cac-termo').value = cpfDig;
+          cacConsultar(cpfDig, { origemBusca: true });
+        } else { bsStatus(''); msg('Cliente localizado: ' + (campos.nome || '') + '.'); }
+      } finally { if (!dentro) bsOcupado = false; }
+    }
+    // quando o CAC termina (agora ou depois da troca de conta), junta a cobrança ao cliente atual — só se o CPF bate
+    function bsJuntarCac() {
+      const st = bsGet(), cs = cacSS();
+      if (!st || st.etapa !== 'cac') return;
+      if (cs && cs.etapa === 'aviso') { bsSet({ ...st, etapa: '' }); bsStatus(''); return; }
+      // o CAC terminou sem resultado (ex.: CPF não encontrado) e não há troca de conta pendente
+      if (!cs && !cacOcupado && !GM_getValue('trocaConta', null) && !campoSenha() && Date.now() - (st.cacDesde || 0) > 3000) {
+        bsSet({ ...st, etapa: '' }); bsStatus('');
+        return msg(st.cliente ? 'Cliente localizado na Mesa; o CAC não trouxe dados de cobrança para este CPF.' : 'Nenhum cliente encontrado.');
+      }
+      if (!cs || cs.etapa !== 'resultado' || !cs.resultado) return;
+      const res = cs.resultado, cpfCac = (res.cliente.cpf || '').replace(/\D/g, '');
+      const cliente = st.cliente || { campos: {}, origem: {}, consultadoEm: res.consultadoEm, avisos: [] };
+      const cpfCli = (cliente.campos.cpf || '').replace(/\D/g, '') || (st.tipo === 'cpf' ? st.termo : '');
+      if (cpfCli && cpfCac && cpfCli !== cpfCac) { bsSet({ ...st, etapa: '' }); bsStatus(''); return msg('O CAC devolveu outro CPF: os dados de cobrança NÃO foram usados.'); }
+      const put = (k, v, s) => { if (v && !cliente.campos[k]) { cliente.campos[k] = v; cliente.origem[k] = s; } };
+      put('nome', res.cliente.nome, 'CAC'); put('cpf', res.cliente.cpf, 'CAC');
+      Object.entries(res.campos).forEach(([k, v]) => put(k, v, 'CAC · ' + (res.origem[k] || '')));
+      cliente.avisos = [...(cliente.avisos || []), 'Cobrança: CAC (' + res.consultadoEm + (res.conta ? ', conta ' + res.conta : '') + ').'];
+      bsSet({ ...st, etapa: '', cliente });
+      bsStatus('');
+      bsMostrar();
+      msg('Cliente localizado: ' + (cliente.campos.nome || '') + ' (Mesa' + (st.soCac ? '' : ' + CAC') + ').');
+    }
+    setInterval(bsJuntarCac, 1000);
+
+    /* ---- "Usar cliente atual" nos outros módulos (pergunta antes de trocar o que já foi digitado) ---- */
+    function bsPreencher(alvos) {
+      const st = bsGet();
+      if (!st || !st.cliente) return msg('Busque um cliente antes (campo "Buscar cliente" no topo).');
+      const c = st.cliente.campos, conflitos = [], aplicar = [];
+      alvos.forEach(([el, v]) => {
+        if (!el || !v) return;
+        const atual = el.value.trim();
+        if (atual && atual !== v) conflitos.push(el); aplicar.push([el, v]);
+      });
+      if (!aplicar.length) return msg('O cliente atual não tem dados para estes campos.');
+      if (conflitos.length && !confirm(conflitos.length + ' campo(s) já preenchido(s) serão substituídos pelos dados do cliente atual. Continuar?')) return;
+      aplicar.forEach(([el, v]) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); });
+      msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + aplicar.length + ' campo(s)).');
+    }
+    const bsReais = v => { const n = ngCentavos(String(v || '').replace(/\s*\(.*$/, '')); return n == null ? '' : (n / 100).toFixed(2).replace('.', ','); };
+    $('#mf-bs-usar-neg').onclick = () => {
+      const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
+      const f = k => painel.querySelector('#mf-ng-campos [data-campo="' + k + '"]');
+      bsPreencher([[f('nome'), c.campos.nome], [f('proposta'), c.campos.proposta], [f('cpf'), c.campos.cpf], [f('valor_parcela'), bsReais(c.campos.valorParcela)]]);
+    };
+    $('#mf-bs-usar-cac').onclick = () => {
+      const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
+      bsPreencher([[$('#mf-cac-proposta'), c.campos.proposta], [$('#mf-cac-imei'), c.campos.imei], [$('#mf-cac-atendente'), c.campos.vendedor]]);
+    };
+    $('#mf-bs-usar-lem').onclick = () => {
+      const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
+      $('#mf-lb-form-grupo').open = true;
+      bsPreencher([[$('#mf-lb-cliente'), c.campos.nome], [$('#mf-lb-proposta'), c.campos.proposta]]);
+    };
+
+    // campo de busca: botão, Enter, ou pausa na digitação (só CPF completo ou nº de proposta; nome só pelo botão)
+    let bsPausa = null;
+    $('#mf-bs-termo').addEventListener('input', () => {
+      clearTimeout(bsPausa);
+      const t = $('#mf-bs-termo').value, tp = bsTipo(t);
+      $('#mf-bs-tipo').textContent = tp ? { cpf: 'CPF', proposta: 'Proposta', nome: 'Nome' }[tp] : '';
+      if (tp === 'cpf' || (tp === 'proposta' && t.trim().length >= 4)) bsPausa = setTimeout(() => bsBuscar(t), 800);
+    });
+    $('#mf-bs-termo').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(bsPausa); bsBuscar($('#mf-bs-termo').value); } });
+    $('#mf-bs-buscar').onclick = () => { clearTimeout(bsPausa); bsBuscar($('#mf-bs-termo').value); };
+    $('#mf-bs-limpar').onclick = () => { bsSet(null); cacSSSet(null); cacMostrar(null); $('#mf-bs-termo').value = ''; $('#mf-bs-tipo').textContent = ''; bsStatus(''); bsMostrar(); msg('Cliente atual limpo.'); };
+    $('#mf-bs-cac').checked = GM_getValue('buscaComCac', true);
+    $('#mf-bs-cac').addEventListener('change', () => GM_setValue('buscaComCac', $('#mf-bs-cac').checked));
+    $('#mf-bs-tit').onclick = () => { const a = $('#mf-bs-corpo').style.display === 'none'; $('#mf-bs-corpo').style.display = a ? '' : 'none'; $('#mf-bs-tit').classList.toggle('aberta', a); GM_setValue('buscaAberta', a); };
+    if (!GM_getValue('buscaAberta', true)) { $('#mf-bs-corpo').style.display = 'none'; $('#mf-bs-tit').classList.remove('aberta'); }
+    const bsIni = bsGet();
+    if (bsIni) { $('#mf-bs-termo').value = bsIni.termo || ''; bsMostrar(); }
 
     // ao recarregar a página, restaura a fila salva (permite continuar depois de fechar/recarregar)
     if (fila().length) $('#mf-lista').value = fila().join('\n');

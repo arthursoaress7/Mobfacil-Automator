@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.32
+// @version      11.34
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.32');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.34');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -67,7 +67,10 @@
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
-    lerAbaCliente: true,             // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
+    lerAbaCliente: true, 
+    cacTrocaAuto: true,              // Consulta CAC: troca sozinho para a conta master quando a atual não tem acesso
+    cacVoltarConta: true,            // Consulta CAC: volta para a conta anterior depois da consulta
+    cacPosicaoGeral: true,           // Consulta CAC: abre a Posição Geral (o sistema registra protocolo, como na tela)            // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
   };
   const cfg = k => GM_getValue(k, PADRAO[k]);
 
@@ -894,8 +897,8 @@
         #mf-p .mf-top small{opacity:.6;margin-left:6px;font-size:12px;font-weight:400}
         #mf-p.mf-min .mf-top{border-radius:11px}
         #mf-p.mf-arrastando{opacity:.93;box-shadow:0 14px 40px #0007}
-        #mf-p .mf-abas{display:flex;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
-        #mf-p .mf-abas button{flex:1;background:transparent;color:#64748b;border-radius:0;padding:9px 2px;font-size:12.5px;border-bottom:2px solid transparent}
+        #mf-p .mf-abas{display:flex;flex-wrap:wrap;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+        #mf-p .mf-abas button{flex:1 0 25%;background:transparent;color:#64748b;border-radius:0;padding:9px 2px;font-size:12.5px;border-bottom:2px solid transparent}
         #mf-p .mf-abas button.ativa{background:#fff;color:#1e293b;border-bottom-color:#2563eb}
         #mf-p .mf-sec{padding:10px 14px;border-bottom:1px solid #e2e8f0}
         #mf-p .mf-tit{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px}
@@ -922,6 +925,25 @@
         #mf-p .mf-opc small{display:block;color:#64748b;font-size:12px;margin-top:1px}
         #mf-p #mf-versao{cursor:default;user-select:none}
         #mf-p .mf-grupo{padding:4px 14px;border-bottom:1px solid #e2e8f0}
+        #mf-p .mf-cac-lin{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9}
+        #mf-p .mf-cac-lin span{color:#64748b}
+        #mf-p .mf-cac-lin b{text-align:right}
+        #mf-p .mf-badge{display:inline-block;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;vertical-align:middle}
+        #mf-p .mf-lb-rot{display:flex;flex-direction:column;gap:2px;font-size:12px;color:#475569}
+        #mf-p .mf-lb-rot input,#mf-p .mf-lb-rot select,#mf-p .mf-lb-rot textarea{width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;color:#1f2937;background:#fff}
+        #mf-p .mf-lb-rot input[type=checkbox]{width:auto}
+        #mf-p input[type=date]{padding:5px}
+        #mf-p .mf-erro{border-color:#dc2626 !important;background:#fef2f2 !important}
+        #mf-p .mf-lb-filtros{display:flex;gap:4px}
+        #mf-p .mf-lb-filtros button{flex:1;padding:6px 2px;font-size:12px;background:#e2e8f0;color:#1e293b}
+        #mf-p .mf-lb-filtros button.ativa{background:#1e293b;color:#fff}
+        #mf-p .mf-lb-item{border:1px solid #e2e8f0;border-left:4px solid #94a3b8;border-radius:6px;padding:6px 8px;margin-bottom:6px;cursor:pointer;font-size:12px}
+        #mf-p .mf-lb-item.hoje{border-left-color:#ea580c;background:#fff7ed}
+        #mf-p .mf-lb-item.atrasado{border-left-color:#dc2626;background:#fef2f2}
+        #mf-p .mf-lb-item.encerrado{opacity:.6}
+        #mf-p .mf-lb-l1{font-weight:600;color:#1e293b}
+        #mf-p .mf-lb-det{white-space:pre-wrap;color:#475569;margin-top:4px}
+        #mf-p .mf-lb-acoes button{padding:4px 7px;font-size:11px;margin:4px 4px 0 0}
         #mf-p .mf-grupo>summary{cursor:pointer;padding:6px 0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;list-style:none}
         #mf-p .mf-grupo>summary::-webkit-details-marker{display:none}
         #mf-p .mf-grupo>summary::before,#mf-p .mf-dobra::before{content:'▸ ';color:#94a3b8}
@@ -939,13 +961,16 @@
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
       </style>
-      <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small></div>
+      <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span></div>
         <button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-corpo">
         <div class="mf-abas">
           <button data-aba="rel">Relatórios</button>
           <button data-aba="ccb">CCBs</button>
+          <button data-aba="cac">CAC</button>
           <button data-aba="cta">Contas</button>
+          <button data-aba="neg">Negociações</button>
+          <button data-aba="lem">Lembretes <span id="mf-lb-badge" class="mf-badge" style="display:none"></span></button>
           <button data-aba="cfg">Configurações</button>
         </div>
 
@@ -1043,6 +1068,114 @@
           </div>
         </div>
 
+        <div data-pag="cac">
+          <div class="mf-sec">
+            <div class="mf-tit">Consulta CAC (somente leitura)</div>
+            <div class="mf-linha" style="margin-bottom:6px">
+              <input id="mf-cac-termo" type="text" placeholder="CPF ou nome do cliente" autocomplete="off" style="flex:1">
+              <button id="mf-cac-buscar" class="azul" style="padding:8px 12px">Consultar</button>
+            </div>
+            <div id="mf-cac-st" class="mf-info"></div>
+            <div id="mf-cac-escolha"></div>
+          </div>
+          <div class="mf-sec" id="mf-cac-res" style="display:none">
+            <div class="mf-tit">Resultado do CAC</div>
+            <div id="mf-cac-tabela"></div>
+            <div class="mf-tit" style="margin-top:10px">Preenchimento manual</div>
+            <div class="mf-grade">
+              <label class="mf-lb-rot">Proposta<input id="mf-cac-proposta" type="text" autocomplete="off"></label>
+              <label class="mf-lb-rot">IMEI<input id="mf-cac-imei" type="text" autocomplete="off"></label>
+              <label class="mf-lb-rot">Atendente<input id="mf-cac-atendente" type="text" autocomplete="off"></label>
+              <label class="mf-lb-rot">Número Contato (RD Station)<input id="mf-cac-contato" type="text" autocomplete="off"></label>
+              <label class="mf-lb-rot">Quem negociou<input id="mf-cac-quem" type="text" autocomplete="off" placeholder="Paymobi / Recupere"></label>
+              <label class="mf-lb-rot">Data do Contato<input id="mf-cac-data" type="date"></label>
+            </div>
+            <div class="mf-grade" style="margin-top:8px">
+              <button id="mf-cac-copiar" class="verde mf-cheia">Copiar linha (Proposta → Vencimento Mais Antigo)</button>
+              <button id="mf-cac-limpar" class="cinza mf-cheia">Nova consulta</button>
+            </div>
+            <div class="mf-info" style="margin-top:6px">O resultado fica só nesta aba do navegador (some ao fechar a aba) e não é enviado a lugar nenhum.</div>
+          </div>
+        </div>
+
+        <div data-pag="neg">
+          <div class="mf-sec">
+            <div class="mf-tit">Gerador de negociações</div>
+            <select id="mf-ng-modelo"></select>
+            <div id="mf-ng-desc" class="mf-info" style="margin-top:6px"></div>
+          </div>
+          <details class="mf-grupo" id="mf-ng-dados" open><summary>Dados</summary>
+            <div id="mf-ng-campos"></div>
+          </details>
+          <details class="mf-grupo" id="mf-ng-saida" open><summary>Texto</summary>
+            <div class="mf-grade" style="margin-bottom:8px">
+              <button id="mf-ng-gerar" class="azul">Gerar texto</button>
+              <button id="mf-ng-copiar" class="verde">Copiar texto</button>
+            </div>
+            <textarea id="mf-ng-texto" style="height:180px" placeholder="O texto gerado aparece aqui e pode ser editado antes de copiar."></textarea>
+            <div class="mf-grade" style="margin-top:8px">
+              <button id="mf-ng-limpar" class="cinza">Limpar campos</button>
+              <button id="mf-ng-novo" class="cinza">Novo texto</button>
+            </div>
+            <div class="mf-info" style="margin-top:6px">Os dados digitados ficam só nesta página: não são salvos nem enviados.</div>
+          </details>
+          <details class="mf-grupo"><summary>Frases para a planilha</summary>
+            <div class="mf-linha">
+              <select id="mf-ng-frase-tipo" style="flex:1">
+                <option value="fechou">Cliente fechou o acordo</option>
+                <option value="solicitou">Simulação (cliente solicitou)</option>
+              </select>
+              <button id="mf-ng-frases" class="azul" style="padding:8px 10px">Gerar frases</button>
+            </div>
+            <label class="mf-lb-rot">Pedido do cliente<textarea id="mf-ng-f-pedido" style="height:54px"></textarea></label>
+            <button id="mf-ng-copiar-pedido" class="cinza" style="width:100%;margin:4px 0 8px">Copiar "Pedido do cliente"</button>
+            <label class="mf-lb-rot">Acordo Realizado<textarea id="mf-ng-f-acordo" style="height:54px"></textarea></label>
+            <button id="mf-ng-copiar-acordo" class="cinza" style="width:100%;margin-top:4px">Copiar "Acordo Realizado"</button>
+          </details>
+        </div>
+
+        <div data-pag="lem">
+          <div class="mf-sec">
+            <div class="mf-tit">Lembretes de pagamentos parciais</div>
+            <div id="mf-lb-resumo" style="font-size:13px;margin-bottom:8px"></div>
+            <div class="mf-lb-filtros">
+              <button data-filtro="atencao">Atenção</button>
+              <button data-filtro="pendentes">Pendentes</button>
+              <button data-filtro="encerrados">Concluídos</button>
+              <button data-filtro="todos">Todos</button>
+            </div>
+            <input id="mf-lb-busca" type="text" placeholder="Buscar por proposta ou cliente" autocomplete="off" style="margin-top:8px">
+            <div id="mf-lb-lista" style="margin-top:8px"></div>
+          </div>
+          <details class="mf-grupo" id="mf-lb-form-grupo"><summary id="mf-lb-form-tit">Novo lembrete</summary>
+            <div class="mf-grade">
+              <input id="mf-lb-cliente" type="text" placeholder="Cliente (opcional)" autocomplete="off">
+              <input id="mf-lb-proposta" type="text" placeholder="Nº da proposta" autocomplete="off">
+              <label class="mf-lb-rot">Valor total<input id="mf-lb-total" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+              <label class="mf-lb-rot"><span id="mf-lb-pago-rot">Valor pago agora</span><input id="mf-lb-pago" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+              <label class="mf-lb-rot">Data do pagamento<input id="mf-lb-data-pag" type="date"></label>
+              <label class="mf-lb-rot">Próximo acompanhamento<input id="mf-lb-proxima" type="date"></label>
+            </div>
+            <div id="mf-lb-saldo" class="mf-info" style="margin:6px 0"></div>
+            <textarea id="mf-lb-obs" style="height:54px" placeholder="Observações"></textarea>
+            <label class="mf-lb-rot" id="mf-lb-status-rot" style="display:none">Status
+              <select id="mf-lb-status"><option value="pendente">Pendente</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option></select></label>
+            <div class="mf-grade" style="margin-top:8px">
+              <button id="mf-lb-salvar" class="verde">Salvar lembrete</button>
+              <button id="mf-lb-cancelar" class="cinza">Cancelar</button>
+            </div>
+          </details>
+          <details class="mf-grupo"><summary>Backup e avisos</summary>
+            <div class="mf-grade">
+              <button id="mf-lb-exportar" class="cinza">Exportar backup</button>
+              <button id="mf-lb-importar" class="cinza">Importar backup</button>
+            </div>
+            <input id="mf-lb-arquivo" type="file" accept=".json,application/json" style="display:none">
+            <button id="mf-lb-notif" class="cinza" style="width:100%;margin-top:8px">Ativar notificações do navegador</button>
+            <div class="mf-info" style="margin-top:6px">Os lembretes ficam só neste navegador (armazenamento do Tampermonkey) e continuam após atualizar o script. Não são sincronizados entre computadores ou perfis: use o backup para levar a outro lugar. Os avisos só aparecem com uma página do sistema aberta.</div>
+          </details>
+        </div>
+
         <div data-pag="cfg">
           <details class="mf-grupo" data-grupo="coleta" open><summary>Coleta</summary>
             <label class="mf-opc" title="Coleta também CPF, motivo (coluna R) e os dados da proposta (nome, loja, vendedor, contato...) no modelo Auditoria 2 Completo. Desligada: só os dados de crédito."><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b><small>CPF, motivo e dados da proposta (A–R)</small></span></label>
@@ -1058,6 +1191,30 @@
           </details>
           <details class="mf-grupo" data-grupo="contas"><summary>Contas</summary>
             <label class="mf-opc" title="Desligado: pede confirmação antes de sair da conta atual."><input type="checkbox" id="mf-troca-direta"><span><b>Trocar de conta sem confirmação</b></span></label>
+          </details>
+          <details class="mf-grupo" data-grupo="cac"><summary>Consulta CAC</summary>
+            <label class="mf-lb-rot">Conta master (acessa o CAC)<select id="mf-cac-master"></select></label>
+            <label class="mf-opc"><input type="checkbox" id="mf-cac-troca"><span><b>Trocar automaticamente para a conta master</b><small>Quando a conta atual não acessar o CAC. Encerra a sessão em todas as abas.</small></span></label>
+            <label class="mf-opc"><input type="checkbox" id="mf-cac-voltar"><span><b>Voltar para a conta anterior depois</b></span></label>
+            <label class="mf-opc" title="Como na tela do CAC, abrir a Posição Geral registra um protocolo de atendimento. Desligado: lê só os contratos (a Filial pode ficar N/A)."><input type="checkbox" id="mf-cac-posicao"><span><b>Abrir a Posição Geral</b><small>Traz a Filial (Origem); o sistema registra protocolo.</small></span></label>
+          </details>
+          <details class="mf-grupo" data-grupo="negociacoes"><summary>Gerador de negociações</summary>
+            <div class="mf-info" style="margin-bottom:4px">Modelo de texto</div>
+            <select id="mf-ng-cfg-modelo"></select>
+            <textarea id="mf-ng-cfg-texto" style="height:170px;margin-top:6px;font-family:Consolas,monospace;font-size:12px"></textarea>
+            <div class="mf-grade" style="margin-top:6px">
+              <button id="mf-ng-cfg-salvar" class="verde">Salvar modelo</button>
+              <button id="mf-ng-cfg-restaurar" class="cinza">Restaurar original</button>
+            </div>
+            <div id="mf-ng-cfg-vars" class="mf-info" style="margin-top:6px;white-space:pre-wrap"></div>
+            <div class="mf-info" style="margin:10px 0 4px">Dados para pagamento (só neste navegador; usados no modelo "Retorno do setor — Instruções de pagamento")</div>
+            <div class="mf-grade">
+              <input id="mf-ng-pix" type="text" placeholder="Chave PIX" autocomplete="off" class="mf-cheia">
+              <input id="mf-ng-banco" type="text" placeholder="Banco" autocomplete="off">
+              <input id="mf-ng-agencia" type="text" placeholder="Agência" autocomplete="off">
+              <input id="mf-ng-conta" type="text" placeholder="Conta" autocomplete="off" class="mf-cheia">
+            </div>
+            <button id="mf-ng-pag-salvar" class="cinza" style="width:100%;margin-top:6px">Salvar dados para pagamento</button>
           </details>
           <details class="mf-grupo" data-grupo="painel"><summary>Painel e diagnóstico</summary>
             <button id="mf-pos" class="cinza" style="width:100%" title="Arraste o painel pela barra escura do título; a posição fica salva.">Restaurar posição original do painel</button>
@@ -1077,7 +1234,7 @@
 
     /* ---------- abas ---------- */
     const mostrarAba = a => {
-      if (!['rel', 'ccb', 'cta', 'cfg'].includes(a)) a = 'rel';
+      if (!['rel', 'ccb', 'cac', 'cta', 'neg', 'lem', 'cfg'].includes(a)) a = 'rel';
       painel.querySelectorAll('[data-pag]').forEach(p => { p.style.display = p.dataset.pag === a ? 'block' : 'none'; });
       painel.querySelectorAll('.mf-abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === a));
       GM_setValue('abaPainel', a);
@@ -1105,7 +1262,7 @@
     };
     let arraste = null;
     topo.addEventListener('pointerdown', e => {
-      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, #mf-versao')) return;
+      if (e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, #mf-versao, .mf-badge')) return;
       const r = painel.getBoundingClientRect();
       arraste = { dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, id: e.pointerId, moveu: false };
       try { topo.setPointerCapture(e.pointerId); } catch (_) {}
@@ -2645,6 +2802,975 @@
     desenharContas();
     processarTroca();
     desenharContas();
+
+
+    /* ================= GERADOR DE NEGOCIAÇÕES =================
+       Texto montado SÓ com o que foi digitado: nada é inventado, salvo ou enviado.
+       Os dados ficam em memória (campos da tela); o que fica salvo são os MODELOS (negModelos) e os dados
+       para pagamento (negPagamento), que o próprio usuário cadastra em Configurações.
+       Regras dos modelos:
+         {{variavel}}            -> valor digitado (moeda em R$ 0,00, datas em dd/mm/aaaa)
+         linha com variável vazia -> a linha sai do texto
+         parágrafo (bloco entre linhas em branco) que tinha variáveis e perdeu todas -> sai inteiro (com o título) */
+    const NG_CAMPOS = {
+      nome: { rot: 'Nome do cliente', tipo: 'texto' },
+      proposta: { rot: 'Nº da proposta', tipo: 'texto' },
+      cpf: { rot: 'CPF (só se necessário)', tipo: 'texto' },
+      valor_parcela: { rot: 'Valor atual da parcela', tipo: 'moeda' },
+      parcelas_atraso: { rot: 'Parcelas em atraso', tipo: 'num' },
+      dias_atraso: { rot: 'Dias de atraso', tipo: 'num' },
+      vencimento_antigo: { rot: 'Vencimento mais antigo', tipo: 'data' },
+      vencimento: { rot: 'Vencimento', tipo: 'data' },
+      valor_entrada: { rot: 'Valor da entrada', tipo: 'moeda' },
+      data_entrada: { rot: 'Data da entrada', tipo: 'data' },
+      quantidade_parcelas: { rot: 'Quantidade de parcelas', tipo: 'num' },
+      valor_desejado: { rot: 'Valor desejado por parcela', tipo: 'moeda' },
+      valor_parcela_acordo: { rot: 'Valor de cada parcela', tipo: 'moeda' },
+      dia_vencimento: { rot: 'Dia de vencimento', tipo: 'dia' },
+      data_pagamento: { rot: 'Data de pagamento', tipo: 'data' },
+      proximo_vencimento: { rot: 'Próximo vencimento', tipo: 'data' },
+      pedido_cliente: { rot: 'Pedido do cliente (texto livre)', tipo: 'area' },
+      condicoes: { rot: 'Condições', tipo: 'area' },
+      instrucoes: { rot: 'Instruções de pagamento do setor', tipo: 'area' },
+      prazo_pagamento: { rot: 'Prazo para pagamento', tipo: 'texto' },
+      validade: { rot: 'Validade do acordo', tipo: 'data' },
+      valor_inicial: { rot: 'Valor do pagamento inicial', tipo: 'moeda' },
+      data_inicial: { rot: 'Data do pagamento inicial', tipo: 'data' },
+      valor_restante: { rot: 'Valor restante', tipo: 'moeda' },
+      data_restante: { rot: 'Data do valor restante', tipo: 'data' },
+      prazo_dias_uteis: { rot: 'Validade (dias úteis)', tipo: 'num' },
+      valor_solicitado: { rot: 'Valor solicitado pelo cliente', tipo: 'moeda' },
+      vencimento_solicitado: { rot: 'Vencimento solicitado', tipo: 'data' },
+      parcela_antecipada: { rot: 'Parcela antecipada (ex.: 03/10)', tipo: 'texto' },
+      vencimento_original: { rot: 'Vencimento original da parcela', tipo: 'data' },
+      valor_na_data_pagamento: { rot: 'Valor na data de pagamento', tipo: 'moeda' },
+      incluir_ted: { rot: 'Incluir conta para TED/transferência', tipo: 'check' },
+      observacoes: { rot: 'Observações', tipo: 'area' },
+    };
+    // variáveis que vêm de Configurações (não são digitadas por negociação)
+    const NG_VARS_PAGAMENTO = { chave_pix: 'Chave PIX', banco: 'Banco', agencia: 'Agência', conta: 'Conta' };
+    const NG_MODELOS = {
+      pedido: {
+        nome: 'Pedido de negociação', desc: 'Organiza o que o CLIENTE pediu, para encaminhar ao setor. Não indica aprovação.',
+        campos: ['nome', 'proposta', 'cpf', 'valor_parcela', 'parcelas_atraso', 'dias_atraso', 'vencimento_antigo', 'valor_entrada', 'quantidade_parcelas', 'valor_desejado', 'dia_vencimento', 'data_pagamento', 'pedido_cliente', 'observacoes'],
+        obrig: ['nome'], umDe: [['valor_entrada', 'quantidade_parcelas', 'valor_desejado', 'dia_vencimento', 'data_pagamento', 'pedido_cliente']],
+        texto: 'Pedido de negociação\n\nCliente: {{nome}}\nProposta: {{proposta}}\nCPF: {{cpf}}\n\nSituação atual:\nValor da parcela: {{valor_parcela}}\nParcelas em atraso: {{parcelas_atraso}}\nDias em atraso: {{dias_atraso}}\nVencimento mais antigo: {{vencimento_antigo}}\n\nO cliente solicita:\nEntrada de {{valor_entrada}}\nQuantidade de parcelas: {{quantidade_parcelas}}\nValor por parcela: {{valor_desejado}}\nVencimento no dia {{dia_vencimento}}\nPagamento em {{data_pagamento}}\n\nPedido do cliente: {{pedido_cliente}}\n\nObservações: {{observacoes}}\n\nFico no aguardo do retorno do setor sobre a possibilidade desta negociação.',
+      },
+      acordo: {
+        nome: 'Acordo realizado', desc: 'Registra as condições EFETIVAMENTE aceitas pelo cliente.',
+        campos: ['nome', 'proposta', 'valor_entrada', 'data_entrada', 'quantidade_parcelas', 'valor_parcela_acordo', 'dia_vencimento', 'proximo_vencimento', 'condicoes', 'observacoes'],
+        obrig: ['nome'], umDe: [['valor_entrada', 'valor_parcela_acordo', 'condicoes']],
+        texto: 'Acordo realizado\n\nCliente: {{nome}}\nProposta: {{proposta}}\n\nCondições aceitas pelo cliente:\nEntrada: {{valor_entrada}}\nData da entrada: {{data_entrada}}\nParcelas: {{quantidade_parcelas}}\nValor de cada parcela: {{valor_parcela_acordo}}\nVencimento: todo dia {{dia_vencimento}}\nPróximo vencimento: {{proximo_vencimento}}\n\nOutras condições: {{condicoes}}\n\nObservações: {{observacoes}}',
+      },
+      retorno: {
+        nome: 'Retorno do setor', desc: 'Repassa o que o SETOR autorizou, sem alterar as condições.',
+        campos: ['nome', 'proposta', 'valor_entrada', 'quantidade_parcelas', 'valor_parcela_acordo', 'dia_vencimento', 'instrucoes', 'prazo_pagamento', 'validade', 'condicoes', 'observacoes'],
+        obrig: ['nome'], umDe: [['valor_entrada', 'quantidade_parcelas', 'valor_parcela_acordo', 'condicoes']],
+        rotulos: { valor_entrada: 'Entrada autorizada', quantidade_parcelas: 'Parcelas autorizadas', valor_parcela_acordo: 'Valor das parcelas autorizadas', dia_vencimento: 'Dia de vencimento autorizado', condicoes: 'Condições adicionais' },
+        texto: 'Retorno do setor responsável\n\nCliente: {{nome}}\nProposta: {{proposta}}\n\nCondições autorizadas pelo setor:\nEntrada: {{valor_entrada}}\nParcelas: {{quantidade_parcelas}}\nValor das parcelas: {{valor_parcela_acordo}}\nVencimento: todo dia {{dia_vencimento}}\n\nInstruções de pagamento: {{instrucoes}}\nPrazo para pagamento: {{prazo_pagamento}}\nAcordo válido até {{validade}}\n\nCondições adicionais: {{condicoes}}\n\nObservações: {{observacoes}}',
+      },
+      folego: {
+        nome: 'Campanha do Fôlego', desc: 'Condição da campanha: pagamento inicial e saldo restante, como informado.',
+        campos: ['nome', 'proposta', 'condicoes', 'valor_inicial', 'data_inicial', 'valor_restante', 'data_restante', 'observacoes'],
+        obrig: ['nome', 'valor_inicial', 'data_inicial'],
+        rotulos: { condicoes: 'Condições da campanha' },
+        texto: 'Campanha do Fôlego\n\nCliente: {{nome}}\nProposta: {{proposta}}\n\nCondição da campanha: {{condicoes}}\n\nPagamento inicial de {{valor_inicial}} em {{data_inicial}}\nValor restante: {{valor_restante}}\nPagamento do restante em {{data_restante}}\n\nObservações: {{observacoes}}',
+      },
+      retornoPix: {
+        nome: 'Retorno do setor — Instruções de pagamento', desc: 'Usa a chave PIX e a conta cadastradas em Configurações > Gerador de negociações.',
+        campos: ['quantidade_parcelas', 'valor_parcela', 'vencimento', 'prazo_dias_uteis', 'proximo_vencimento', 'incluir_ted'],
+        obrig: ['quantidade_parcelas', 'valor_parcela', 'vencimento', 'prazo_dias_uteis', 'proximo_vencimento', 'chave_pix'],
+        rotulos: { valor_parcela: 'Valor da parcela' },
+        texto: 'Segue retorno do setor responsável pela negociação:\n\nParcelas: {{quantidade_parcelas}}\nValor: {{valor_parcela}}\nVencimento: {{vencimento}}\n\nPara confirmação desta negociação, peço que realize o pagamento da primeira parcela via PIX, conforme os dados abaixo.\n\nDados para pagamento:\n\nChave PIX: {{chave_pix}}\n\nConta corrente (caso prefira TED/transferência):\nBanco: {{banco}}\nAgência: {{agencia}}\nConta: {{conta}}\n\nApós a efetuação do pagamento, por gentileza, envie o comprovante. Os demais boletos serão encaminhados mediante confirmação do pagamento.\n\nEste acordo é válido por {{prazo_dias_uteis}} dias úteis. Caso o pagamento seja realizado dentro desse prazo, o seu próximo vencimento será no dia {{proximo_vencimento}}. Se o pagamento não for realizado dentro do prazo, o acordo será cancelado e será necessário entrar em contato com o nosso suporte para renegociar novamente.',
+      },
+      solicitacao: {
+        nome: 'Solicitação de negociação', desc: 'Resumo para o setor com o que o cliente quer negociar.',
+        campos: ['nome', 'cpf', 'valor_parcela', 'vencimento', 'parcelas_atraso', 'valor_solicitado', 'vencimento_solicitado'],
+        obrig: ['nome', 'valor_solicitado'],
+        texto: 'Nome: {{nome}}\nCPF: {{cpf}}\nValor da parcela: {{valor_parcela}}\nVencimento: {{vencimento}}\nParcelas em atraso: {{parcelas_atraso}}\n\nCliente quer negociar (de acordo com a solicitação):\n\nValor: {{valor_solicitado}}\nVencimento: {{vencimento_solicitado}}',
+      },
+      antecipacao: {
+        nome: 'Antecipação de parcela', desc: 'Dados da antecipação como informados; nenhum valor é calculado pelo script.',
+        campos: ['nome', 'cpf', 'parcela_antecipada', 'vencimento_original', 'data_pagamento', 'valor_na_data_pagamento'],
+        obrig: ['nome', 'parcela_antecipada', 'data_pagamento', 'valor_na_data_pagamento'],
+        texto: 'Sr. {{nome}}, segue os dados conforme solicitado.\n\nCliente: {{nome}}\nCPF: {{cpf}}\nParcela antecipada: {{parcela_antecipada}}\nVencimento original da parcela: {{vencimento_original}}\nData de pagamento: {{data_pagamento}}\nValor na data de pagamento: {{valor_na_data_pagamento}}\n\nFavor conferir os dados acima.\n\nEstando de acordo, para a quitação antecipada do contrato, o pagamento será via PIX.\n\nO pagamento deve ser realizado, no mínimo, em D+1, considerando que o pagamento deverá ocorrer até amanhã. Caso não seja realizado dentro do prazo informado, será necessário fazer uma nova solicitação.',
+      },
+    };
+    const ngValores = {};   // SÓ em memória: some ao recarregar a página
+    const ngModelosSalvos = () => GM_getValue('negModelos', {}) || {};
+    const ngTextoModelo = k => (typeof ngModelosSalvos()[k] === 'string' ? ngModelosSalvos()[k] : NG_MODELOS[k].texto);
+    const ngPagamento = () => GM_getValue('negPagamento', {}) || {};
+    const ngCentavos = t => {
+      let s = String(t == null ? '' : t).replace(/R\$|\s/g, '');
+      if (!s) return null;
+      if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+      else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+      if (!/^\d+(\.\d+)?$/.test(s)) return null;
+      return Math.round(parseFloat(s) * 100);
+    };
+    const ngReais = c => 'R$ ' + (c / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const ngData = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };
+    // valor de cada variável já formatado ('' = vazio)
+    function ngValor(k) {
+      if (k in NG_VARS_PAGAMENTO) {
+        const pg = ngPagamento();
+        const chave = { chave_pix: 'pix', banco: 'banco', agencia: 'agencia', conta: 'conta' }[k];
+        if (k !== 'chave_pix' && !ngValores.incluir_ted) return '';
+        return String(pg[chave] || '').trim();
+      }
+      const def = NG_CAMPOS[k], v = ngValores[k];
+      if (!def) return '';
+      if (def.tipo === 'check') return v ? 'sim' : '';
+      if (v == null || String(v).trim() === '') return '';
+      if (def.tipo === 'moeda') { const c = ngCentavos(v); return c == null ? '' : ngReais(c); }
+      if (def.tipo === 'data') return ngData(v);
+      return String(v).trim().replace(/\s*\n\s*/g, def.tipo === 'area' ? '\n' : ' ');
+    }
+    // monta o texto a partir do modelo; nunca deixa {{...}} no resultado
+    function ngMontar(modelo) {
+      const paragrafos = modelo.replace(/\r/g, '').split(/\n[ \t]*\n/);
+      const saida = [];
+      paragrafos.forEach(p => {
+        const linhas = p.split('\n');
+        let tinhaVar = false, ficouVar = false;
+        const kept = [];
+        linhas.forEach(l => {
+          const vars = [...l.matchAll(/\{\{\s*([\w]+)\s*\}\}/g)].map(m => m[1]);
+          if (!vars.length) { kept.push(l); return; }
+          tinhaVar = true;
+          const vals = vars.map(ngValor);
+          if (vals.some(x => !x)) return;   // alguma variável vazia: a linha sai
+          ficouVar = true;
+          kept.push(l.replace(/\{\{\s*([\w]+)\s*\}\}/g, (_, k) => ngValor(k)));
+        });
+        if (tinhaVar && !ficouVar) return;  // bloco sem nenhum dado: sai com o título
+        const t = kept.join('\n').trim();
+        if (t) saida.push(t);
+      });
+      return saida.join('\n\n').replace(/\{\{[^}]*\}\}/g, '').trim();
+    }
+    const ngModeloAtual = () => GM_getValue('negModeloAtual', 'pedido') in NG_MODELOS ? GM_getValue('negModeloAtual', 'pedido') : 'pedido';
+    function ngDesenharCampos() {
+      const k = ngModeloAtual(), m = NG_MODELOS[k];
+      $('#mf-ng-desc').textContent = m.desc;
+      const caixa = $('#mf-ng-campos');
+      caixa.innerHTML = '';
+      const grade = document.createElement('div');
+      grade.className = 'mf-grade';
+      m.campos.forEach(c => {
+        const def = NG_CAMPOS[c];
+        const rot = (m.rotulos && m.rotulos[c]) || def.rot;
+        const obrig = m.obrig.includes(c);
+        const lab = document.createElement('label');
+        lab.className = 'mf-lb-rot' + (def.tipo === 'area' || def.tipo === 'check' ? ' mf-cheia' : '');
+        let inp;
+        if (def.tipo === 'area') { inp = document.createElement('textarea'); inp.style.height = '54px'; }
+        else {
+          inp = document.createElement('input');
+          inp.type = def.tipo === 'data' ? 'date' : def.tipo === 'check' ? 'checkbox' : 'text';
+          if (def.tipo === 'moeda') { inp.inputMode = 'decimal'; inp.placeholder = '0,00'; }
+          if (def.tipo === 'num' || def.tipo === 'dia') inp.inputMode = 'numeric';
+          inp.autocomplete = 'off';
+        }
+        inp.dataset.campo = c;
+        if (def.tipo === 'check') inp.checked = ngValores[c] != null ? !!ngValores[c] : !!(ngPagamento().banco || ngPagamento().conta);
+        else inp.value = ngValores[c] || '';
+        if (def.tipo === 'check') ngValores[c] = inp.checked;
+        inp.addEventListener(def.tipo === 'check' ? 'change' : 'input', () => {
+          ngValores[c] = def.tipo === 'check' ? inp.checked : inp.value;
+          inp.classList.remove('mf-erro');
+        });
+        if (def.tipo === 'check') { lab.style.flexDirection = 'row'; lab.style.alignItems = 'center'; lab.append(inp, document.createTextNode(' ' + rot)); }
+        else lab.append(document.createTextNode(rot + (obrig ? ' *' : '')), inp);
+        grade.appendChild(lab);
+      });
+      caixa.appendChild(grade);
+    }
+    // campos essenciais que faltam (nomes para mostrar ao usuário)
+    function ngFaltando() {
+      const m = NG_MODELOS[ngModeloAtual()], f = [];
+      m.obrig.forEach(c => {
+        if (c in NG_VARS_PAGAMENTO) { if (!ngValor(c)) f.push(NG_VARS_PAGAMENTO[c] + ' (Configurações > Gerador de negociações)'); return; }
+        if (!ngValor(c)) f.push(((m.rotulos && m.rotulos[c]) || NG_CAMPOS[c].rot));
+      });
+      (m.umDe || []).forEach(g => { if (!g.some(c => ngValor(c))) f.push('pelo menos um de: ' + g.map(c => (m.rotulos && m.rotulos[c]) || NG_CAMPOS[c].rot).join(', ')); });
+      // valores digitados que não são válidos (não viram texto em vez de sumir sem aviso)
+      m.campos.forEach(c => {
+        const def = NG_CAMPOS[c], v = ngValores[c];
+        if (v == null || String(v).trim() === '' || def.tipo === 'check') return;
+        if (def.tipo === 'moeda' && ngCentavos(v) == null) f.push(((m.rotulos && m.rotulos[c]) || def.rot) + ' (valor inválido)');
+        if ((def.tipo === 'num') && !/^\d+$/.test(String(v).trim())) f.push(((m.rotulos && m.rotulos[c]) || def.rot) + ' (use só números)');
+        if (def.tipo === 'dia' && !(/^\d{1,2}$/.test(String(v).trim()) && +v >= 1 && +v <= 31)) f.push(((m.rotulos && m.rotulos[c]) || def.rot) + ' (1 a 31)');
+      });
+      return f;
+    }
+    const ngTemDados = () => Object.entries(ngValores).some(([k, v]) => NG_CAMPOS[k] && NG_CAMPOS[k].tipo !== 'check' && String(v || '').trim()) || !!$('#mf-ng-texto').value.trim();
+    const ngLimpar = () => { Object.keys(ngValores).forEach(k => delete ngValores[k]); ngDesenharCampos(); };
+    const selNg = $('#mf-ng-modelo');
+    Object.entries(NG_MODELOS).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.nome; selNg.appendChild(o); });
+    selNg.value = ngModeloAtual();
+    selNg.addEventListener('change', () => { GM_setValue('negModeloAtual', selNg.value); $('#mf-ng-texto').value = ''; ngDesenharCampos(); });
+    $('#mf-ng-gerar').onclick = () => {
+      const f = ngFaltando();
+      painel.querySelectorAll('#mf-ng-campos [data-campo]').forEach(i => i.classList.toggle('mf-erro', f.some(x => x.startsWith((NG_MODELOS[ngModeloAtual()].rotulos || {})[i.dataset.campo] || NG_CAMPOS[i.dataset.campo].rot))));
+      if (f.length) return msg('Preencha antes de gerar:\n- ' + f.join('\n- '));
+      $('#mf-ng-texto').value = ngMontar(ngTextoModelo(ngModeloAtual()));
+      msg('Texto gerado. Revise (pode editar) e clique em Copiar texto.');
+    };
+    $('#mf-ng-copiar').onclick = () => {
+      const t = $('#mf-ng-texto').value;
+      if (!t.trim()) return msg('Gere o texto antes de copiar.');
+      GM_setClipboard(t, 'text');   // exatamente o que está na pré-visualização, com as quebras de linha
+      msg('Texto copiado.');
+    };
+    $('#mf-ng-limpar').onclick = () => {
+      if (ngTemDados() && !confirm('Apagar os dados digitados neste modelo?')) return;
+      ngLimpar(); msg('Campos limpos.');
+    };
+    $('#mf-ng-novo').onclick = () => {
+      if (ngTemDados() && !confirm('Começar um novo texto? Os dados e o texto atuais serão apagados.')) return;
+      ngLimpar(); $('#mf-ng-texto').value = ''; msg('Pronto para uma nova negociação.');
+    };
+    ngDesenharCampos();
+
+    // Configurações: modelos editáveis e dados para pagamento (só locais)
+    const selCfgNg = $('#mf-ng-cfg-modelo');
+    Object.entries(NG_MODELOS).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.nome; selCfgNg.appendChild(o); });
+    const ngCfgMostrar = () => {
+      const k = selCfgNg.value, m = NG_MODELOS[k];
+      $('#mf-ng-cfg-texto').value = ngTextoModelo(k);
+      const vars = [...m.campos.filter(c => NG_CAMPOS[c].tipo !== 'check').map(c => '{{' + c + '}} ' + ((m.rotulos && m.rotulos[c]) || NG_CAMPOS[c].rot)),
+        ...(/\{\{\s*(chave_pix|banco|agencia|conta)/.test(NG_MODELOS[k].texto) ? Object.entries(NG_VARS_PAGAMENTO).map(([v, r]) => '{{' + v + '}} ' + r + ' (dados para pagamento)') : [])];
+      $('#mf-ng-cfg-vars').textContent = 'Variáveis deste modelo:\n' + vars.join('\n') + '\nLinha com variável vazia sai do texto; bloco que fica sem nenhum dado sai inteiro.' +
+        (typeof ngModelosSalvos()[k] === 'string' ? '\n(modelo personalizado)' : '');
+    };
+    selCfgNg.addEventListener('change', ngCfgMostrar);
+    $('#mf-ng-cfg-salvar').onclick = () => {
+      const t = $('#mf-ng-cfg-texto').value;
+      const desconhecidas = [...t.matchAll(/\{\{\s*([\w]+)\s*\}\}/g)].map(x => x[1]).filter(v => !(v in NG_CAMPOS) && !(v in NG_VARS_PAGAMENTO));
+      if (desconhecidas.length) return msg('Variáveis desconhecidas no modelo: ' + [...new Set(desconhecidas)].map(v => '{{' + v + '}}').join(', '));
+      const mm = ngModelosSalvos(); mm[selCfgNg.value] = t; GM_setValue('negModelos', mm);
+      ngCfgMostrar(); msg('Modelo "' + NG_MODELOS[selCfgNg.value].nome + '" salvo.');
+    };
+    $('#mf-ng-cfg-restaurar').onclick = () => {
+      if (!confirm('Voltar o modelo "' + NG_MODELOS[selCfgNg.value].nome + '" ao texto original?')) return;
+      const mm = ngModelosSalvos(); delete mm[selCfgNg.value]; GM_setValue('negModelos', mm);
+      ngCfgMostrar(); msg('Modelo original restaurado.');
+    };
+    ['pix', 'banco', 'agencia', 'conta'].forEach(c => { $('#mf-ng-' + c).value = ngPagamento()[c] || ''; });
+    $('#mf-ng-pag-salvar').onclick = () => {
+      const pg = {};
+      ['pix', 'banco', 'agencia', 'conta'].forEach(c => { const v = $('#mf-ng-' + c).value.trim(); if (v) pg[c] = v.slice(0, 120); });
+      if (Object.keys(pg).length) GM_setValue('negPagamento', pg); else GM_deleteValue('negPagamento');
+      msg('Dados para pagamento salvos neste navegador.');
+    };
+    ngCfgMostrar();
+
+    /* ================= LEMBRETES DE PAGAMENTOS PARCIAIS =================
+       Base própria e versionada: GM 'mfLembretes' = { versao, itens: [...], invalidos: [...] }.
+       - Ao carregar NADA é apagado nem recriado; só grava quando o usuário muda algo (ou numa migração).
+       - Migração de formato antigo: copia o original para 'mfLembretesBackup_v<versão>' antes de converter.
+       - Registros que não se reconhecem vão para "invalidos" (preservados, não apagados).
+       - O estado dos avisos (pop-up adiado) fica em 'mfLembretesAviso', separado dos registros.
+       - Datas sempre 'AAAA-MM-DD' no horário LOCAL do navegador (sem conversão de fuso). Valores em centavos. */
+    const LB_VERSAO = 1, LB_CHAVE = 'mfLembretes';
+    const lbHoje = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    const lbDataOk = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+    const lbNovoId = () => 'lb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const lbItemValido = x => x && typeof x === 'object' && typeof x.id === 'string' && Number.isFinite(x.total) && Array.isArray(x.pagamentos);
+    function lbCarregar() {
+      let raw = GM_getValue(LB_CHAVE, null);
+      if (raw == null) return { versao: LB_VERSAO, itens: [], invalidos: [] };
+      if (Array.isArray(raw)) raw = { versao: 0, itens: raw };          // formato sem versão (lista simples)
+      if (typeof raw !== 'object') return { versao: LB_VERSAO, itens: [], invalidos: [raw], somenteLeitura: true };
+      const base = { versao: raw.versao | 0, itens: Array.isArray(raw.itens) ? raw.itens : [], invalidos: Array.isArray(raw.invalidos) ? raw.invalidos : [] };
+      if (base.versao > LB_VERSAO) return { ...base, somenteLeitura: true };   // base de versão mais nova: não mexe
+      if (base.versao < LB_VERSAO) {
+        GM_setValue('mfLembretesBackup_v' + base.versao, raw);            // cópia do original antes de migrar
+        const itens = [], invalidos = [...base.invalidos], vistos = new Set();
+        base.itens.forEach(x => {
+          const y = lbMigrar(x);
+          if (!y) { invalidos.push(x); return; }
+          if (vistos.has(y.id)) return;                                   // nunca duplica
+          vistos.add(y.id); itens.push(y);
+        });
+        const nova = { versao: LB_VERSAO, itens, invalidos };
+        GM_setValue(LB_CHAVE, nova);
+        return nova;
+      }
+      // itens que não se reconhecem são PRESERVADOS em "invalidos" (nunca apagados); mesmo id repetido aparece uma vez
+      const vistos = new Set(), ok = [];
+      base.itens.forEach(x => {
+        if (!lbItemValido(x)) { base.invalidos.push(x); return; }
+        if (vistos.has(x.id)) return;
+        vistos.add(x.id); ok.push(x);
+      });
+      base.itens = ok;
+      return base;
+    }
+    // versão 0 (lista simples): aceita { proposta, total, pago, proxima, ... } e converte sem perder campos
+    function lbMigrar(x) {
+      if (lbItemValido(x)) return x;
+      if (!x || typeof x !== 'object') return null;
+      const total = Number.isFinite(x.total) ? x.total : ngCentavos(x.total);
+      if (total == null) return null;
+      const pago = x.pago != null ? (Number.isFinite(x.pago) ? x.pago : ngCentavos(x.pago)) : 0;
+      return {
+        id: typeof x.id === 'string' ? x.id : lbNovoId(), cliente: String(x.cliente || ''), proposta: String(x.proposta || ''), total,
+        pagamentos: pago ? [{ valor: pago, data: lbDataOk(x.dataPagamento) ? x.dataPagamento : '', registradoEm: Date.now() }] : [],
+        proxima: lbDataOk(x.proxima) ? x.proxima : '', obs: String(x.obs || ''), status: ['pendente', 'concluido', 'cancelado'].includes(x.status) ? x.status : 'pendente',
+        historico: [], criadoEm: x.criadoEm || Date.now(), atualizadoEm: Date.now(), original: x,
+      };
+    }
+    let lbBase = lbCarregar();
+    const lbSalvar = () => {
+      if (lbBase.somenteLeitura) { msg('Os lembretes salvos são de uma versão mais nova do script: atualize o script antes de alterar.'); return false; }
+      GM_setValue(LB_CHAVE, { versao: LB_VERSAO, itens: lbBase.itens, invalidos: lbBase.invalidos });
+      lbAtualizar();
+      return true;
+    };
+    // outras abas/janelas alteraram: recarrega
+    const lbRecarregar = () => { lbBase = lbCarregar(); };
+    const lbPago = it => it.pagamentos.reduce((s, p) => s + (Number.isFinite(p.valor) ? p.valor : 0), 0);
+    const lbSaldo = it => it.total - lbPago(it);
+    const lbAtencao = it => it.status === 'pendente' && lbDataOk(it.proxima) && it.proxima <= lbHoje();
+    const lbVencido = it => it.status === 'pendente' && lbDataOk(it.proxima) && it.proxima < lbHoje();
+
+    let lbFiltro = 'atencao', lbEditando = null, lbAberto = null;
+    function lbDesenhar() {
+      const hoje = lbHoje(), itens = lbBase.itens;
+      const venc = itens.filter(lbVencido).length, deHoje = itens.filter(it => lbAtencao(it) && it.proxima === hoje).length;
+      const pend = itens.filter(it => it.status === 'pendente').length;
+      $('#mf-lb-resumo').innerHTML = '';
+      const r = document.createElement('span');
+      r.textContent = 'Atrasados: ' + venc + ' · Para hoje: ' + deHoje + ' · Pendentes: ' + pend + (lbBase.invalidos.length ? ' · ' + lbBase.invalidos.length + ' registro(s) não reconhecido(s) preservado(s)' : '');
+      $('#mf-lb-resumo').appendChild(r);
+      painel.querySelectorAll('.mf-lb-filtros button').forEach(b => b.classList.toggle('ativa', b.dataset.filtro === lbFiltro));
+      const busca = $('#mf-lb-busca').value.trim().toLowerCase();
+      let lista = itens.filter(it => lbFiltro === 'todos' ? true : lbFiltro === 'atencao' ? lbAtencao(it) : lbFiltro === 'pendentes' ? it.status === 'pendente' : it.status !== 'pendente');
+      if (busca) lista = lista.filter(it => (it.proposta + ' ' + it.cliente).toLowerCase().includes(busca));
+      lista.sort((a, b) => (a.proxima || '9999') .localeCompare(b.proxima || '9999'));
+      const caixa = $('#mf-lb-lista');
+      caixa.innerHTML = '';
+      if (!lista.length) { const v = document.createElement('div'); v.className = 'mf-info'; v.textContent = lbFiltro === 'atencao' ? 'Nenhum lembrete para hoje ou atrasado.' : 'Nenhum lembrete.'; caixa.appendChild(v); return; }
+      lista.forEach(it => {
+        const el = document.createElement('div');
+        el.className = 'mf-lb-item' + (lbVencido(it) ? ' atrasado' : lbAtencao(it) ? ' hoje' : '') + (it.status !== 'pendente' ? ' encerrado' : '');
+        const l1 = document.createElement('div'); l1.className = 'mf-lb-l1';
+        l1.textContent = (it.proposta ? 'Proposta ' + it.proposta : 'Sem proposta') + (it.cliente ? ' · ' + it.cliente : '');
+        const l2 = document.createElement('div'); l2.className = 'mf-lb-l2';
+        const st = it.status === 'pendente' ? (lbVencido(it) ? 'ATRASADO' : lbAtencao(it) ? 'HOJE' : 'pendente') : it.status === 'concluido' ? 'concluído' : 'cancelado';
+        l2.textContent = 'Saldo ' + ngReais(lbSaldo(it)) + ' de ' + ngReais(it.total) + ' · próx.: ' + (ngData(it.proxima) || '—') + ' · ' + st;
+        el.append(l1, l2);
+        if (lbAberto === it.id) {
+          const det = document.createElement('div'); det.className = 'mf-lb-det';
+          det.textContent = 'Pagamentos: ' + (it.pagamentos.length ? it.pagamentos.map(p => ngReais(p.valor) + (p.data ? ' em ' + ngData(p.data) : '')).join('; ') : 'nenhum') +
+            (it.obs ? '\nObs.: ' + it.obs : '') + (it.historico && it.historico.length ? '\n' + it.historico.slice(-3).map(h => h.texto).join('\n') : '');
+          const acoes = document.createElement('div'); acoes.className = 'mf-lb-acoes';
+          const bt = (t, cls, fn) => { const b = document.createElement('button'); b.className = cls; b.textContent = t; b.onclick = e => { e.stopPropagation(); fn(); }; acoes.appendChild(b); };
+          if (it.status === 'pendente') {
+            bt('Pagamento', 'verde', () => lbAbrirForm(it, 'pagamento'));
+            bt('Editar', 'cinza', () => lbAbrirForm(it, 'editar'));
+            bt('Concluir', 'azul', () => lbMudarStatus(it.id, 'concluido'));
+            bt('Cancelar', 'laranja', () => lbMudarStatus(it.id, 'cancelado'));
+          } else bt('Reabrir', 'cinza', () => lbMudarStatus(it.id, 'pendente'));
+          bt('Excluir', 'vermelho', () => lbExcluir(it.id));
+          el.append(det, acoes);
+        }
+        el.onclick = () => { lbAberto = lbAberto === it.id ? null : it.id; lbDesenhar(); };
+        caixa.appendChild(el);
+      });
+    }
+    const lbHist = (it, texto) => { it.historico = [...(it.historico || []), { em: Date.now(), texto: new Date().toLocaleDateString() + ': ' + texto }].slice(-30); };
+    function lbMudarStatus(id, st) {
+      lbRecarregar();
+      const it = lbBase.itens.find(x => x.id === id);
+      if (!it) return;
+      const nome = { concluido: 'concluir', cancelado: 'cancelar', pendente: 'reabrir' }[st];
+      if (!confirm('Confirma ' + nome + ' o lembrete' + (it.proposta ? ' da proposta ' + it.proposta : '') + '?')) return;
+      it.status = st; it.atualizadoEm = Date.now(); lbHist(it, { concluido: 'concluído', cancelado: 'cancelado', pendente: 'reaberto' }[st]);
+      if (lbSalvar()) msg('Lembrete ' + { concluido: 'concluído', cancelado: 'cancelado', pendente: 'reaberto' }[st] + '.');
+    }
+    function lbExcluir(id) {
+      lbRecarregar();
+      const it = lbBase.itens.find(x => x.id === id);
+      if (!it || !confirm('EXCLUIR definitivamente o lembrete' + (it.proposta ? ' da proposta ' + it.proposta : '') + '? Esta ação não pode ser desfeita.')) return;
+      lbBase.itens = lbBase.itens.filter(x => x.id !== id);
+      if (lbSalvar()) msg('Lembrete excluído.');
+    }
+    // formulário: novo, editar ou registrar novo pagamento
+    function lbAbrirForm(it, modoForm) {
+      lbEditando = it ? { id: it.id, modo: modoForm } : null;
+      $('#mf-lb-form-grupo').open = true;
+      $('#mf-lb-form-tit').textContent = !it ? 'Novo lembrete' : modoForm === 'pagamento' ? 'Registrar pagamento (proposta ' + (it.proposta || '—') + ')' : 'Editar lembrete';
+      $('#mf-lb-cliente').value = it ? it.cliente : ''; $('#mf-lb-proposta').value = it ? it.proposta : '';
+      $('#mf-lb-total').value = it ? (it.total / 100).toFixed(2).replace('.', ',') : '';
+      $('#mf-lb-pago').value = '';
+      $('#mf-lb-pago-rot').textContent = it ? 'Novo pagamento (opcional)' : 'Valor pago agora';
+      $('#mf-lb-data-pag').value = '';
+      $('#mf-lb-proxima').value = it ? it.proxima : '';
+      $('#mf-lb-obs').value = it ? it.obs : '';
+      $('#mf-lb-status').value = it ? it.status : 'pendente';
+      $('#mf-lb-status-rot').style.display = it && modoForm === 'editar' ? '' : 'none';
+      ['#mf-lb-cliente', '#mf-lb-proposta', '#mf-lb-total'].forEach(s => { $(s).disabled = !!it && modoForm === 'pagamento'; });
+      lbAtualizarSaldoForm();
+      mostrarAba('lem');
+    }
+    function lbAtualizarSaldoForm() {
+      const total = ngCentavos($('#mf-lb-total').value), novo = ngCentavos($('#mf-lb-pago').value) || 0;
+      const it = lbEditando && lbBase.itens.find(x => x.id === lbEditando.id);
+      const jaPago = it ? lbPago(it) : 0;
+      if (total == null) { $('#mf-lb-saldo').textContent = 'Saldo restante: informe o valor total.'; return; }
+      const saldo = total - jaPago - novo;
+      $('#mf-lb-saldo').textContent = (jaPago ? 'Já pago: ' + ngReais(jaPago) + ' · ' : '') + 'Saldo restante: ' + (saldo < 0 ? 'NEGATIVO (' + ngReais(-saldo) + ' acima do total)' : ngReais(saldo));
+      $('#mf-lb-saldo').style.color = saldo < 0 ? '#dc2626' : '';
+    }
+    ['#mf-lb-total', '#mf-lb-pago'].forEach(s => $(s).addEventListener('input', lbAtualizarSaldoForm));
+    $('#mf-lb-cancelar').onclick = () => { lbAbrirForm(null); $('#mf-lb-form-grupo').open = false; };
+    $('#mf-lb-salvar').onclick = () => {
+      lbRecarregar();
+      const total = ngCentavos($('#mf-lb-total').value);
+      const pagoTxt = $('#mf-lb-pago').value.trim(), pago = pagoTxt ? ngCentavos(pagoTxt) : 0;
+      const dataPag = $('#mf-lb-data-pag').value, proxima = $('#mf-lb-proxima').value;
+      const proposta = $('#mf-lb-proposta').value.trim().slice(0, 40), cliente = $('#mf-lb-cliente').value.trim().slice(0, 120);
+      const erros = [];
+      if (!proposta && !cliente) erros.push('proposta ou cliente');
+      if (total == null || total <= 0) erros.push('valor total válido');
+      if (pago == null || pago < 0) erros.push('valor pago válido');
+      if (pagoTxt && pago > 0 && !lbDataOk(dataPag)) erros.push('data do pagamento');
+      const st = $('#mf-lb-status-rot').style.display === 'none' ? 'pendente' : $('#mf-lb-status').value;
+      if (st === 'pendente' && !lbDataOk(proxima)) erros.push('data do próximo acompanhamento');
+      if (erros.length) return msg('Preencha: ' + erros.join(', ') + '.');
+      let it = lbEditando && lbBase.itens.find(x => x.id === lbEditando.id);
+      if (!it) {
+        // já existe lembrete pendente desta proposta: oferece registrar o pagamento nele (sem duplicar)
+        const existente = proposta && lbBase.itens.find(x => x.status === 'pendente' && x.proposta === proposta);
+        if (existente && confirm('Já existe um lembrete pendente para a proposta ' + proposta + '. Registrar este pagamento nele?\n(Cancelar = criar outro lembrete separado)')) it = existente;
+      }
+      const jaPago = it ? lbPago(it) : 0;
+      const totalFinal = it && lbEditando && lbEditando.modo === 'pagamento' ? it.total : total;
+      if (jaPago + pago > totalFinal) return msg('O valor pago (' + ngReais(jaPago + pago) + ') passa do total (' + ngReais(totalFinal) + '): o saldo não pode ficar negativo.');
+      if (!it) {
+        it = { id: lbNovoId(), cliente, proposta, total, pagamentos: [], proxima: '', obs: '', status: 'pendente', historico: [], criadoEm: Date.now(), atualizadoEm: Date.now() };
+        lbBase.itens.push(it);
+        lbHist(it, 'criado');
+      } else if (!(lbEditando && lbEditando.modo === 'pagamento')) {
+        it.cliente = cliente; it.proposta = proposta; it.total = total;
+      }
+      if (pago > 0) { it.pagamentos.push({ valor: pago, data: dataPag, registradoEm: Date.now() }); lbHist(it, 'pagamento de ' + ngReais(pago) + (dataPag ? ' em ' + ngData(dataPag) : '')); }
+      if (lbDataOk(proxima) && proxima !== it.proxima) { if (it.proxima) lbHist(it, 'acompanhamento ' + ngData(it.proxima) + ' → ' + ngData(proxima)); it.proxima = proxima; }
+      if ($('#mf-lb-obs').value.trim() !== it.obs) it.obs = $('#mf-lb-obs').value.trim().slice(0, 1000);
+      if (st !== it.status) { it.status = st; lbHist(it, 'status: ' + st); }
+      it.atualizadoEm = Date.now();
+      if (!lbSalvar()) return;
+      lbAberto = it.id; lbEditando = null;
+      $('#mf-lb-form-grupo').open = false; lbAbrirForm(null); $('#mf-lb-form-grupo').open = false;
+      lbFiltro = 'pendentes';
+      lbDesenhar();
+      msg('Lembrete salvo. Saldo restante: ' + ngReais(lbSaldo(it)) + '.');
+    };
+    painel.querySelectorAll('.mf-lb-filtros button').forEach(b => b.addEventListener('click', () => { lbFiltro = b.dataset.filtro; lbDesenhar(); }));
+    $('#mf-lb-busca').addEventListener('input', lbDesenhar);
+
+    // backup: exporta tudo (inclusive registros não reconhecidos); importa SOMANDO, sem duplicar (mesmo id: fica o mais recente)
+    $('#mf-lb-exportar').onclick = () => {
+      lbRecarregar();
+      const json = JSON.stringify({ tipo: 'PaymobiFin-Assistente-lembretes', versao: LB_VERSAO, exportadoEm: new Date().toISOString(), itens: lbBase.itens, invalidos: lbBase.invalidos }, null, 1);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = 'lembretes-paymobifin-' + lbHoje() + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      msg('Backup exportado (' + lbBase.itens.length + ' lembretes).');
+    };
+    $('#mf-lb-importar').onclick = () => $('#mf-lb-arquivo').click();
+    $('#mf-lb-arquivo').addEventListener('change', async () => {
+      const f = $('#mf-lb-arquivo').files[0];
+      $('#mf-lb-arquivo').value = '';
+      if (!f) return;
+      let dados;
+      try { dados = JSON.parse(await f.text()); } catch (_) { return msg('Arquivo inválido: não é um JSON.'); }
+      const vindos = Array.isArray(dados) ? dados : dados && Array.isArray(dados.itens) ? dados.itens : null;
+      if (!vindos) return msg('Arquivo não reconhecido como backup de lembretes.');
+      lbRecarregar();
+      let novos = 0, atualizados = 0, ignorados = 0;
+      vindos.forEach(x => {
+        const y = lbMigrar(x);
+        if (!y) { ignorados++; return; }
+        const i = lbBase.itens.findIndex(z => z.id === y.id);
+        if (i < 0) { lbBase.itens.push(y); novos++; }
+        else if ((y.atualizadoEm || 0) > (lbBase.itens[i].atualizadoEm || 0)) { lbBase.itens[i] = y; atualizados++; }
+      });
+      if (lbSalvar()) msg('Importação: ' + novos + ' novos, ' + atualizados + ' atualizados, ' + ignorados + ' não reconhecidos. Nenhum lembrete existente foi apagado.');
+    });
+    $('#mf-lb-notif').onclick = async () => {
+      if (!('Notification' in window)) return msg('Este navegador não oferece notificações.');
+      const p = await Notification.requestPermission();   // só quando o usuário clica
+      msg(p === 'granted' ? 'Notificações ativadas: o navegador também avisa quando houver lembretes (com uma página do sistema aberta).' : 'Notificações não autorizadas. Os avisos continuam aparecendo dentro da página.');
+    };
+
+    /* ---- contador (badge) e pop-up ---- */
+    function lbAtualizar() {
+      const n = lbBase.itens.filter(lbAtencao).length;
+      [$('#mf-lb-badge'), $('#mf-lb-badge-topo')].forEach(b => { b.textContent = n; b.style.display = n ? '' : 'none'; });
+      $('#mf-lb-badge-topo').title = n + ' lembrete(s) para hoje ou atrasado(s)';
+      lbDesenhar();
+      lbVerificarPopup();
+    }
+    const lbAviso = () => GM_getValue('mfLembretesAviso', {}) || {};
+    let lbPopup = null, lbNotificouEm = 0;
+    function lbFecharPopup() { if (lbPopup) { lbPopup.remove(); lbPopup = null; } }
+    function lbVerificarPopup() {
+      const devidos = lbBase.itens.filter(lbAtencao);
+      if (!devidos.length) return lbFecharPopup();
+      const av = lbAviso();
+      if (av.adiadoAte && Date.now() < av.adiadoAte) return lbFecharPopup();   // "Lembrar mais tarde" (vale para todas as abas)
+      lbMostrarPopup(devidos);
+    }
+    function lbMostrarPopup(devidos) {
+      if (!lbPopup) {
+        lbPopup = document.createElement('div');
+        lbPopup.id = 'mf-lb-popup';
+        document.body.appendChild(lbPopup);
+        if (window.Notification && Notification.permission === 'granted' && Date.now() - lbNotificouEm > 30 * 60 * 1000) {
+          lbNotificouEm = Date.now();
+          try { new Notification('PaymobiFin - Assistente', { body: devidos.length + ' lembrete(s) de pagamento para acompanhar hoje.' }); } catch (_) {}
+        }
+      }
+      lbPopup.innerHTML = '';
+      const st = document.createElement('style');
+      st.textContent = '#mf-lb-popup{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:340px;max-width:calc(100vw - 32px);max-height:70vh;overflow:auto;background:#fff;color:#1f2937;border:1px solid #fca5a5;border-left:5px solid #dc2626;border-radius:10px;box-shadow:0 10px 30px #0004;font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif;padding:12px}' +
+        '#mf-lb-popup *{box-sizing:border-box;font-family:inherit}#mf-lb-popup h4{margin:0 0 8px;font-size:14px}#mf-lb-popup .it{border-top:1px solid #f1f5f9;padding:8px 0}' +
+        '#mf-lb-popup .at{color:#dc2626;font-weight:700}#mf-lb-popup button{cursor:pointer;border:0;border-radius:6px;padding:5px 8px;margin:4px 4px 0 0;font-size:12px;font-weight:600;background:#e2e8f0;color:#1e293b}' +
+        '#mf-lb-popup button.pri{background:#2563eb;color:#fff}#mf-lb-popup input{font-size:12px;padding:3px;margin:4px 4px 0 0}';
+      lbPopup.appendChild(st);
+      const h = document.createElement('h4');
+      h.textContent = '🔔 ' + devidos.length + ' acompanhamento(s) de pagamento';
+      lbPopup.appendChild(h);
+      devidos.sort((a, b) => a.proxima.localeCompare(b.proxima)).slice(0, 20).forEach(it => {
+        const d = document.createElement('div'); d.className = 'it';
+        const t = document.createElement('div');
+        t.textContent = (it.cliente || 'Cliente não informado') + (it.proposta ? ' · proposta ' + it.proposta : '');
+        const s = document.createElement('div');
+        s.innerHTML = '';
+        s.append('Pago: ' + ngReais(lbPago(it)) + ' · Saldo: ' + ngReais(lbSaldo(it)) + ' · ');
+        const dt = document.createElement('span'); dt.className = lbVencido(it) ? 'at' : '';
+        dt.textContent = (lbVencido(it) ? 'atrasado desde ' : 'hoje, ') + ngData(it.proxima);
+        s.appendChild(dt);
+        d.append(t, s);
+        if (it.obs) { const o = document.createElement('div'); o.style.color = '#64748b'; o.textContent = it.obs.slice(0, 160); d.appendChild(o); }
+        const b = (txt, cls, fn) => { const x = document.createElement('button'); x.textContent = txt; if (cls) x.className = cls; x.onclick = fn; d.appendChild(x); return x; };
+        b('Ver lembrete', 'pri', () => { lbAberto = it.id; lbFiltro = 'atencao'; if (GM_getValue('min', false)) { GM_setValue('min', false); aplicarMin(false); trazerParaTela(); } mostrarAba('lem'); lbDesenhar(); });
+        const adiarBt = b('Adiar', '', () => {
+          if (d.querySelector('input[type=date]')) return;
+          const inp = document.createElement('input'); inp.type = 'date'; inp.min = (() => { const x = new Date(); x.setDate(x.getDate() + 1); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); })();
+          const ok = document.createElement('button'); ok.textContent = 'OK'; ok.className = 'pri';
+          ok.onclick = () => {
+            if (!lbDataOk(inp.value) || inp.value <= lbHoje()) return msg('Escolha uma data a partir de amanhã.');
+            lbRecarregar();
+            const x = lbBase.itens.find(z => z.id === it.id);
+            if (!x) return;
+            lbHist(x, 'adiado de ' + ngData(x.proxima) + ' para ' + ngData(inp.value)); x.proxima = inp.value; x.atualizadoEm = Date.now();
+            if (lbSalvar()) msg('Lembrete adiado para ' + ngData(inp.value) + '.');
+          };
+          adiarBt.after(inp, ok);
+        });
+        b('Concluir', '', () => lbMudarStatus(it.id, 'concluido'));
+        lbPopup.appendChild(d);
+      });
+      const rod = document.createElement('div'); rod.style.marginTop = '8px';
+      const mais = document.createElement('button');
+      mais.textContent = 'Lembrar mais tarde (1 h)';
+      mais.onclick = () => { GM_setValue('mfLembretesAviso', { ...lbAviso(), adiadoAte: Date.now() + 60 * 60 * 1000 }); lbFecharPopup(); };   // não muda nenhum lembrete
+      rod.appendChild(mais);
+      lbPopup.appendChild(rod);
+    }
+    $('#mf-lb-badge-topo').addEventListener('click', e => {
+      e.stopPropagation();
+      if (GM_getValue('min', false)) { GM_setValue('min', false); aplicarMin(false); trazerParaTela(); }
+      lbFiltro = 'atencao'; mostrarAba('lem'); lbDesenhar();
+    });
+    // a cada minuto: virada do dia, mudanças feitas em outra aba e fim do "lembrar mais tarde"
+    setInterval(() => { lbRecarregar(); lbAtualizar(); }, 60 * 1000);
+    lbAtualizar();
+
+
+    /* ================= CONSULTA CAC (Central de Atendimento) — SOMENTE LEITURA =================
+       Usa as MESMAS requisições que a tela do CAC faz (código da própria página):
+         1. GET  /CentralAtendimento/CentralPesquisaCliente?strCliente=...  -> #tabCentralClientes (CPF, Nome, Produto, Conta...)
+            cada linha chama Atendimento('produto', 'conta')
+         2. GET  /CentralAtendimento/BuscaCartao?strProduto&strCartao       -> JSON do cliente (situação, protocolo, confirmação)
+         3. POST /CentralAtendimento/CentralInicio (opcional)              -> Posição Geral (Origem, Data de Adesão, contratos)
+            (como na tela, o sistema registra um protocolo de atendimento; pode ser desligado em Configurações)
+            sem ela: GET /CentralAtendimento/CentralCompras (lista de contratos)
+         4. GET  /CentralAtendimento/DetalheCompra?strAutorizacao=N         -> Detalhes da Transação + tabela de parcelas
+       Nada é alterado no CAC (nenhuma "Operação"). Se o sistema pedir confirmação de identidade, a consulta para.
+       Consulta em andamento e resultado ficam no sessionStorage DESTA aba (somem ao fechar a aba); nada vai para o GM. */
+    const CAC_SS = 'mfCacEstado';
+    const cacSS = () => { try { return JSON.parse(sessionStorage.getItem(CAC_SS) || 'null'); } catch (_) { return null; } };
+    const cacSSSet = v => { try { if (v) sessionStorage.setItem(CAC_SS, JSON.stringify(v)); else sessionStorage.removeItem(CAC_SS); } catch (_) {} };
+    const cacBase = () => {
+      const v = (document.getElementById('txtCaminhoSistema') || {}).value;
+      if (v) return v.replace(/\/+$/, '');
+      const m = location.pathname.match(/^(.*?\/ErCardWeb)(\/|$)/i);
+      return location.origin + (m ? m[1] : '');
+    };
+    let cacOcupado = false;
+    const cacStatus = t => { $('#mf-cac-st').textContent = t; };
+    const limpoTxt = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
+    async function cacReq(caminho, params, metodo) {
+      const ctl = new AbortController();
+      const tm = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_REDE * 1000);
+      const corpo = new URLSearchParams(params).toString();
+      const url = cacBase() + caminho + (metodo === 'POST' ? '' : '?' + corpo);
+      try {
+        const r = await fetch(url, metodo === 'POST'
+          ? { method: 'POST', credentials: 'include', signal: ctl.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' }, body: corpo }
+          : { credentials: 'include', signal: ctl.signal, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        return { ok: r.ok, status: r.status, texto: await r.text() };
+      } catch (e) {
+        return { ok: false, status: 0, texto: '', erro: ctl.signal.aborted ? 'tempo esgotado' : 'erro de rede' };
+      } finally { clearTimeout(tm); }
+    }
+    const cacDoc = t => new DOMParser().parseFromString(t, 'text/html');
+    const ehLogin = t => /id=["']?frmLogin|id=["']?txtSenha/i.test(t || '');
+    // pares <dt>rótulo</dt><dd>valor</dd> de um fragmento
+    const cacDl = doc => {
+      const o = {};
+      doc.querySelectorAll('dt').forEach(dt => {
+        const dd = dt.nextElementSibling;
+        const k = limpoTxt(dt.textContent).toLowerCase();
+        if (dd && dd.tagName === 'DD' && !(k in o)) o[k] = limpoTxt(dd.textContent);
+      });
+      return o;
+    };
+    const cacContratos = doc => [...new Set([...doc.querySelectorAll('[onclick*="CentralDetalheCompra"]')]
+      .map(el => (el.getAttribute('onclick').match(/CentralDetalheCompra\(\s*['"]?(\d+)/) || [])[1]).filter(Boolean))];
+    const cacNum = t => { const c = ngCentavos(limpoTxt(t)); return c == null ? null : c; };
+    const cacIsoDe = br => { const m = String(br || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
+    const cacCpfFmt = d => (d && d.length >= 11 ? d.slice(0, 11).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '');
+
+    // tabela de parcelas do "Detalhes da Transação" (colunas achadas pelo cabeçalho)
+    function cacParcelas(doc) {
+      const tab = [...doc.querySelectorAll('table')].find(t => { const h = limpoTxt(t.querySelector('thead') && t.querySelector('thead').textContent).toLowerCase(); return /parcela/.test(h) && /dias atraso/.test(h) && /saldo/.test(h); });
+      if (!tab) return null;
+      const ths = [...tab.querySelectorAll('thead th')].map(th => limpoTxt(th.textContent).toLowerCase());
+      const ix = n => ths.findIndex(h => h === n || h.startsWith(n));
+      const c = { parc: ix('parcela'), venc: ix('vencimento'), valor: ix('valor'), saldo: ix('saldo'), dias: ix('dias atraso'), dpg: ix('data pagto'), vpg: ix('vlr pg'), sit: ix('situação') };
+      return [...tab.querySelectorAll('tbody tr')].map(tr => {
+        const td = [...tr.children].map(x => limpoTxt(x.textContent));
+        const num = parseInt((td[c.parc] || '').match(/\d+/) || ['0'], 10);
+        return { num, venc: cacIsoDe(td[c.venc]), valor: cacNum(td[c.valor]), saldo: cacNum(td[c.saldo]), dias: parseInt(td[c.dias], 10) || 0,
+          dataPg: cacIsoDe(td[c.dpg]), valorPg: cacNum(td[c.vpg]), situacao: td[c.sit] || '' };
+      }).filter(p => p.num > 0);
+    }
+
+    // campos da aba Negociação a partir do que veio do CAC (cada um com a origem)
+    function cacCalcular(row, posicao, det, parcelas) {
+      const f = {}, src = {};
+      const put = (k, v, s) => { if (v != null && v !== '' && f[k] == null) { f[k] = v; src[k] = s; } };
+      put('nome', det && det['nome do cliente'], 'Detalhe do contrato');
+      put('nome', posicao && (posicao['cliente'] || '').replace(/\s*\([\d.\-/]+\)\s*$/, ''), 'Posição Geral');
+      put('nome', row.nome, 'Pesquisa');
+      put('cpf', det && det['cpf'], 'Detalhe do contrato');
+      put('cpf', cacCpfFmt(row.cpf), 'Pesquisa');
+      put('dataProposta', det && (det['data contrato'] || '').match(/\d{2}\/\d{2}\/\d{4}/) && det['data contrato'].match(/\d{2}\/\d{2}\/\d{4}/)[0], 'Detalhe do contrato (Data Contrato)');
+      put('dataProposta', posicao && posicao['data de adesão'], 'Posição Geral (Data de Adesão)');
+      put('filial', posicao && (posicao['origem'] || '').replace(/\s*\(\d+\)\s*$/, ''), 'Posição Geral (Origem)');
+      if (parcelas && parcelas.length) {
+        const hoje = lbHoje();
+        const p1 = parcelas.find(p => p.num === 1) || parcelas[0];
+        if (p1.valor != null) put('valorParcela', ngReais(p1.valor), 'Parcelas (valor da parcela ' + p1.num + ')');
+        const atraso = parcelas.filter(p => p.dias > 0 && (p.saldo == null || p.saldo > 0));
+        put('parcelasAtraso', String(atraso.length), 'Parcelas (dias de atraso > 0 e saldo em aberto)');
+        put('diasAtraso', String(atraso.length ? Math.max(...atraso.map(p => p.dias)) : 0), 'Parcelas (maior "Dias Atraso")');
+        const antigo = atraso.map(p => p.venc).filter(Boolean).sort()[0];
+        if (antigo) put('vencMaisAntigo', ngData(antigo), 'Parcelas (vencimento mais antigo em atraso)');
+        // FPD: a 1ª parcela venceu e não foi paga integralmente
+        if (p1.num === 1 && p1.venc) {
+          const naoPaga = p1.saldo == null ? !/liquid/i.test(p1.situacao) : p1.saldo > 0;
+          put('fpd', p1.venc < hoje && naoPaga ? 'SIM' : 'NÃO', 'Parcela 1 (' + (p1.situacao || 'sem situação') + ', saldo ' + (p1.saldo != null ? ngReais(p1.saldo) : '?') + ')');
+        }
+      }
+      return { campos: f, origem: src };
+    }
+
+    async function cacConsultar(termo, extra) {
+      extra = extra || {};
+      if (cacOcupado) return;
+      if (executando || ccb.rodando) return msg('Há uma coleta ou download em andamento. Aguarde terminar para consultar o CAC.');
+      termo = limpoTxt(termo).toUpperCase();
+      if (termo.replace(/\D/g, '').length === 11 && /^[\d.\-\s]+$/.test(termo)) termo = termo.replace(/\D/g, '');
+      if (termo.length < 3) return msg('Informe o CPF ou o nome do cliente.');
+      cacOcupado = true;
+      $('#mf-cac-buscar').disabled = true;
+      cacMostrar(null);
+      try {
+        cacStatus('Pesquisando no CAC...');
+        const r = await cacReq('/CentralAtendimento/CentralPesquisaCliente', { strCliente: termo });
+        const doc = r.texto ? cacDoc(r.texto) : null;
+        const tab = doc && doc.querySelector('#tabCentralClientes');
+        if (!r.ok || !tab) {
+          const motivo = r.erro || (ehLogin(r.texto) ? 'a sessão expirou' : 'esta conta não tem acesso ao CAC (HTTP ' + r.status + ')');
+          return cacSemAcesso(termo, motivo, extra);
+        }
+        let rows = [...tab.querySelectorAll('tbody tr[onclick*="Atendimento("]')].map(tr => {
+          const m = tr.getAttribute('onclick').match(/Atendimento\(\s*['"]([^'"]*)['"]\s*,\s*['"]([^'"]*)['"]/) || [];
+          const td = [...tr.children].map(x => limpoTxt(x.textContent));
+          return { produto: m[1] || '', conta: m[2] || '', cpf: (td[0] || '').replace(/\D/g, ''), nome: td[1] || '', produtoTxt: td[2] || '', situacao: td[4] || '', motivo: td[5] || '' };
+        }).filter(x => x.produto && x.conta);
+        const cpfBusca = /^\d{11}$/.test(termo) ? termo : '';
+        if (cpfBusca) rows = rows.filter(x => x.cpf.startsWith(cpfBusca));
+        if (!rows.length) { cacSSSet(null); cacStatus(''); return msg('CAC: nenhum cliente encontrado para "' + termo + '".'); }
+        if (rows.length > 1) {
+          cacStatus('Mais de um resultado: escolha o cliente/produto.');
+          const caixa = $('#mf-cac-escolha');
+          caixa.innerHTML = '';
+          rows.slice(0, 30).forEach(x => {
+            const b = document.createElement('button');
+            b.className = 'cinza'; b.style.cssText = 'width:100%;margin-top:4px;text-align:left;font-size:12px;padding:6px';
+            b.textContent = x.nome + ' · ' + cacCpfFmt(x.cpf) + ' · ' + x.produtoTxt + ' · conta ' + x.conta + (x.motivo ? ' · ' + x.motivo : '');
+            b.onclick = () => { caixa.innerHTML = ''; cacAbrir(x, termo, extra); };
+            caixa.appendChild(b);
+          });
+          return;
+        }
+        await cacAbrir(rows[0], termo, extra, true);
+      } finally {
+        cacOcupado = false;
+        $('#mf-cac-buscar').disabled = false;
+      }
+    }
+
+    async function cacAbrir(row, termo, extra, dentro) {
+      if (!dentro) { if (cacOcupado) return; cacOcupado = true; }
+      try {
+        cacStatus('Abrindo o cliente (somente leitura)...');
+        const r = await cacReq('/CentralAtendimento/BuscaCartao', { strProduto: row.produto, strCartao: row.conta });
+        let js = null;
+        try { js = JSON.parse(r.texto); } catch (_) {}
+        const c = Array.isArray(js) ? js[0] : js;
+        if (!r.ok || !c) return cacFim('O CAC não devolveu os dados do cliente' + (ehLogin(r.texto) ? ' (sessão expirada)' : ' (HTTP ' + r.status + ')') + '.', extra);
+        if (c.strResultado) return cacFim('CAC: ' + limpoTxt(cacDoc(String(c.strResultado)).body.textContent), extra);
+        if (c.strValidarDadosCliente === 'S') return cacFim('O CAC exige a confirmação de identidade deste cliente. Faça esta consulta pela tela do CAC.', extra);
+        let posicao = null, contratos = [];
+        if (cfg('cacPosicaoGeral')) {
+          cacStatus('Lendo a Posição Geral...');
+          const p = await cacReq('/CentralAtendimento/CentralInicio', { strProduto: row.produto, strCartao: row.conta, lngProtocolo: c.lngProtocoloAtendimento || 0 }, 'POST');
+          if (p.ok && p.texto) { const d = cacDoc(p.texto); posicao = cacDl(d); contratos = cacContratos(d); }
+        }
+        if (!contratos.length) {
+          cacStatus('Lendo os contratos...');
+          const p = await cacReq('/CentralAtendimento/CentralCompras', { strProduto: row.produto, strCartao: row.conta });
+          if (p.ok && p.texto) contratos = cacContratos(cacDoc(p.texto));
+        }
+        const detalhes = [];
+        for (const aut of contratos.slice(0, 5)) {
+          cacStatus('Lendo o contrato ' + aut + '...');
+          const d = await cacReq('/CentralAtendimento/DetalheCompra', { strAutorizacao: aut });
+          if (!d.ok || !d.texto) continue;
+          const doc = cacDoc(d.texto), dl = cacDl(doc);
+          // o contrato tem que ser do MESMO cliente pesquisado (CPF)
+          const cpfDet = (dl['cpf'] || '').replace(/\D/g, '');
+          if (cpfDet && row.cpf && !row.cpf.startsWith(cpfDet)) continue;
+          detalhes.push({ aut, dl, parcelas: cacParcelas(doc) || [] });
+        }
+        // vários contratos: usa o que tem atraso (o mais atrasado); senão o primeiro
+        const escolhido = detalhes.slice().sort((a, b) => Math.max(0, ...b.parcelas.map(p => p.dias)) - Math.max(0, ...a.parcelas.map(p => p.dias)))[0] || null;
+        const calc = cacCalcular(row, posicao, escolhido && escolhido.dl, escolhido && escolhido.parcelas);
+        const resultado = {
+          termo, consultadoEm: new Date().toLocaleString(), conta: (contaAtiva() || {}).usuario || '',
+          cliente: { nome: calc.campos.nome || row.nome, cpf: calc.campos.cpf || cacCpfFmt(row.cpf) },
+          contrato: escolhido ? escolhido.aut : '', outrosContratos: detalhes.filter(d => d !== escolhido).map(d => d.aut),
+          produto: row.produtoTxt, situacao: (posicao && posicao['situação']) || row.situacao + (row.motivo ? ' / ' + row.motivo : ''),
+          protocolo: c.lngProtocoloAtendimento || '', posicaoGeral: !!posicao,
+          campos: calc.campos, origem: calc.origem,
+        };
+        const st = cacSS() || {};
+        cacSSSet({ etapa: 'resultado', resultado, voltar: extra.voltar || st.voltar || '', quando: Date.now(), abrirAba: true });
+        cacMostrar(resultado);
+        cacStatus('');
+        msg('CAC: dados de ' + resultado.cliente.nome + ' lidos. Confira, preencha os campos manuais e copie a linha.');
+        cacVoltarConta(extra);
+      } finally {
+        if (!dentro) cacOcupado = false;
+      }
+    }
+    function cacFim(texto, extra) {
+      cacStatus('');
+      const st = cacSS();
+      // o aviso fica guardado nesta aba para ser mostrado de novo depois da volta para a conta anterior
+      if (!st || st.etapa !== 'resultado') cacSSSet({ etapa: 'aviso', texto, voltar: (extra && extra.voltar) || (st && st.voltar) || '', quando: Date.now() });
+      msg(texto);
+      cacVoltarConta(extra);
+    }
+    // depois da consulta, volta para a conta de antes (se a troca foi feita pelo script)
+    function cacVoltarConta(extra) {
+      const voltar = (extra && extra.voltar) || ((cacSS() || {}).voltar);
+      if (!voltar || !cfg('cacVoltarConta')) return;
+      const c = contas().find(x => x.usuario.toLowerCase() === voltar.toLowerCase());
+      const st = cacSS();
+      if (st) cacSSSet({ ...st, voltar: '' });
+      if (!c) return msg('Consulta feita. A conta anterior (' + voltar + ') não está cadastrada: volte para ela manualmente.');
+      setTimeout(() => trocarPara(c), 1500);
+    }
+    // sem acesso com a conta atual: troca para a conta master (se configurada) e continua sozinho depois do login
+    function cacSemAcesso(termo, motivo, extra) {
+      const master = contas().find(x => x.usuario === GM_getValue('cacContaMaster', ''));
+      const atual = contaAtiva();
+      if (extra.jaTrocou || !master || !cfg('cacTrocaAuto') || (atual && atual.usuario.toLowerCase() === master.usuario.toLowerCase())) {
+        cacSSSet(null); cacStatus('');
+        return msg('CAC indisponível: ' + motivo + '.' + (!master ? ' Escolha a conta master em Configurações > Consulta CAC para trocar automaticamente.' : ''));
+      }
+      if (GM_getValue('trocaConta', null)) return msg('Já existe uma troca de conta em andamento. Aguarde terminar.');
+      cacSSSet({ etapa: 'trocando', termo, voltar: atual ? atual.usuario : '', quando: Date.now() });
+      cacStatus('Trocando para a conta master (' + rotuloConta(master) + ')...');
+      msg('A conta atual não acessa o CAC (' + motivo + '). Trocando para a conta master; a consulta continua sozinha depois do login.');
+      trocarPara(master);
+    }
+    // a cada página carregada: continua a consulta depois da troca, ou mostra o resultado guardado nesta aba
+    function cacRetomar() {
+      const st = cacSS();
+      if (!st) return;
+      if (st.etapa === 'resultado') {
+        cacMostrar(st.resultado);
+        if (st.abrirAba && !campoSenha() && !GM_getValue('trocaConta', null)) { cacSSSet({ ...st, abrirAba: false }); mostrarAba('cac'); }
+        return;
+      }
+      if (st.etapa === 'aviso') {
+        if (campoSenha() || GM_getValue('trocaConta', null)) return;
+        cacSSSet(null); mostrarAba('cac'); msg('Consulta CAC: ' + st.texto);
+        return;
+      }
+      if (Date.now() - st.quando > 15 * 60 * 1000) return cacSSSet(null);
+      if (campoSenha() || GM_getValue('trocaConta', null)) { cacStatus('Aguardando o login da conta master...'); return; }
+      const master = GM_getValue('cacContaMaster', '');
+      const a = contaAtiva();
+      if (st.etapa === 'trocando' && a && a.usuario.toLowerCase() === master.toLowerCase()) {
+        cacSSSet({ ...st, etapa: 'consultando' });
+        mostrarAba('cac');
+        $('#mf-cac-termo').value = st.termo;
+        cacConsultar(st.termo, { voltar: st.voltar, jaTrocou: true });
+      } else if (st.etapa === 'trocando') {
+        cacSSSet(null);
+        msg('A troca para a conta master não foi confirmada (conta ativa: ' + (a ? rotuloConta(a) : 'não identificada') + '). Consulta CAC cancelada.');
+      }
+    }
+
+    const CAC_LINHA = [   // aba "Negociação": colunas Proposta ... Vencimento Mais Antigo
+      ['Proposta', 'm:proposta'], ['Nome', 'nome'], ['CPF', 'cpf'], ['IMEI', 'm:imei'], ['Data da Proposta', 'dataProposta'], ['Filial', 'filial'],
+      ['Atendente', 'm:atendente'], ['Número Contato', 'm:contato'], ['Quem negociou', 'm:quem'], ['Data do Contato', 'm:data'],
+      ['Valor parcela', 'valorParcela'], ['FPD', 'fpd'], ['Parcelas Em Atraso', 'parcelasAtraso'], ['Dias Atraso', 'diasAtraso'], ['Vencimento Mais Antigo', 'vencMaisAntigo'],
+    ];
+    function cacMostrar(res) {
+      $('#mf-cac-res').style.display = res ? '' : 'none';
+      if (!res) return;
+      const t = $('#mf-cac-tabela');
+      t.innerHTML = '';
+      const add = (k, v, s) => {
+        const d = document.createElement('div'); d.className = 'mf-cac-lin';
+        const a = document.createElement('span'); a.textContent = k;
+        const b = document.createElement('b'); b.textContent = v || 'N/A';
+        if (s) b.title = 'Origem: ' + s;
+        d.append(a, b); t.appendChild(d);
+      };
+      add('Cliente', res.cliente.nome + (res.cliente.cpf ? ' (' + res.cliente.cpf + ')' : ''));
+      add('Contrato', res.contrato + (res.outrosContratos.length ? ' (outros: ' + res.outrosContratos.join(', ') + ')' : ''));
+      add('Situação', res.situacao);
+      CAC_LINHA.filter(([, k]) => !k.startsWith('m:') && k !== 'nome' && k !== 'cpf').forEach(([rot, k]) => add(rot, res.campos[k], res.origem[k]));
+      const info = document.createElement('div'); info.className = 'mf-info'; info.style.marginTop = '4px';
+      info.textContent = 'Consultado em ' + res.consultadoEm + (res.conta ? ' com a conta ' + res.conta : '') + (res.posicaoGeral ? ' · Posição Geral aberta (protocolo ' + (res.protocolo || 'do sistema') + ')' : ' · sem Posição Geral') + '. Passe o mouse no valor para ver a origem.';
+      t.appendChild(info);
+    }
+    $('#mf-cac-buscar').onclick = () => { cacSSSet(null); cacConsultar($('#mf-cac-termo').value); };
+    $('#mf-cac-termo').addEventListener('keydown', e => { if (e.key === 'Enter') $('#mf-cac-buscar').click(); });
+    $('#mf-cac-copiar').onclick = () => {
+      const st = cacSS();
+      if (!st || !st.resultado) return msg('Faça uma consulta antes de copiar.');
+      const res = st.resultado, man = k => limpoTxt($('#mf-cac-' + k).value);
+      const linha = CAC_LINHA.map(([, k]) => {
+        if (k === 'm:data') return ngData($('#mf-cac-data').value);
+        if (k.startsWith('m:')) return man(k.slice(2));
+        return res.campos[k] != null && res.campos[k] !== '' ? res.campos[k] : 'N/A';
+      });
+      GM_setClipboard(textoTab([linha]), 'text');
+      msg('Linha copiada (' + CAC_LINHA.length + ' colunas: Proposta → Vencimento Mais Antigo). Cole na coluna Proposta da aba Negociação. Campos manuais vazios vão em branco.');
+    };
+    $('#mf-cac-limpar').onclick = () => {
+      cacSSSet(null); cacMostrar(null); cacStatus('');
+      ['termo', 'proposta', 'imei', 'atendente', 'contato', 'quem', 'data'].forEach(k => { $('#mf-cac-' + k).value = ''; });
+      msg('Pronto para uma nova consulta.');
+    };
+    // Configurações: conta master e opções
+    const selMaster = $('#mf-cac-master');
+    const desenharMaster = () => {
+      const atual = GM_getValue('cacContaMaster', '');
+      selMaster.innerHTML = '<option value="">(nenhuma)</option>';
+      contas().forEach(c => { const o = document.createElement('option'); o.value = c.usuario; o.textContent = rotuloConta(c); selMaster.appendChild(o); });
+      selMaster.value = contas().some(c => c.usuario === atual) ? atual : '';
+    };
+    selMaster.addEventListener('change', () => { GM_setValue('cacContaMaster', selMaster.value); msg(selMaster.value ? 'Conta master do CAC: ' + selMaster.value + '.' : 'Sem conta master para o CAC.'); });
+    $('#mf-contas-tit').addEventListener('click', desenharMaster);
+    $('#mf-conta-salvar').addEventListener('click', desenharMaster);
+    painel.querySelectorAll('[data-aba="cfg"]').forEach(b => b.addEventListener('click', desenharMaster));
+    ligarOpcao('#mf-cac-troca', 'cacTrocaAuto');
+    ligarOpcao('#mf-cac-voltar', 'cacVoltarConta');
+    ligarOpcao('#mf-cac-posicao', 'cacPosicaoGeral');
+    desenharMaster();
+    cacRetomar();
+
+    /* ---- Gerador: frases de uma linha para a planilha (colunas "Pedido do cliente" e "Acordo Realizado") ----
+       "fechou" = acordo fechado; "solicitou" = simulação para ver se é viável. Só usa o que foi digitado. */
+    function ngFrases(tipo) {
+      const m = ngModeloAtual(), v = ngValor;
+      const verbo = tipo === 'fechou' ? 'fechou' : 'solicitou';
+      if (m === 'antecipacao') return { erro: 'O modelo "Antecipação de parcela" não tem frase para a planilha de negociação.' };
+      const ini = v('valor_inicial'), dIni = v('data_inicial'), rest = v('valor_restante'), dRest = v('data_restante');
+      if (m === 'folego') {
+        if (!ini || !dIni) return { erro: 'Preencha o valor e a data do pagamento inicial.' };
+        const resto = rest && dRest ? ' e o restante no valor de ' + rest + ' no dia ' + dRest : rest ? ' e o restante no valor de ' + rest : '';
+        return {
+          pedido: 'Campanha do Fôlego: Cliente ' + (tipo === 'fechou' ? 'fechou acordo para pagar ' : 'solicitou pagar ') + ini + ' no dia ' + dIni + resto,
+          acordo: 'Prosseguimos com o acordo de ' + ini + ' no dia ' + dIni + resto,
+        };
+      }
+      const ent = v('valor_entrada'), dEnt = v('data_entrada') || (m === 'pedido' ? v('data_pagamento') : '');
+      const qtd = v('quantidade_parcelas');
+      const parc = v('valor_parcela_acordo') || v('valor_desejado') || (m === 'retornoPix' ? v('valor_parcela') : '');
+      const dia = v('dia_vencimento');
+      const todoDia = dia ? ', com vencimento para todo dia ' + dia : '';
+      if (m === 'solicitacao') {
+        const vs = v('valor_solicitado'), vd = v('vencimento_solicitado');
+        if (!vs) return { erro: 'Preencha o valor solicitado.' };
+        return { pedido: 'Cliente ' + verbo + ' pagar ' + vs + (vd ? ' com vencimento em ' + vd : ''), acordo: 'Prosseguimos com ' + vs + (vd ? ' com vencimento em ' + vd : '') };
+      }
+      if (ent && qtd && parc) {
+        const e = ent + (dEnt ? ' no dia ' + dEnt : '');
+        return { pedido: 'Cliente ' + verbo + ' pagar de entrada ' + e + ' + ' + qtd + 'x ' + parc + (dia ? ' para todo dia ' + dia : ''),
+          acordo: 'Prosseguimos com o acordo de ' + e + ' de entrada + ' + qtd + 'x ' + parc + (dia ? ' para todo dia ' + dia : '') };
+      }
+      if (qtd && parc) {
+        const venc = m === 'retornoPix' && v('vencimento') ? ', com 1º vencimento em ' + v('vencimento') : todoDia;
+        return { pedido: 'Cliente ' + verbo + ' renegociar as parcelas para ' + qtd + ' parcelas de ' + parc + venc, acordo: 'Prosseguimos com o acordo de ' + qtd + ' parcelas de ' + parc + venc };
+      }
+      if (parc && dia) return { pedido: 'Cliente ' + verbo + ' pagar ' + parc + ' todo dia ' + dia, acordo: 'Prosseguimos com ' + parc + ' todo dia ' + dia };
+      if (ent && dEnt) return { pedido: 'Cliente ' + verbo + ' pagar ' + ent + ' no dia ' + dEnt, acordo: 'Prosseguimos com o pagamento de ' + ent + ' no dia ' + dEnt };
+      return { erro: 'Para a frase, preencha: quantidade e valor das parcelas, ou valor da parcela e dia de vencimento, ou entrada com data.' };
+    }
+    $('#mf-ng-frases').onclick = () => {
+      const r = ngFrases($('#mf-ng-frase-tipo').value);
+      if (r.erro) return msg(r.erro);
+      $('#mf-ng-f-pedido').value = r.pedido; $('#mf-ng-f-acordo').value = r.acordo;
+      msg('Frases geradas. Copie cada uma para a coluna correspondente.');
+    };
+    $('#mf-ng-copiar-pedido').onclick = () => { const t = $('#mf-ng-f-pedido').value; if (!t.trim()) return msg('Gere as frases antes.'); GM_setClipboard(t, 'text'); msg('Frase do "Pedido do cliente" copiada.'); };
+    $('#mf-ng-copiar-acordo').onclick = () => { const t = $('#mf-ng-f-acordo').value; if (!t.trim()) return msg('Gere as frases antes.'); GM_setClipboard(t, 'text'); msg('Frase do "Acordo Realizado" copiada.'); };
+    // novo texto / limpar / trocar de modelo também apagam as frases (nada de uma negociação passa para outra)
+    ['#mf-ng-novo', '#mf-ng-limpar'].forEach(s => $(s).addEventListener('click', () => {
+      const vazio = !Object.entries(ngValores).some(([k, v]) => NG_CAMPOS[k] && NG_CAMPOS[k].tipo !== 'check' && String(v || '').trim());
+      if (vazio) { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; }
+    }));
+    $('#mf-ng-modelo').addEventListener('change', () => { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; });
 
     // ao recarregar a página, restaura a fila salva (permite continuar depois de fechar/recarregar)
     if (fila().length) $('#mf-lista').value = fila().join('\n');

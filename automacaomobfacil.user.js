@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      12.0
+// @version      12.1
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -26,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.0');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.1');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -897,13 +897,27 @@
     painel.innerHTML = `
       <style>
         #mf-p{position:fixed;bottom:60px;left:10px;z-index:2147483647;width:340px;max-width:calc(100vw - 8px);background:#fff;color:#1f2937;
-          border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 28px #0005;font:14px/1.4 system-ui,Segoe UI,Arial,sans-serif;overflow:hidden}
+          border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 8px 28px #0005;font:14px/1.4 system-ui,Segoe UI,Arial,sans-serif;overflow:visible}
         #mf-p *{box-sizing:border-box;font-family:inherit}
         #mf-p .mf-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#1e293b;color:#fff;font-size:15px;
-          cursor:move;user-select:none;touch-action:none}
+          cursor:move;user-select:none;touch-action:none;border-radius:11px 11px 0 0}
         #mf-p .mf-top small{opacity:.6;margin-left:6px;font-size:12px;font-weight:400}
         #mf-p.mf-min .mf-top{border-radius:11px}
         #mf-p.mf-arrastando{opacity:.93;box-shadow:0 14px 40px #0007}
+        /* redimensionar: alças fora da borda (direita, baixo) e puxador no canto; nada fica sobre campos ou a barra de rolagem */
+        #mf-p .mf-rz{position:absolute;z-index:4;touch-action:none}
+        #mf-p .mf-rz-d{top:14px;bottom:14px;right:-8px;width:8px;cursor:ew-resize}
+        #mf-p .mf-rz-b{left:14px;right:14px;bottom:-8px;height:8px;cursor:ns-resize}
+        #mf-p .mf-rz-c{right:-8px;bottom:-8px;width:22px;height:22px;cursor:nwse-resize;outline:none;border-radius:0 0 12px 0}
+        #mf-p .mf-rz-c::after{content:'';position:absolute;right:10px;bottom:10px;width:10px;height:10px;opacity:.55;
+          background:linear-gradient(135deg,transparent 0 45%,#94a3b8 45% 55%,transparent 55% 70%,#94a3b8 70% 80%,transparent 80%)}
+        #mf-p .mf-rz-c:hover::after,#mf-p .mf-rz-c:focus-visible::after,#mf-p.mf-redimensionando .mf-rz-c::after{opacity:1}
+        #mf-p .mf-rz-c:focus-visible{box-shadow:inset 0 0 0 2px #93c5fd}
+        #mf-p.mf-min .mf-rz,#mf-p.mf-min #mf-tam{display:none}
+        #mf-p.mf-tam-livre{box-sizing:border-box}   /* tamanho escolhido = medida na tela (borda incluída); o original não muda */
+        #mf-p.mf-redimensionando{box-shadow:0 14px 40px #0007;user-select:none}
+        #mf-p.mf-redimensionando *{user-select:none}
+        #mf-p #mf-tam{margin-left:auto;font-size:15px;padding:2px 8px}
         #mf-p .mf-abas{display:flex;flex-wrap:wrap;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
         #mf-p .mf-abas{position:relative;flex-wrap:nowrap}
         #mf-p .mf-abas button{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;background:transparent;color:#64748b;border-radius:0;padding:9px 2px;font-size:12px;border-bottom:2px solid transparent;white-space:nowrap}
@@ -1012,6 +1026,11 @@
         #mf-p[data-ui=nova] #mf-lb-salvar:hover,#mf-p[data-ui=nova] #mf-ccb-baixar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-conta-trocar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-frases:hover,#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled){background:#1d4ed8}
         #mf-p[data-ui=nova] #mf-cop:hover,#mf-p[data-ui=nova] #mf-ng-copiar:hover,#mf-p[data-ui=nova] #mf-at-copiar:hover,#mf-p[data-ui=nova] #mf-at-msg-copiar:hover,#mf-p[data-ui=nova] #mf-dval:hover,#mf-p[data-ui=nova] #mf-dlin:hover{background:#15803d}
         #mf-p[data-ui=nova] .mf-mini{border:0;background:transparent;color:#fff;padding:2px 8px;font-size:18px}
+        #mf-p[data-ui=nova] #mf-tam{margin-left:0;font-size:15px}
+        #mf-p[data-ui=nova] .mf-top{border-radius:13px 13px 0 0}
+        #mf-p[data-ui=nova].mf-min .mf-top{border-radius:13px}
+        #mf-p[data-ui=nova] .mf-corpo{border-radius:0 0 13px 13px}
+        #mf-p[data-ui=nova] .mf-rz-c{border-radius:0 0 14px 0}
         #mf-p[data-ui=nova] .mf-mini:hover{background:#334155}
         #mf-p[data-ui=nova] .mf-lb-filtros button{background:#f1f5f9;border:0;color:#475569;font-weight:600;padding:6px 2px}
         #mf-p[data-ui=nova] .mf-lb-filtros button.ativa{background:#1e293b;color:#fff}
@@ -1072,12 +1091,34 @@
         #mf-p .mf-conta button{padding:4px 8px;font-size:12px}
         #mf-p #mf-msg{margin:10px 14px 14px;padding:10px;background:#f1f5f9;border-radius:8px;font-size:13px;max-height:130px;overflow:auto;white-space:pre-wrap}
         #mf-p #mf-msg:empty{display:none}
-        #mf-p .mf-corpo{max-height:calc(100vh - 140px);overflow-y:auto;overscroll-behavior:contain}
+        #mf-p .mf-corpo{max-height:calc(100vh - 140px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;border-radius:0 0 11px 11px;container-type:inline-size}
+        /* painel mais largo: o conteúdo se reorganiza (só visual; os módulos não mudam). Abaixo de 560 px fica como sempre foi */
+        @container (min-width: 560px) {
+          #mf-p .mf-grade{grid-template-columns:repeat(3,minmax(0,1fr))}
+          #mf-p [data-pag="his"] .mf-grade{grid-template-columns:repeat(4,minmax(0,1fr))}
+          #mf-p #mf-bs-res{display:grid;grid-template-columns:1fr 1fr;column-gap:18px;max-height:420px;align-content:start}
+          #mf-p #mf-bs-res > :not(.mf-cac-lin){grid-column:1/-1}
+          #mf-p #mf-cac-tabela{display:grid;grid-template-columns:1fr 1fr;column-gap:18px}
+          #mf-p #mf-cac-tabela > :not(.mf-cac-lin){grid-column:1/-1}
+        }
+        @container (min-width: 680px) {
+          #mf-p .mf-grade{grid-template-columns:repeat(4,minmax(0,1fr))}
+          #mf-p #mf-lb-lista,#mf-p #mf-hs-lista,#mf-p #mf-tm-lista{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start}
+          #mf-p #mf-lb-lista > *,#mf-p #mf-hs-lista > *,#mf-p #mf-tm-lista > *{margin:0}
+          #mf-p #mf-lb-lista > .mf-info,#mf-p #mf-hs-lista > .mf-info,#mf-p #mf-tm-lista > .mf-info,
+          #mf-p .mf-lb-item:has(.mf-lb-det),#mf-p .mf-hs-item:has(.mf-hs-det){grid-column:1/-1}
+          #mf-p .mf-pl-lin{grid-template-columns:1.7fr 1fr 1.25fr 1.6fr 1fr}
+          #mf-p .mf-pl-lin .mf-pl-acao{grid-column:auto}
+          #mf-p #mf-ng-texto,#mf-p #mf-at-msg-texto{height:240px !important}
+          #mf-p #mf-ng-f-pedido,#mf-p #mf-ng-f-acordo{height:44px !important}
+        }
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
-        <button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
+        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
+      <div class="mf-rz mf-rz-d" data-rz="x" title="Arraste para mudar a largura"></div><div class="mf-rz mf-rz-b" data-rz="y" title="Arraste para mudar a altura"></div>
+      <div class="mf-rz mf-rz-c" data-rz="xy" tabindex="0" role="separator" aria-label="Redimensionar o painel (setas do teclado; duplo clique alterna padrão e ampliado)" title="Arraste para redimensionar · duplo clique: padrão / ampliado"></div>
       <div class="mf-corpo">
         <div id="mf-ui-prev" class="mf-ui-prev"><span id="mf-ui-prev-txt" style="flex:1"></span><button id="mf-ui-prev-manter" class="verde" style="padding:5px 9px">Manter</button><button id="mf-ui-prev-voltar" class="cinza" style="padding:5px 9px">Voltar</button></div>
         <div class="mf-bs" id="mf-bs">
@@ -1472,6 +1513,11 @@
           <details class="mf-grupo" data-grupo="painel"><summary>Painel, navegação e diagnóstico</summary>
             <label class="mf-opc"><input type="checkbox" id="mf-nav-auto"><span><b>Abrir sozinho a tela necessária</b><small>Busca e Relatórios abrem a Mesa de Crédito; CCBs abrem a Fila de Propostas, pelo menu do próprio sistema.</small></span></label>
             <button id="mf-pos" class="cinza" style="width:100%" title="Arraste o painel pela barra escura do título; a posição fica salva.">Restaurar posição original do painel</button>
+            <div class="mf-info" id="mf-tam-info" style="margin:8px 0 4px"></div>
+            <div class="mf-grade">
+              <button id="mf-tam-exp" class="cinza" title="760 px de largura e a altura da tela menos 80 px (adaptado à tela)">Tamanho expandido</button>
+              <button id="mf-tam-orig" class="cinza" title="Volta exatamente ao tamanho padrão do painel">Restaurar tamanho original</button>
+            </div>
             <div class="mf-grade" style="margin-top:8px">
               <button id="mf-fal" class="cinza">Faltantes</button>
               <button id="mf-dbg" class="cinza">Diagnóstico</button>
@@ -1503,6 +1549,7 @@
       if (!p) {   // posição original (definida no CSS: canto inferior esquerdo)
         painel.style.left = painel.style.top = painel.style.bottom = '';
         corpo.style.maxHeight = '';
+        corpoTamanho(null);
         return null;
       }
       const w = painel.offsetWidth || 340, hTopo = topo.offsetHeight || 42;
@@ -1513,6 +1560,7 @@
       painel.style.top = top + 'px';
       painel.style.bottom = 'auto';
       corpo.style.maxHeight = Math.max(140, window.innerHeight - top - hTopo - 40) + 'px';
+      corpoTamanho(top);
       return { left, top };
     };
     let arraste = null;
@@ -1543,8 +1591,116 @@
     };
     topo.addEventListener('pointerup', soltar);
     topo.addEventListener('pointercancel', soltar);
-    window.addEventListener('resize', () => aplicarPosicao(GM_getValue('posPainel', null)));
-    aplicarPosicao(GM_getValue('posPainel', null));
+    window.addEventListener('resize', () => ajustarPainel(false));
+
+    /* ---------- tamanho do painel (redimensionar, expandido, restaurar) ----------
+       GM 'tamPainel' = { modo: 'personalizado', w, h } | { modo: 'expandido' }; sem a chave = tamanho ORIGINAL (o CSS de sempre,
+       nada é sobrescrito). Um tamanho só para as duas aparências. Alças só na direita, embaixo e no canto: o canto superior
+       esquerdo (a posição) não se move. A janela menor encolhe o painel só na tela; o valor salvo não muda.
+       'tamAmpliado' guarda o último tamanho ampliado, para o botão ⤢ alternar entre o original e ele. */
+    const TAM_MIN = { w: 320, h: 300 }, TAM_MAX_W = 1200, TAM_BORDA = 8, TAM_EXP = { w: 760, folgaH: 80 };
+    let tamTemp = null;   // tamanho durante o arraste (só é salvo ao soltar)
+    const tamSalvo = () => { const t = GM_getValue('tamPainel', null); return t && (t.modo === 'expandido' || (Number.isFinite(t.w) && Number.isFinite(t.h))) ? t : null; };
+    function tamLimitar(t) {
+      const maxW = Math.max(TAM_MIN.w, Math.min(TAM_MAX_W, window.innerWidth - 2 * TAM_BORDA)), maxH = Math.max(TAM_MIN.h, window.innerHeight - 2 * TAM_BORDA);
+      return { w: Math.round(Math.min(Math.max(t.w, TAM_MIN.w), maxW)), h: Math.round(Math.min(Math.max(t.h, TAM_MIN.h), maxH)) };
+    }
+    // tamanho que vale agora (null = original). Expandido = 760 × (altura da tela − 80), adaptado se a tela não comportar
+    function tamEfetivo() {
+      if (tamTemp) return tamTemp;
+      const t = tamSalvo();
+      if (!t) return null;
+      return tamLimitar(t.modo === 'expandido' ? { w: TAM_EXP.w, h: window.innerHeight - TAM_EXP.folgaH } : t);
+    }
+    // largura no painel; altura no corpo (a rolagem interna dos módulos continua no mesmo lugar). Minimizado: largura original
+    function aplicarTamanho() {
+      const t = GM_getValue('min', false) ? null : tamEfetivo();
+      painel.style.width = t ? t.w + 'px' : '';
+      painel.classList.toggle('mf-tam-livre', !!t);
+      return t;
+    }
+    function corpoTamanho(top) {
+      const t = GM_getValue('min', false) ? null : tamEfetivo();
+      if (!t) { corpo.style.height = ''; return; }
+      const hTopo = topo.offsetHeight || 42;
+      // sempre dentro da tela: na posição original (ancorada embaixo) e na escolhida
+      const disponivel = top == null ? window.innerHeight - 60 - hTopo - TAM_BORDA : window.innerHeight - top - hTopo - TAM_BORDA;
+      corpo.style.maxHeight = 'none';
+      corpo.style.height = Math.max(120, Math.min(t.h - hTopo - 2, disponivel)) + 'px';
+    }
+    // tamanho + posição: se o tamanho não cabe onde o painel está, ele sobe / vai para a esquerda o mínimo necessário
+    function ajustarPainel(salvarPos) {
+      const t = aplicarTamanho(), pos = GM_getValue('posPainel', null);
+      if (!t || !pos) { aplicarPosicao(pos); tamInfo(); return; }
+      const q = aplicarPosicao({ left: Math.min(pos.left, window.innerWidth - t.w - TAM_BORDA), top: Math.min(pos.top, window.innerHeight - t.h - TAM_BORDA) });
+      if (salvarPos && q && (q.left !== pos.left || q.top !== pos.top)) GM_setValue('posPainel', q);
+      tamInfo();
+    }
+    function tamInfo() {
+      const t = tamSalvo(), e = tamEfetivo();
+      const txt = !t ? 'Tamanho: original' : (t.modo === 'expandido' ? 'Tamanho: expandido' : 'Tamanho: personalizado') + (e ? ' (' + e.w + ' × ' + e.h + ' px' + (t.modo !== 'expandido' && (e.w !== t.w || e.h !== t.h) ? ', reduzido para caber nesta janela' : '') + ')' : '');
+      const el = $('#mf-tam-info'); if (el) el.textContent = txt + '. Arraste a borda direita, a de baixo ou o canto inferior direito.';
+      const b = $('#mf-tam'); if (b) { b.textContent = t ? '⤡' : '⤢'; b.title = t ? 'Voltar ao tamanho original' : 'Ampliar o painel'; }
+    }
+    function tamDefinir(t, msgTxt) {
+      if (t) { GM_setValue('tamPainel', t); GM_setValue('tamAmpliado', t); } else GM_deleteValue('tamPainel');
+      if (GM_getValue('min', false)) { GM_setValue('min', false); aplicarMin(false); }
+      ajustarPainel(true);
+      if (msgTxt) msg(msgTxt);
+    }
+    const tamAlternar = () => tamSalvo() ? tamDefinir(null, 'Painel no tamanho original.') : tamDefinir(GM_getValue('tamAmpliado', null) || { modo: 'expandido' }, 'Painel ampliado. ⤡ volta ao tamanho original.');
+    $('#mf-tam').onclick = tamAlternar;
+    $('#mf-tam-exp').onclick = () => tamDefinir({ modo: 'expandido' }, 'Painel no tamanho expandido (760 px × altura da tela − 80 px, adaptado à tela).');
+    $('#mf-tam-orig').onclick = () => { GM_deleteValue('tamAmpliado'); tamDefinir(null, 'Painel de volta ao tamanho original.'); };
+    // arrastar as alças
+    let rz = null, rzQuadro = 0;
+    painel.querySelectorAll('.mf-rz').forEach(al => {
+      al.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || GM_getValue('min', false) || arraste) return;
+        e.preventDefault(); e.stopPropagation();
+        let r = painel.getBoundingClientRect();
+        if (!painel.style.top) {   // posição original (ancorada embaixo): fixa onde está, para o painel crescer para baixo/direita
+          const q = aplicarPosicao({ left: r.left, top: r.top });
+          if (q) GM_setValue('posPainel', q);
+          r = painel.getBoundingClientRect();
+        }
+        rz = { eixo: al.dataset.rz, x0: e.clientX, y0: e.clientY, w0: r.width, h0: r.height, left: r.left, top: r.top, id: e.pointerId, el: al };
+        try { al.setPointerCapture(e.pointerId); } catch (_) {}
+        painel.classList.add('mf-redimensionando');
+      });
+      al.addEventListener('pointermove', e => {
+        if (!rz || e.pointerId !== rz.id) return;
+        const x = rz.eixo.includes('x') ? rz.w0 + e.clientX - rz.x0 : rz.w0, y = rz.eixo.includes('y') ? rz.h0 + e.clientY - rz.y0 : rz.h0;
+        // limites: mínimo, máximo da tela e o espaço até a borda da janela a partir da posição atual (o painel não sai da tela)
+        const lim = tamLimitar({ w: x, h: y });
+        tamTemp = { w: Math.max(TAM_MIN.w, Math.min(lim.w, window.innerWidth - rz.left - TAM_BORDA)), h: Math.max(TAM_MIN.h, Math.min(lim.h, window.innerHeight - rz.top - TAM_BORDA)) };
+        if (!rzQuadro) rzQuadro = requestAnimationFrame(() => { rzQuadro = 0; if (rz) { aplicarTamanho(); corpoTamanho(rz.top); } });
+      });
+      const fim = e => {
+        if (!rz || (e && e.pointerId !== rz.id)) return;
+        try { rz.el.releasePointerCapture(rz.id); } catch (_) {}
+        rz = null; painel.classList.remove('mf-redimensionando');
+        if (tamTemp) { const t = { modo: 'personalizado', w: tamTemp.w, h: tamTemp.h }; tamTemp = null; GM_setValue('tamPainel', t); GM_setValue('tamAmpliado', t); }
+        ajustarPainel(false);
+      };
+      al.addEventListener('pointerup', fim);
+      al.addEventListener('pointercancel', fim);
+    });
+    const canto = $('.mf-rz-c');
+    canto.addEventListener('dblclick', tamAlternar);
+    // teclado: setas mudam o tamanho (Shift = passo maior)
+    canto.addEventListener('keydown', e => {
+      const d = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] }[e.key];
+      if (!d || GM_getValue('min', false)) return;
+      e.preventDefault();
+      const r = painel.getBoundingClientRect(), passo = e.shiftKey ? 60 : 20;
+      if (!painel.style.top) { const q = aplicarPosicao({ left: r.left, top: r.top }); if (q) GM_setValue('posPainel', q); }
+      const lim = tamLimitar({ w: r.width + d[0] * passo, h: r.height + d[1] * passo });
+      const t = { modo: 'personalizado', w: Math.min(lim.w, Math.max(TAM_MIN.w, window.innerWidth - r.left - TAM_BORDA)), h: Math.min(lim.h, Math.max(TAM_MIN.h, window.innerHeight - r.top - TAM_BORDA)) };
+      GM_setValue('tamPainel', t); GM_setValue('tamAmpliado', t);
+      ajustarPainel(false);
+    });
+    ajustarPainel(false);
     $('#mf-pos').onclick = () => {
       GM_deleteValue('posPainel');
       aplicarPosicao(null);
@@ -1588,12 +1744,14 @@
     const aplicarMin = m => {
       $('.mf-corpo').style.display = m ? 'none' : 'block';
       painel.classList.toggle('mf-min', !!m);
+      aplicarTamanho(); corpoTamanho(painel.style.top ? parseFloat(painel.style.top) : null);   // minimizado: só a barra, na largura original
       $('#mf-min').textContent = m ? '+' : '—';
       $('#mf-min').title = m ? 'Expandir' : 'Minimizar';
     };
     // ao expandir: se o painel ficou (parcial ou totalmente) fora da tela, sobe para dentro dela e salva a nova posição;
     // se já cabe, a posição não muda. Só se aplica à posição escolhida pelo usuário (a original já cresce para cima).
     const trazerParaTela = () => {
+      if (tamEfetivo()) return ajustarPainel(true);   // tamanho escolhido: o mesmo ajuste do redimensionar
       if (!painel.style.top) return;
       corpo.style.maxHeight = '';   // mede o painel no tamanho natural (o limite antigo foi calculado para a posição minimizada)
       const r = painel.getBoundingClientRect(), MARGEM = 8;
@@ -5049,7 +5207,7 @@
     const chip = document.createElement('button'); chip.className = 'mf-ui-chip'; chip.title = 'Conta ativa (abre Contas)'; chip.onclick = () => mostrarAba('cta');
     const eng = document.createElement('button'); eng.className = 'mf-ui-icone'; eng.textContent = '⚙'; eng.title = 'Configurações'; eng.onclick = () => mostrarAba('cfg');
     acoesTopo.append(chip, eng);
-    $('#mf-min').before(acoesTopo);
+    $('#mf-tam').before(acoesTopo);
     // "Copiar ▾" na Auditoria: o botão principal continua sendo "Copiar resultado"; os outros vão para o menu
     const gradeCopia = $('#mf-cop').parentElement;
     gradeCopia.classList.add('mf-ui-copias');

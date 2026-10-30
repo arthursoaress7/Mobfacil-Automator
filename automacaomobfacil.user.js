@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.37
+// @version      11.38
 // @author       Arthur
 // @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -23,7 +23,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.37');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.38');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -999,6 +999,9 @@
         #mf-p[data-ui=nova] .mf-badge{background:#ef4444}
         #mf-p .mf-ui-prev{display:none}
         #mf-p .mf-ng-bloco{margin-bottom:6px}
+        #mf-p .mf-ng-saldo{font-size:14px;font-weight:700;color:#15803d;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 9px}
+        #mf-p .mf-ng-saldo:empty{display:none}
+        #mf-p .mf-ng-saldo.erro{color:#b91c1c;background:#fef2f2;border-color:#fecaca}
         #mf-p .mf-ng-bloco>summary{cursor:pointer;font-size:12px;font-weight:600;color:#475569;padding:4px 0}
         #mf-p .mf-ui-prev.ativo{display:flex;gap:6px;align-items:center;padding:8px 14px;background:#fef9c3;font-size:12.5px;border-bottom:1px solid #fde68a}
         #mf-p .mf-bs{padding:8px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc}
@@ -1206,6 +1209,7 @@
           <div class="mf-sec">
             <div class="mf-tit">Gerador de negociações</div>
             <select id="mf-ng-modelo"></select>
+            <select id="mf-ng-modalidade" style="margin-top:6px;display:none" title="Tipo de acordo realizado"></select>
             <div id="mf-ng-desc" class="mf-info" style="margin-top:6px"></div>
           </div>
           <details class="mf-grupo" id="mf-ng-dados" open><summary>Dados</summary>
@@ -1235,6 +1239,7 @@
             <button id="mf-ng-copiar-pedido" class="cinza" style="width:100%;margin:4px 0 8px">Copiar "Pedido do cliente"</button>
             <label class="mf-lb-rot">Acordo Realizado<textarea id="mf-ng-f-acordo" style="height:54px"></textarea></label>
             <button id="mf-ng-copiar-acordo" class="cinza" style="width:100%;margin-top:4px">Copiar "Acordo Realizado"</button>
+            <div class="mf-linha" style="margin-top:8px"><input id="mf-ng-f-parcela" type="text" placeholder="A partir de qual parcela" style="flex:1"><button id="mf-ng-copiar-parcela" class="cinza" style="padding:7px 9px">Copiar</button></div>
           </details>
         </div>
 
@@ -3042,9 +3047,137 @@
         texto: 'Sr. {{nome}}, segue os dados conforme solicitado.\n\nCliente: {{nome}}\nCPF: {{cpf}}\nParcela antecipada: {{parcela_antecipada}}\nVencimento original da parcela: {{vencimento_original}}\nData de pagamento: {{data_pagamento}}\nValor na data de pagamento: {{valor_na_data_pagamento}}\n\nFavor conferir os dados acima.\n\nEstando de acordo, para a quitação antecipada do contrato, o pagamento será via PIX.\n\nO pagamento deve ser realizado, no mínimo, em D+1, considerando que o pagamento deverá ocorrer até amanhã. Caso não seja realizado dentro do prazo informado, será necessário fazer uma nova solicitação.',
       },
     };
+
+    /* ---- "Acordo realizado": modalidades (levantadas nas planilhas Negociação e Renegociação) ----
+       Cada modalidade = campos + obrigatórios + modelo de texto (editável) + frases para a planilha.
+       Para criar uma nova modalidade basta acrescentar uma entrada aqui (nada mais no gerador muda).
+       Chave do modelo editável: 'acordo:<modalidade>'. 'geral' usa o modelo "Acordo realizado" anterior (chave 'acordo'). */
+    Object.assign(NG_CAMPOS, {
+      parcela_atual: { rot: 'Parcela atual do contrato', tipo: 'num' },
+      abrangencia_tipo: { rot: 'Abrangência', tipo: 'select', opcoes: [['', '(não informar)'], ['inteiro', 'Contrato inteiro'], ['apartir', 'A partir de uma parcela'], ['especificas', 'Parcelas específicas']] },
+      parcela_inicial: { rot: 'A partir da parcela', tipo: 'num' },
+      parcelas_especificas: { rot: 'Parcelas negociadas (ex.: 8, 9 e 10)', tipo: 'texto' },
+      abrangencia: { rot: 'Abrangência (texto)', tipo: 'calc' },
+      valor_total_devido: { rot: 'Valor total devido', tipo: 'moeda' },
+      valor_pago_parcial: { rot: 'Valor pago agora (parcial)', tipo: 'moeda' },
+      com_juros: { rot: 'Restante com juros', tipo: 'check', padrao: true },
+      forma_pix: { rot: 'Forma', tipo: 'select', opcoes: [['PIX semanal', 'PIX semanal'], ['PIX Automático', 'PIX Automático']] },
+      valor_semanal: { rot: 'Valor semanal', tipo: 'moeda' },
+      qtd_semanas: { rot: 'Nº de pagamentos semanais', tipo: 'num' },
+      dia_semana: { rot: 'Dia da semana (ex.: sábado)', tipo: 'texto' },
+      qtd_parcelas_mensais: { rot: 'Equivale a (nº de parcelas)', tipo: 'num' },
+      parcela_mensal: { rot: 'Valor da parcela equivalente', tipo: 'moeda' },
+      dia_anterior: { rot: 'Dia de vencimento anterior', tipo: 'dia' },
+      novo_dia: { rot: 'Novo dia de vencimento', tipo: 'dia' },
+      parcelas_afetadas: { rot: 'Parcelas afetadas (quantidade)', tipo: 'num' },
+      autorizacao: { rot: 'Autorização / origem (ex.: Procon)', tipo: 'texto' },
+      tipo_antecipacao: { rot: 'Tipo', tipo: 'select', opcoes: [['parcelas', 'Antecipar parcela(s)'], ['quitacao', 'Quitar todo o contrato']] },
+      qtd_antecipadas: { rot: 'Quantidade de parcelas antecipadas', tipo: 'num' },
+      referencia: { rot: 'Referência (ex.: fatura de setembro, parcela 8)', tipo: 'texto' },
+      valor_antecipacao: { rot: 'Valor', tipo: 'moeda' },
+      antecipacao_descr: { rot: 'Descrição da antecipação', tipo: 'calc' },
+      qtd_regularizar: { rot: 'Parcelas em atraso regularizadas (quantidade)', tipo: 'num' },
+      valor_regularizar: { rot: 'Valor da regularização', tipo: 'moeda' },
+      dividir_qtd: { rot: 'Dividido em (nº de parcelas)', tipo: 'num' },
+      dividir_valor: { rot: 'Valor de cada parte', tipo: 'moeda' },
+    });
+    const NG_CAB = c => 'Acordo realizado — ' + c + '\n\nCliente: {{nome}}\nProposta: {{proposta}}\nParcela atual do contrato: {{parcela_atual}}\nAbrangência: {{abrangencia}}\n\n';
+    const NG_ABR = ['abrangencia_tipo', 'parcela_inicial', 'parcelas_especificas'];
+    const NG_MODALIDADES = {
+      geral: { nome: 'Condições gerais (modelo anterior)' },
+      mensal: {
+        nome: 'Novo valor mensal', campos: ['nome', 'proposta', 'parcela_atual', ...NG_ABR, 'valor_parcela_acordo', 'dia_vencimento', 'quantidade_parcelas', 'observacoes'],
+        obrig: ['nome', 'valor_parcela_acordo', 'dia_vencimento'], rotulos: { valor_parcela_acordo: 'Novo valor da parcela' },
+        texto: NG_CAB('Novo valor mensal') + 'Prosseguimos com o acordo de {{valor_parcela_acordo}} com pagamento todo dia {{dia_vencimento}}.\nQuantidade de parcelas: {{quantidade_parcelas}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => ({ pedido: 'Cliente ' + verbo + ' renegociar as parcelas para ' + v('valor_parcela_acordo') + ' com pagamento todo dia ' + v('dia_vencimento') + (v('quantidade_parcelas') ? ', ' + v('quantidade_parcelas') + ' parcelas' : ''),
+          acordo: 'Prosseguimos com o acordo de ' + v('valor_parcela_acordo') + ' com pagamento todo dia ' + v('dia_vencimento') + (v('quantidade_parcelas') ? ', ' + v('quantidade_parcelas') + ' parcelas' : '') }),
+      },
+      parcelamento: {
+        nome: 'Parcelamento (quantidade × valor)', campos: ['nome', 'proposta', 'parcela_atual', ...NG_ABR, 'quantidade_parcelas', 'valor_parcela_acordo', 'dia_vencimento', 'observacoes'],
+        obrig: ['nome', 'quantidade_parcelas', 'valor_parcela_acordo'],
+        texto: NG_CAB('Parcelamento') + 'Prosseguimos com o acordo de {{quantidade_parcelas}} parcelas de {{valor_parcela_acordo}}.\nVencimento: todo dia {{dia_vencimento}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => { const d = v('dia_vencimento') ? ', com vencimento para todo dia ' + v('dia_vencimento') : '';
+          return { pedido: 'Cliente ' + verbo + ' renegociar as parcelas para ' + v('quantidade_parcelas') + ' parcelas de ' + v('valor_parcela_acordo') + d, acordo: 'Prosseguimos com o acordo de ' + v('quantidade_parcelas') + ' parcelas de ' + v('valor_parcela_acordo') + d }; },
+      },
+      entrada: {
+        nome: 'Entrada + parcelas', campos: ['nome', 'proposta', 'parcela_atual', ...NG_ABR, 'valor_entrada', 'data_entrada', 'quantidade_parcelas', 'valor_parcela_acordo', 'dia_vencimento', 'observacoes'],
+        obrig: ['nome', 'valor_entrada', 'quantidade_parcelas', 'valor_parcela_acordo'],
+        texto: NG_CAB('Entrada + parcelas') + 'Prosseguimos com 1 parcela de {{valor_entrada}} como entrada e {{quantidade_parcelas}} parcelas de {{valor_parcela_acordo}}.\nData da entrada: {{data_entrada}}\nVencimento das parcelas: todo dia {{dia_vencimento}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => { const e = '1 parcela de ' + v('valor_entrada') + ' como entrada' + (v('data_entrada') ? ' no dia ' + v('data_entrada') : '') + ', e ' + v('quantidade_parcelas') + ' parcelas de ' + v('valor_parcela_acordo') + (v('dia_vencimento') ? ', vencendo todo dia ' + v('dia_vencimento') : '');
+          return { pedido: 'Cliente ' + verbo + ' ' + e, acordo: 'Prosseguimos com ' + e }; },
+      },
+      parcial: {
+        nome: 'Pagamento parcial + restante', campos: ['nome', 'proposta', 'parcela_atual', 'valor_total_devido', 'valor_pago_parcial', 'data_pagamento', 'valor_restante', 'data_restante', 'com_juros', 'observacoes'],
+        obrig: ['nome', 'valor_pago_parcial', 'data_pagamento', 'valor_restante', 'data_restante'], saldo: true, rotulos: { data_pagamento: 'Data do pagamento parcial', valor_restante: 'Saldo restante' },
+        texto: NG_CAB('Pagamento parcial') + 'Prosseguimos com o pagamento parcial de {{valor_pago_parcial}} no dia {{data_pagamento}}.\nValor total devido: {{valor_total_devido}}\nSaldo restante: {{valor_restante}}\nPagamento do restante: {{data_restante}}\nRestante com juros: {{com_juros}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => { const r = ' e o restante (' + v('valor_restante') + ')' + (v('com_juros') ? ' com juros' : '') + ' no dia ' + v('data_restante');
+          return { pedido: 'Cliente ' + (verbo === 'fechou' ? 'fechou o pagamento parcial de ' : 'solicitou pagar parcialmente ') + v('valor_pago_parcial') + ' no dia ' + v('data_pagamento') + r, acordo: 'Prosseguimos com o pagamento parcial de ' + v('valor_pago_parcial') + ' no dia ' + v('data_pagamento') + r }; },
+      },
+      folego: {
+        nome: 'Campanha do Fôlego (pagamento parcial)', campos: ['nome', 'proposta', 'parcela_atual', 'valor_total_devido', 'valor_pago_parcial', 'data_pagamento', 'valor_restante', 'data_restante', 'com_juros', 'condicoes', 'observacoes'],
+        obrig: ['nome', 'valor_pago_parcial', 'data_pagamento', 'valor_restante', 'data_restante'], saldo: true, rotulos: { data_pagamento: 'Data do pagamento inicial', valor_pago_parcial: 'Pagamento inicial', valor_restante: 'Saldo restante', condicoes: 'Condições da campanha' },
+        texto: NG_CAB('Campanha do Fôlego') + 'Pagamento inicial de {{valor_pago_parcial}} no dia {{data_pagamento}}.\nValor total devido: {{valor_total_devido}}\nSaldo restante: {{valor_restante}}\nPagamento do restante: {{data_restante}}\nRestante com juros: {{com_juros}}\n\nCondições da campanha: {{condicoes}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => { const r = ' e o restante no valor de ' + v('valor_restante') + (v('com_juros') ? ' com juros' : '') + ' no dia ' + v('data_restante');
+          return { pedido: 'Campanha do Fôlego: Cliente ' + (verbo === 'fechou' ? 'fechou acordo para pagar ' : 'solicitou pagar ') + v('valor_pago_parcial') + ' no dia ' + v('data_pagamento') + r, acordo: 'Prosseguimos com o acordo de ' + v('valor_pago_parcial') + ' no dia ' + v('data_pagamento') + r }; },
+      },
+      pix: {
+        nome: 'PIX semanal / PIX Automático', campos: ['nome', 'proposta', 'parcela_atual', ...NG_ABR, 'forma_pix', 'valor_semanal', 'qtd_semanas', 'dia_semana', 'qtd_parcelas_mensais', 'parcela_mensal', 'valor_entrada', 'observacoes'],
+        obrig: ['nome', 'forma_pix', 'valor_semanal', 'qtd_semanas'], rotulos: { valor_entrada: 'Entrada (opcional)' },
+        texto: NG_CAB('{{forma_pix}}') + 'Prosseguimos com o acordo via {{forma_pix}}: {{qtd_semanas}} pagamentos semanais de {{valor_semanal}}.\nDia da semana: {{dia_semana}}\nEquivale a {{qtd_parcelas_mensais}} parcelas de {{parcela_mensal}}\nEntrada: {{valor_entrada}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => {
+          const base = v('qtd_parcelas_mensais') && v('parcela_mensal') ? v('qtd_parcelas_mensais') + ' parcelas de ' + v('parcela_mensal') + ' (' + v('valor_semanal') + ' semanal)' : v('qtd_semanas') + ' pagamentos semanais de ' + v('valor_semanal');
+          const ds = v('dia_semana'), toda = /^(segunda|ter[çc]a|quarta|quinta|sexta)|feira$/i.test(ds);
+          const resto = ' via ' + v('forma_pix') + (ds ? (toda ? ' toda ' : ' todo ') + ds : '') + (v('valor_entrada') ? ', com entrada de ' + v('valor_entrada') : '');
+          return { pedido: 'Cliente ' + verbo + ' ' + base + resto, acordo: 'Prosseguimos com ' + base + resto };
+        },
+      },
+      vencimento: {
+        nome: 'Alteração da data de vencimento', campos: ['nome', 'proposta', 'parcela_atual', 'dia_anterior', 'novo_dia', 'parcelas_afetadas', 'valor_parcela_acordo', 'autorizacao', 'observacoes'],
+        obrig: ['nome', 'novo_dia'], rotulos: { valor_parcela_acordo: 'Novo valor das parcelas (se mudou)' },
+        texto: NG_CAB('Alteração da data de vencimento') + 'Prosseguimos com a alteração da data de vencimento para todo dia {{novo_dia}}.\nVencimento anterior: dia {{dia_anterior}}\nParcelas afetadas: {{parcelas_afetadas}}\nNovo valor das parcelas: {{valor_parcela_acordo}}\nAutorização: {{autorizacao}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => { const x = (v('parcelas_afetadas') ? ' de suas ' + v('parcelas_afetadas') + ' parcelas' : '') + (v('valor_parcela_acordo') ? ', valor das parcelas para ' + v('valor_parcela_acordo') : '') + (v('autorizacao') ? ', formalizado via ' + v('autorizacao') : '');
+          return { pedido: 'Cliente ' + verbo + (verbo === 'fechou' ? ' a' : '') + ' alteração da data de vencimento' + (v('dia_anterior') ? ' de dia ' + v('dia_anterior') : '') + ' para dia ' + v('novo_dia') + x,
+            acordo: 'Prosseguimos com a alteração da data de vencimento' + (v('dia_anterior') ? ' de dia ' + v('dia_anterior') : '') + ' para todo dia ' + v('novo_dia') + x }; },
+      },
+      antecipacao: {
+        nome: 'Antecipação / quitação', campos: ['nome', 'proposta', 'parcela_atual', 'tipo_antecipacao', 'qtd_antecipadas', 'referencia', 'valor_antecipacao', 'data_pagamento', 'observacoes'],
+        obrig: ['nome', 'tipo_antecipacao', 'valor_antecipacao'],
+        texto: NG_CAB('Antecipação / quitação') + 'Prosseguimos com {{antecipacao_descr}} no valor de {{valor_antecipacao}}.\nReferência: {{referencia}}\nData de pagamento: {{data_pagamento}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => {
+          if (v('tipo_antecipacao') === 'quitacao') return { pedido: 'Cliente ' + verbo + ' ' + v('valor_antecipacao') + ' para quitar todo o contrato' + (v('data_pagamento') ? ' com pagamento em ' + v('data_pagamento') : ''), acordo: 'Prosseguimos com a quitação de todo o contrato no valor de ' + v('valor_antecipacao') + (v('data_pagamento') ? ' com pagamento em ' + v('data_pagamento') : '') };
+          const q = v('qtd_antecipadas') + (v('qtd_antecipadas') === '1' ? ' parcela' : ' parcelas') + (v('referencia') ? ' (' + v('referencia') + ')' : '');
+          return { pedido: 'Cliente ' + (verbo === 'fechou' ? 'fechou a antecipação de ' : 'solicitou antecipar ') + q + ' no valor de ' + v('valor_antecipacao') + (v('data_pagamento') ? ' com pagamento em ' + v('data_pagamento') : ''), acordo: 'Prosseguimos com a antecipação de ' + q + ' no valor de ' + v('valor_antecipacao') + (v('data_pagamento') ? ' com pagamento em ' + v('data_pagamento') : '') };
+        },
+      },
+      regularizacao: {
+        nome: 'Regularização de parcela(s) em atraso', campos: ['nome', 'proposta', 'parcela_atual', 'qtd_regularizar', 'referencia', 'valor_regularizar', 'data_pagamento', 'dividir_qtd', 'dividir_valor', 'observacoes'],
+        obrig: ['nome', 'qtd_regularizar'], umDe: [['valor_regularizar', 'dividir_valor']],
+        texto: NG_CAB('Regularização de parcela(s) em atraso') + 'Prosseguimos com a regularização de {{qtd_regularizar}} parcela(s) em atraso.\nReferência: {{referencia}}\nValor: {{valor_regularizar}}\nData de pagamento: {{data_pagamento}}\nDividido em {{dividir_qtd}} parcelas de {{dividir_valor}}\n\nObservações: {{observacoes}}',
+        frases: (v, verbo) => {
+          if (v('dividir_qtd') && v('dividir_valor')) { const t = v('dividir_qtd') + ' parcelas de ' + v('dividir_valor') + ' referentes ' + (v('referencia') ? 'a ' + v('referencia') : 'à(s) parcela(s) em atraso'); return { pedido: 'Cliente ' + verbo + ' ' + t, acordo: 'Prosseguimos com ' + t }; }
+          const um = v('qtd_regularizar') === '1';
+          const resto = (v('referencia') ? ' (' + v('referencia') + ')' : '') + ' no valor de ' + v('valor_regularizar') + (v('data_pagamento') ? ' no dia ' + v('data_pagamento') : '');
+          const de = (um ? 'da parcela em atraso' : 'das ' + v('qtd_regularizar') + ' parcelas em atraso') + resto;
+          return { pedido: verbo === 'fechou' ? 'Cliente fechou o pagamento ' + de : 'Cliente solicitou pagar ' + (um ? 'a parcela em atraso' : 'as ' + v('qtd_regularizar') + ' parcelas em atraso') + resto,
+            acordo: 'Prosseguimos com o pagamento ' + de };
+        },
+      },
+      semacordo: {
+        nome: 'Sem acordo / pagamento normal', campos: ['nome', 'proposta', 'parcela_atual', 'condicoes', 'valor_parcela_acordo', 'observacoes'],
+        obrig: ['nome', 'condicoes'], rotulos: { condicoes: 'O que aconteceu (ex.: optou por pagar normalmente)', valor_parcela_acordo: 'Valor da parcela (mantido)' },
+        texto: 'Sem acordo\n\nCliente: {{nome}}\nProposta: {{proposta}}\n\n{{condicoes}}\nValor da parcela mantido: {{valor_parcela_acordo}}\n\nObservações: {{observacoes}}',
+        frases: v => ({ pedido: v('condicoes'), acordo: v('valor_parcela_acordo') ? 'Cliente optou por pagar as parcelas normalmente em ' + v('valor_parcela_acordo') : v('condicoes') }),
+      },
+    };
+    const NG_ALL = { ...NG_MODELOS };
+    Object.entries(NG_MODALIDADES).forEach(([k, md]) => { if (k !== 'geral') NG_ALL['acordo:' + k] = { ...md, nome: 'Acordo realizado — ' + md.nome, desc: 'Acordo realizado: ' + md.nome + '. Registra só o que foi efetivamente combinado.' }; });
+    const ngModalidade = () => (GM_getValue('negModalidade', 'mensal') in NG_MODALIDADES ? GM_getValue('negModalidade', 'mensal') : 'mensal');
+    const ngChave = () => (ngModeloAtual() === 'acordo' && ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : ngModeloAtual());
+    const ngDef = () => NG_ALL[ngChave()];
+    const ngOrdinal = n => n + '°';
     const ngValores = {};   // SÓ em memória: some ao recarregar a página
     const ngModelosSalvos = () => GM_getValue('negModelos', {}) || {};
-    const ngTextoModelo = k => (typeof ngModelosSalvos()[k] === 'string' ? ngModelosSalvos()[k] : NG_MODELOS[k].texto);
+    const ngTextoModelo = k => (typeof ngModelosSalvos()[k] === 'string' ? ngModelosSalvos()[k] : NG_ALL[k].texto);
     const ngPagamento = () => GM_getValue('negPagamento', {}) || {};
     const ngCentavos = t => {
       let s = String(t == null ? '' : t).replace(/R\$|\s/g, '');
@@ -3066,6 +3199,20 @@
       }
       const def = NG_CAMPOS[k], v = ngValores[k];
       if (!def) return '';
+      // variáveis calculadas a partir de outros campos
+      if (k === 'abrangencia') {
+        const t = ngValores.abrangencia_tipo;
+        if (t === 'inteiro') return 'contrato inteiro';
+        if (t === 'apartir') return ngValor('parcela_inicial') ? 'a partir da parcela ' + ngValor('parcela_inicial') : '';
+        if (t === 'especificas') return ngValor('parcelas_especificas') ? 'parcelas ' + ngValor('parcelas_especificas') : '';
+        return '';
+      }
+      if (k === 'antecipacao_descr') {
+        if (ngValores.tipo_antecipacao === 'quitacao') return 'a quitação de todo o contrato';
+        const q = ngValor('qtd_antecipadas');
+        return q ? 'a antecipação de ' + q + (q === '1' ? ' parcela' : ' parcelas') : '';
+      }
+      if (def.tipo === 'calc') return '';
       if (def.tipo === 'check') return v ? 'sim' : '';
       if (v == null || String(v).trim() === '') return '';
       if (def.tipo === 'moeda') { const c = ngCentavos(v); return c == null ? '' : ngReais(c); }
@@ -3097,21 +3244,26 @@
     }
     const ngModeloAtual = () => GM_getValue('negModeloAtual', 'pedido') in NG_MODELOS ? GM_getValue('negModeloAtual', 'pedido') : 'pedido';
     function ngDesenharCampos() {
-      const k = ngModeloAtual(), m = NG_MODELOS[k];
+      const k = ngModeloAtual(), m = ngDef();
       $('#mf-ng-desc').textContent = m.desc;
+      $('#mf-ng-modalidade').style.display = k === 'acordo' ? '' : 'none';
       const caixa = $('#mf-ng-campos');
       caixa.innerHTML = '';
       const grade = document.createElement('div');
       grade.className = 'mf-grade';
       m.campos.forEach(c => {
         const def = NG_CAMPOS[c];
+        if (def.tipo === 'calc') return;
         const rot = (m.rotulos && m.rotulos[c]) || def.rot;
         const obrig = m.obrig.includes(c);
         const lab = document.createElement('label');
         lab.className = 'mf-lb-rot' + (def.tipo === 'area' || def.tipo === 'check' ? ' mf-cheia' : '');
         let inp;
         if (def.tipo === 'area') { inp = document.createElement('textarea'); inp.style.height = '54px'; }
-        else {
+        else if (def.tipo === 'select') {
+          inp = document.createElement('select');
+          def.opcoes.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; inp.appendChild(o); });
+        } else {
           inp = document.createElement('input');
           inp.type = def.tipo === 'data' ? 'date' : def.tipo === 'check' ? 'checkbox' : 'text';
           if (def.tipo === 'moeda') { inp.inputMode = 'decimal'; inp.placeholder = '0,00'; }
@@ -3119,22 +3271,25 @@
           inp.autocomplete = 'off';
         }
         inp.dataset.campo = c;
-        if (def.tipo === 'check') inp.checked = ngValores[c] != null ? !!ngValores[c] : !!(ngPagamento().banco || ngPagamento().conta);
+        if (def.tipo === 'check') inp.checked = ngValores[c] != null ? !!ngValores[c] : 'padrao' in def ? !!def.padrao : !!(ngPagamento().banco || ngPagamento().conta);
+        else if (def.tipo === 'select') inp.value = ngValores[c] != null ? ngValores[c] : def.opcoes[0][0];
         else inp.value = ngValores[c] || '';
         if (def.tipo === 'check') ngValores[c] = inp.checked;
-        inp.addEventListener(def.tipo === 'check' ? 'change' : 'input', () => {
+        if (def.tipo === 'select') ngValores[c] = inp.value;
+        inp.addEventListener(def.tipo === 'check' || def.tipo === 'select' ? 'change' : 'input', () => {
           ngValores[c] = def.tipo === 'check' ? inp.checked : inp.value;
           inp.classList.remove('mf-erro');
+          if (c === 'abrangencia_tipo' || c === 'tipo_antecipacao') ngMostrarDependentes();
         });
         if (def.tipo === 'check') { lab.style.flexDirection = 'row'; lab.style.alignItems = 'center'; lab.append(inp, document.createTextNode(' ' + rot)); }
         else lab.append(document.createTextNode(rot + (obrig ? ' *' : '')), inp);
-        lab.dataset.bloco = def.tipo === 'area' ? 'textos' : ['nome', 'proposta', 'cpf'].includes(c) ? 'cliente'
+        lab.dataset.bloco = def.tipo === 'area' ? 'textos' : ['nome', 'proposta', 'cpf', 'parcela_atual'].includes(c) ? 'cliente' : NG_ABR.includes(c) ? 'abrangencia'
           : (['pedido', 'solicitacao'].includes(k) && ['valor_parcela', 'parcelas_atraso', 'dias_atraso', 'vencimento_antigo', 'vencimento'].includes(c)) ? 'situacao' : 'condicoes';
         grade.appendChild(lab);
       });
-      if (painel.dataset.ui !== 'nova') { caixa.appendChild(grade); return; }
+      if (painel.dataset.ui !== 'nova') { caixa.appendChild(grade); ngSaldoHook(); ngMostrarDependentes(); return; }
       // Nova UI: os mesmos campos em blocos recolhíveis; abre o bloco com campo obrigatório ou já preenchido
-      const nomes = { cliente: 'Cliente', situacao: 'Situação atual', condicoes: 'Condições', textos: 'Textos e observações' };
+      const nomes = { cliente: 'Cliente', abrangencia: 'Abrangência', situacao: 'Situação atual', condicoes: 'Condições', textos: 'Textos e observações' };
       const essenciais = new Set([...m.obrig, ...(m.umDe || []).flat()]);
       Object.keys(nomes).forEach(b => {
         const labs = [...grade.children].filter(l => l.dataset.bloco === b);
@@ -3148,10 +3303,46 @@
         det.append(sum, g);
         caixa.appendChild(det);
       });
+      ngSaldoHook(); ngMostrarDependentes();
+    }
+    // campos que só aparecem conforme a escolha (abrangência; antecipação x quitação)
+    function ngMostrarDependentes() {
+      const vis = (c, on) => { const i = painel.querySelector('#mf-ng-campos [data-campo="' + c + '"]'); if (i) i.closest('label').style.display = on ? '' : 'none'; };
+      vis('parcela_inicial', ngValores.abrangencia_tipo === 'apartir');
+      vis('parcelas_especificas', ngValores.abrangencia_tipo === 'especificas');
+      vis('qtd_antecipadas', ngValores.tipo_antecipacao !== 'quitacao');
+    }
+    // pagamento parcial: saldo = total devido − pago (atualiza a cada digitação; não aceita pagamento acima do total)
+    function ngSaldoHook() {
+      if (!ngDef().saldo) return;
+      const g = c => painel.querySelector('#mf-ng-campos [data-campo="' + c + '"]');
+      const tot = g('valor_total_devido'), pago = g('valor_pago_parcial'), rest = g('valor_restante');
+      if (!tot || !pago || !rest) return;
+      const box = document.createElement('div');
+      box.className = 'mf-ng-saldo mf-cheia';
+      rest.closest('label').after(box);
+      const calc = () => {
+        const t = tot.value.trim() ? ngCentavos(tot.value) : null, p = pago.value.trim() ? ngCentavos(pago.value) : null;
+        ngValores._saldoErro = '';
+        box.classList.remove('erro');
+        if (t != null && p != null) {
+          if (p > t) { ngValores._saldoErro = 'O valor pago (' + ngReais(p) + ') é maior que o total devido (' + ngReais(t) + ').'; box.textContent = ngValores._saldoErro; box.classList.add('erro'); rest.readOnly = false; return; }
+          rest.value = ((t - p) / 100).toFixed(2).replace('.', ','); rest.readOnly = true; ngValores.valor_restante = rest.value;
+          box.textContent = 'Saldo restante: ' + ngReais(t - p);
+        } else { rest.readOnly = false; box.textContent = tot.value.trim() ? 'Informe o valor pago para calcular o saldo.' : 'Informe o total devido para calcular o saldo (ou digite o restante).'; }
+      };
+      [tot, pago].forEach(i => i.addEventListener('input', calc));
+      calc();
     }
     // campos essenciais que faltam (nomes para mostrar ao usuário)
     function ngFaltando() {
-      const m = NG_MODELOS[ngModeloAtual()], f = [];
+      const m = ngDef(), f = [];
+      if (ngValores._saldoErro) f.push(ngValores._saldoErro);
+      if (m.campos.includes('abrangencia_tipo')) {
+        if (ngValores.abrangencia_tipo === 'apartir' && !ngValor('parcela_inicial')) f.push('A partir da parcela');
+        if (ngValores.abrangencia_tipo === 'especificas' && !ngValor('parcelas_especificas')) f.push('Parcelas negociadas');
+      }
+      if (m.campos.includes('tipo_antecipacao') && ngValores.tipo_antecipacao !== 'quitacao' && !ngValor('qtd_antecipadas')) f.push('Quantidade de parcelas antecipadas');
       m.obrig.forEach(c => {
         if (c in NG_VARS_PAGAMENTO) { if (!ngValor(c)) f.push(NG_VARS_PAGAMENTO[c] + ' (Configurações > Gerador de negociações)'); return; }
         if (!ngValor(c)) f.push(((m.rotulos && m.rotulos[c]) || NG_CAMPOS[c].rot));
@@ -3167,18 +3358,23 @@
       });
       return f;
     }
-    const ngTemDados = () => Object.entries(ngValores).some(([k, v]) => NG_CAMPOS[k] && NG_CAMPOS[k].tipo !== 'check' && String(v || '').trim()) || !!$('#mf-ng-texto').value.trim();
+    const ngTemDados = () => Object.entries(ngValores).some(([k, v]) => NG_CAMPOS[k] && !['check', 'select'].includes(NG_CAMPOS[k].tipo) && String(v || '').trim()) || !!$('#mf-ng-texto').value.trim();
     const ngLimpar = () => { Object.keys(ngValores).forEach(k => delete ngValores[k]); ngDesenharCampos(); };
     const selNg = $('#mf-ng-modelo');
     Object.entries(NG_MODELOS).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.nome; selNg.appendChild(o); });
     selNg.value = ngModeloAtual();
     selNg.addEventListener('change', () => { GM_setValue('negModeloAtual', selNg.value); $('#mf-ng-texto').value = ''; ngDesenharCampos(); });
+    // "Acordo realizado": tipo de acordo (modalidade)
+    const selMod = $('#mf-ng-modalidade');
+    Object.entries(NG_MODALIDADES).filter(([k]) => k !== 'geral').concat([['geral', NG_MODALIDADES.geral]]).forEach(([k, md]) => { const o = document.createElement('option'); o.value = k; o.textContent = md.nome; selMod.appendChild(o); });
+    selMod.value = ngModalidade();
+    selMod.addEventListener('change', () => { GM_setValue('negModalidade', selMod.value); $('#mf-ng-texto').value = ''; ['#mf-ng-f-pedido', '#mf-ng-f-acordo', '#mf-ng-f-parcela'].forEach(x => { const e = $(x); if (e) e.value = ''; }); ngDesenharCampos(); });
     $('#mf-ng-gerar').onclick = () => {
       const f = ngFaltando();
-      painel.querySelectorAll('#mf-ng-campos [data-campo]').forEach(i => i.classList.toggle('mf-erro', f.some(x => x.startsWith((NG_MODELOS[ngModeloAtual()].rotulos || {})[i.dataset.campo] || NG_CAMPOS[i.dataset.campo].rot))));
+      painel.querySelectorAll('#mf-ng-campos [data-campo]').forEach(i => i.classList.toggle('mf-erro', f.some(x => x.startsWith((ngDef().rotulos || {})[i.dataset.campo] || NG_CAMPOS[i.dataset.campo].rot))));
       painel.querySelectorAll('#mf-ng-campos .mf-erro').forEach(i => { const d = i.closest('details'); if (d) d.open = true; });   // Nova UI: abre o bloco do campo com erro
       if (f.length) return msg('Preencha antes de gerar:\n- ' + f.join('\n- '));
-      $('#mf-ng-texto').value = ngMontar(ngTextoModelo(ngModeloAtual()));
+      $('#mf-ng-texto').value = ngMontar(ngTextoModelo(ngChave()));
       msg('Texto gerado. Revise (pode editar) e clique em Copiar texto.');
     };
     $('#mf-ng-copiar').onclick = () => {
@@ -3199,12 +3395,14 @@
 
     // Configurações: modelos editáveis e dados para pagamento (só locais)
     const selCfgNg = $('#mf-ng-cfg-modelo');
-    Object.entries(NG_MODELOS).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.nome; selCfgNg.appendChild(o); });
+    Object.entries(NG_ALL).forEach(([k, m]) => { const o = document.createElement('option'); o.value = k; o.textContent = m.nome; selCfgNg.appendChild(o); });
     const ngCfgMostrar = () => {
-      const k = selCfgNg.value, m = NG_MODELOS[k];
+      const k = selCfgNg.value, m = NG_ALL[k];
       $('#mf-ng-cfg-texto').value = ngTextoModelo(k);
       const vars = [...m.campos.filter(c => NG_CAMPOS[c].tipo !== 'check').map(c => '{{' + c + '}} ' + ((m.rotulos && m.rotulos[c]) || NG_CAMPOS[c].rot)),
-        ...(/\{\{\s*(chave_pix|banco|agencia|conta)/.test(NG_MODELOS[k].texto) ? Object.entries(NG_VARS_PAGAMENTO).map(([v, r]) => '{{' + v + '}} ' + r + ' (dados para pagamento)') : [])];
+        ...(m.campos.includes('abrangencia_tipo') ? ['{{abrangencia}} Abrangência por extenso (calculada)'] : []),
+        ...(m.campos.includes('tipo_antecipacao') ? ['{{antecipacao_descr}} "a antecipação de N parcelas" ou "a quitação de todo o contrato" (calculada)'] : []),
+        ...(/\{\{\s*(chave_pix|banco|agencia|conta)/.test(NG_ALL[k].texto) ? Object.entries(NG_VARS_PAGAMENTO).map(([v, r]) => '{{' + v + '}} ' + r + ' (dados para pagamento)') : [])];
       $('#mf-ng-cfg-vars').textContent = 'Variáveis deste modelo:\n' + vars.join('\n') + '\nLinha com variável vazia sai do texto; bloco que fica sem nenhum dado sai inteiro.' +
         (typeof ngModelosSalvos()[k] === 'string' ? '\n(modelo personalizado)' : '');
     };
@@ -3214,10 +3412,10 @@
       const desconhecidas = [...t.matchAll(/\{\{\s*([\w]+)\s*\}\}/g)].map(x => x[1]).filter(v => !(v in NG_CAMPOS) && !(v in NG_VARS_PAGAMENTO));
       if (desconhecidas.length) return msg('Variáveis desconhecidas no modelo: ' + [...new Set(desconhecidas)].map(v => '{{' + v + '}}').join(', '));
       const mm = ngModelosSalvos(); mm[selCfgNg.value] = t; GM_setValue('negModelos', mm);
-      ngCfgMostrar(); msg('Modelo "' + NG_MODELOS[selCfgNg.value].nome + '" salvo.');
+      ngCfgMostrar(); msg('Modelo "' + NG_ALL[selCfgNg.value].nome + '" salvo.');
     };
     $('#mf-ng-cfg-restaurar').onclick = () => {
-      if (!confirm('Voltar o modelo "' + NG_MODELOS[selCfgNg.value].nome + '" ao texto original?')) return;
+      if (!confirm('Voltar o modelo "' + NG_ALL[selCfgNg.value].nome + '" ao texto original?')) return;
       const mm = ngModelosSalvos(); delete mm[selCfgNg.value]; GM_setValue('negModelos', mm);
       ngCfgMostrar(); msg('Modelo original restaurado.');
     };
@@ -3641,6 +3839,8 @@
       put('dataProposta', det && (det['data contrato'] || '').match(/\d{2}\/\d{2}\/\d{4}/) && det['data contrato'].match(/\d{2}\/\d{2}\/\d{4}/)[0], 'Detalhe do contrato (Data Contrato)');
       put('dataProposta', posicao && posicao['data de adesão'], 'Posição Geral (Data de Adesão)');
       put('filial', posicao && (posicao['origem'] || '').replace(/\s*\(\d+\)\s*$/, ''), 'Posição Geral (Origem)');
+      put('totalParcelas', det && ((det['prazo'] || '').match(/\d+/) || [])[0], 'Detalhe do contrato (Prazo)');
+      if (parcelas && parcelas.length) put('totalParcelas', String(Math.max(...parcelas.map(p => p.num))), 'Parcelas (quantidade na tabela)');
       if (parcelas && parcelas.length) {
         const hoje = lbHoje();
         const p1 = parcelas.find(p => p.num === 1) || parcelas[0];
@@ -3650,6 +3850,9 @@
         put('diasAtraso', String(atraso.length ? Math.max(...atraso.map(p => p.dias)) : 0), 'Parcelas (maior "Dias Atraso")');
         const antigo = atraso.map(p => p.venc).filter(Boolean).sort()[0];
         if (antigo) put('vencMaisAntigo', ngData(antigo), 'Parcelas (vencimento mais antigo em atraso)');
+        // parcela atual = a de menor número ainda em aberto (saldo > 0); total = Prazo do contrato
+        const aberta = parcelas.filter(p => p.saldo == null ? !/liquid/i.test(p.situacao) : p.saldo > 0).sort((a, b) => a.num - b.num)[0];
+        if (aberta) put('parcelaAtual', String(aberta.num), 'Parcelas (1ª parcela com saldo em aberto)');
         // FPD: a 1ª parcela venceu e não foi paga integralmente
         if (p1.num === 1 && p1.venc) {
           const naoPaga = p1.saldo == null ? !/liquid/i.test(p1.situacao) : p1.saldo > 0;
@@ -3842,6 +4045,8 @@
       add('Contrato', res.contrato + (res.outrosContratos.length ? ' (outros: ' + res.outrosContratos.join(', ') + ')' : ''));
       add('Situação', res.situacao);
       CAC_LINHA.filter(([, k]) => !k.startsWith('m:') && k !== 'nome' && k !== 'cpf').forEach(([rot, k]) => add(rot, res.campos[k], res.origem[k]));
+      add('Parcela atual', res.campos.parcelaAtual, res.origem.parcelaAtual);
+      add('Total de parcelas', res.campos.totalParcelas, res.origem.totalParcelas);
       const info = document.createElement('div'); info.className = 'mf-info'; info.style.marginTop = '4px';
       info.textContent = 'Consultado em ' + res.consultadoEm + (res.conta ? ' com a conta ' + res.conta : '') + (res.posicaoGeral ? ' · Posição Geral aberta (protocolo ' + (res.protocolo || 'do sistema') + ')' : ' · sem Posição Geral') + '. Passe o mouse no valor para ver a origem.';
       t.appendChild(info);
@@ -3888,6 +4093,12 @@
     function ngFrases(tipo) {
       const m = ngModeloAtual(), v = ngValor;
       const verbo = tipo === 'fechou' ? 'fechou' : 'solicitou';
+      if (m === 'acordo' && ngModalidade() !== 'geral') {
+        const md = NG_MODALIDADES[ngModalidade()];
+        const falta = ngFaltando().filter(x => x !== ((md.rotulos || {}).nome || NG_CAMPOS.nome.rot));
+        if (falta.length) return { erro: 'Para as frases, preencha: ' + falta.join(', ') + '.' };
+        return md.frases(v, verbo);
+      }
       if (m === 'antecipacao') return { erro: 'O modelo "Antecipação de parcela" não tem frase para a planilha de negociação.' };
       const ini = v('valor_inicial'), dIni = v('data_inicial'), rest = v('valor_restante'), dRest = v('data_restante');
       if (m === 'folego') {
@@ -3925,14 +4136,17 @@
       const r = ngFrases($('#mf-ng-frase-tipo').value);
       if (r.erro) return msg(r.erro);
       $('#mf-ng-f-pedido').value = r.pedido; $('#mf-ng-f-acordo').value = r.acordo;
+      const pi = ngValor('parcela_inicial') || (ngValores.abrangencia_tipo === 'apartir' ? '' : '');
+      $('#mf-ng-f-parcela').value = pi ? 'A partir da ' + ngOrdinal(pi) : '';
       msg('Frases geradas. Copie cada uma para a coluna correspondente.');
     };
     $('#mf-ng-copiar-pedido').onclick = () => { const t = $('#mf-ng-f-pedido').value; if (!t.trim()) return msg('Gere as frases antes.'); GM_setClipboard(t, 'text'); msg('Frase do "Pedido do cliente" copiada.'); };
+    $('#mf-ng-copiar-parcela').onclick = () => { const t = $('#mf-ng-f-parcela').value; if (!t.trim()) return msg('Informe "A partir da parcela" e gere as frases.'); GM_setClipboard(t, 'text'); msg('"A partir de qual parcela" copiado.'); };
     $('#mf-ng-copiar-acordo').onclick = () => { const t = $('#mf-ng-f-acordo').value; if (!t.trim()) return msg('Gere as frases antes.'); GM_setClipboard(t, 'text'); msg('Frase do "Acordo Realizado" copiada.'); };
     // novo texto / limpar / trocar de modelo também apagam as frases (nada de uma negociação passa para outra)
     ['#mf-ng-novo', '#mf-ng-limpar'].forEach(s => $(s).addEventListener('click', () => {
       const vazio = !Object.entries(ngValores).some(([k, v]) => NG_CAMPOS[k] && NG_CAMPOS[k].tipo !== 'check' && String(v || '').trim());
-      if (vazio) { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; }
+      if (vazio) { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; $('#mf-ng-f-parcela').value = ''; }
     }));
     $('#mf-ng-modelo').addEventListener('change', () => { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; });
 
@@ -4496,7 +4710,7 @@
     }
 
     const BS_CAMPOS = [['nome', 'Nome'], ['cpf', 'CPF'], ['proposta', 'Proposta'], ['situacao', 'Situação da proposta'], ['telefone', 'Telefone'], ['email', 'E-mail'],
-      ['valorParcela', 'Valor da parcela'], ['entrada', 'Entrada'], ['valorCompra', 'Valor da compra'], ['vendedor', 'Vendedor'], ['imei', 'IMEI'], ['loja', 'Loja'],
+      ['valorParcela', 'Valor da parcela'], ['parcelaAtual', 'Parcela atual'], ['totalParcelas', 'Total de parcelas'], ['entrada', 'Entrada'], ['valorCompra', 'Valor da compra'], ['vendedor', 'Vendedor'], ['imei', 'IMEI'], ['loja', 'Loja'],
       ['dataProposta', 'Data da proposta'], ['filial', 'Filial (CAC)'], ['fpd', 'FPD'], ['parcelasAtraso', 'Parcelas em atraso'], ['diasAtraso', 'Dias de atraso'], ['vencMaisAntigo', 'Vencimento mais antigo']];
     function bsMostrar() {
       const st = bsGet(), caixa = $('#mf-bs-res');
@@ -4641,7 +4855,12 @@
     $('#mf-bs-usar-neg').onclick = () => {
       const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
       const f = k => painel.querySelector('#mf-ng-campos [data-campo="' + k + '"]');
-      bsPreencher([[f('nome'), c.campos.nome], [f('proposta'), c.campos.proposta], [f('cpf'), c.campos.cpf], [f('valor_parcela'), bsReais(c.campos.valorParcela)]]);
+      // parcela atual = referência; "a partir da parcela" só é sugerida se estiver vazia (o funcionário ajusta)
+      const pi = f('parcela_inicial');
+      bsPreencher([[f('nome'), c.campos.nome], [f('proposta'), c.campos.proposta], [f('cpf'), c.campos.cpf], [f('valor_parcela'), bsReais(c.campos.valorParcela)],
+        [f('parcela_atual'), c.campos.parcelaAtual], [pi && !pi.value.trim() ? pi : null, c.campos.parcelaAtual]]);
+      const abr = f('abrangencia_tipo');
+      if (abr && !abr.value && pi && pi.value.trim()) { abr.value = 'apartir'; abr.dispatchEvent(new Event('change', { bubbles: true })); }
     };
     $('#mf-bs-usar-cac').onclick = () => {
       const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);

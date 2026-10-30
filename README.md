@@ -1,6 +1,6 @@
 # Mobfacil-Automator
 
-v11.37
+v11.39
 
 
 Configuração Inicial:

@@ -3,9 +3,9 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      11.38
+// @version      12.0
 // @author       Arthur
-// @description  PaymobiFin - Assistente: auditoria de crédito, relatórios para planilhas, download de CCBs e troca rápida de contas
+// @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*
 // @homepageURL  https://github.com/arthursoaress7/Mobfacil-Automator/tree/main
@@ -16,6 +16,9 @@
 // @grant        GM_deleteValue
 // @grant        GM_setClipboard
 // @grant        unsafeWindow
+// @grant        GM_xmlhttpRequest
+// @connect      api-sa1.pusher.com
+// @require      https://js.pusher.com/8.4.0/pusher.min.js
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -23,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '11.38');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.0');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -73,6 +76,8 @@
     cacTrocaAuto: true,              // Consulta CAC: troca sozinho para a conta master quando a atual não tem acesso
     cacVoltarConta: true,            // Consulta CAC: volta para a conta anterior depois da consulta
     cacPosicaoGeral: true,           // Consulta CAC: abre a Posição Geral (o sistema registra protocolo, como na tela)            // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
+    navAuto: true,                   // abre sozinho a tela do sistema que a função precisa (Mesa de Crédito, Fila de Propostas)
+    equipeAtiva: false,              // sincronização da equipe (Pusher): só liga quando o funcionário configura
   };
   const cfg = k => GM_getValue(k, PADRAO[k]);
 
@@ -900,7 +905,9 @@
         #mf-p.mf-min .mf-top{border-radius:11px}
         #mf-p.mf-arrastando{opacity:.93;box-shadow:0 14px 40px #0007}
         #mf-p .mf-abas{display:flex;flex-wrap:wrap;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
-        #mf-p .mf-abas button{flex:1 0 25%;background:transparent;color:#64748b;border-radius:0;padding:9px 2px;font-size:12.5px;border-bottom:2px solid transparent}
+        #mf-p .mf-abas{position:relative;flex-wrap:nowrap}
+        #mf-p .mf-abas button{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;background:transparent;color:#64748b;border-radius:0;padding:9px 2px;font-size:12px;border-bottom:2px solid transparent;white-space:nowrap}
+        #mf-p .mf-abas .mf-badge{min-width:15px;height:15px;line-height:15px;font-size:10px;padding:0 4px}
         #mf-p .mf-abas button.ativa{background:#fff;color:#1e293b;border-bottom-color:#2563eb}
         #mf-p .mf-sec{padding:10px 14px;border-bottom:1px solid #e2e8f0}
         #mf-p .mf-tit{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;margin-bottom:6px}
@@ -927,6 +934,29 @@
         #mf-p .mf-opc small{display:block;color:#64748b;font-size:12px;margin-top:1px}
         #mf-p #mf-versao{cursor:default;user-select:none}
         #mf-p .mf-grupo{padding:4px 14px;border-bottom:1px solid #e2e8f0}
+        /* navegação (as duas aparências): Atendimento · Histórico · Agenda · Relatórios · Mais ▾ */
+        #mf-p .mf-abas button[data-aba=ccb],#mf-p .mf-abas button[data-aba=cac],#mf-p .mf-abas button[data-aba=cta],
+        #mf-p .mf-abas button[data-aba=lem],#mf-p .mf-abas button[data-aba=tim],#mf-p .mf-abas button[data-aba=cfg]{display:none}
+        #mf-p .mf-ui-menu{position:absolute;right:4px;top:100%;z-index:5;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 20px #0003;padding:4px;min-width:170px;display:none}
+        #mf-p .mf-ui-menu.aberto{display:block}
+        #mf-p .mf-ui-menu button{display:block;width:100%;text-align:left;background:transparent;color:#1e293b;padding:8px 10px;border-radius:6px;font-size:13px;border:0}
+        #mf-p .mf-ui-menu button:hover,#mf-p .mf-ui-menu button.ativa{background:#e2e8f0;filter:none}
+        #mf-p .mf-ui-seg{display:flex;gap:4px;margin:8px 14px 0}
+        #mf-p .mf-ui-seg button{flex:1;padding:6px 4px;font-size:12.5px;background:#e2e8f0;color:#1e293b}
+        #mf-p .mf-ui-seg button.ativa{background:#1e293b;color:#fff}
+        /* atendimento, histórico e equipe */
+        #mf-p .mf-pl-lin{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px}
+        #mf-p .mf-pl-lin input,#mf-p .mf-pl-lin select{width:100%;padding:4px 6px !important;border:1px solid #cbd5e1;border-radius:6px;font-size:12px !important;min-height:30px !important}
+        #mf-p .mf-pl-lin .mf-pl-acao{grid-column:1/-1;font-weight:600}
+        #mf-p .mf-hs-item{border:1px solid #e2e8f0;border-left:4px solid #64748b;border-radius:6px;padding:6px 8px;margin-bottom:6px;cursor:pointer;font-size:12px}
+        #mf-p .mf-hs-item.realizado{border-left-color:#16a34a}
+        #mf-p .mf-hs-item.pendente{border-left-color:#ea580c}
+        #mf-p .mf-hs-item.nao_concluido{border-left-color:#94a3b8}
+        #mf-p .mf-hs-item.anulado{opacity:.6;border-left-color:#dc2626}
+        #mf-p .mf-hs-det{white-space:pre-wrap;color:#475569;margin-top:6px;cursor:auto}
+        #mf-p .mf-hs-det textarea,#mf-p .mf-hs-det input,#mf-p .mf-hs-det select{width:100%;margin-top:3px;font-size:12px;padding:5px;border:1px solid #cbd5e1;border-radius:6px}
+        #mf-p .mf-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:0 6px;border-radius:9px;background:#e0e7ff;color:#3730a3;margin-left:4px;vertical-align:1px}
+        #mf-p .mf-copia{border:0;background:transparent !important;color:#2563eb !important;padding:0 4px !important;font-size:12px !important;cursor:pointer}
 
         /* ===== Nova UI: só vale com data-ui="nova". A UI Antiga usa as regras acima, sem nenhuma alteração ===== */
         #mf-p .mf-ui-nova{display:none}
@@ -945,8 +975,8 @@
         #mf-p[data-ui=nova] .mf-ui-icone{border:0;background:transparent;color:#cbd5e1;padding:3px 7px;font-size:15px;border-radius:6px}
         #mf-p[data-ui=nova] .mf-ui-icone:hover{background:#334155;color:#fff;filter:none}
         /* abas: uma linha; as secundárias ficam no menu "Mais" */
-        #mf-p[data-ui=nova] .mf-abas{flex-wrap:nowrap;position:relative;background:#fff;padding:0 6px;border-bottom:1px solid #e2e8f0}
-        #mf-p[data-ui=nova] .mf-abas button{flex:1 1 auto;padding:10px 4px 8px;font-size:13px;font-weight:600;color:#64748b;border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;white-space:nowrap}
+        #mf-p[data-ui=nova] .mf-abas{flex-wrap:nowrap;position:relative;background:#fff;padding:0 3px;border-bottom:1px solid #e2e8f0}
+        #mf-p[data-ui=nova] .mf-abas button{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;padding:10px 2px 8px;font-size:12.5px;font-weight:600;color:#64748b;border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;white-space:nowrap}
         #mf-p[data-ui=nova] .mf-abas button:hover:not(:disabled){background:#f8fafc}
         #mf-p[data-ui=nova] .mf-abas button.ativa{color:#1d4ed8;border-bottom-color:#2563eb;background:transparent}
         #mf-p[data-ui=nova] .mf-abas button[data-aba=ccb],#mf-p[data-ui=nova] .mf-abas button[data-aba=cac],#mf-p[data-ui=nova] .mf-abas button[data-aba=cta],
@@ -976,11 +1006,11 @@
         #mf-p[data-ui=nova] .vermelho{color:#dc2626;border-color:#fecaca}
         #mf-p[data-ui=nova] .laranja{color:#c2410c;border-color:#fed7aa}
         #mf-p[data-ui=nova] #mf-ini,#mf-p[data-ui=nova] #mf-ng-gerar,#mf-p[data-ui=nova] #mf-cac-buscar,#mf-p[data-ui=nova] #mf-tm-criar,#mf-p[data-ui=nova] #mf-lb-salvar,
-        #mf-p[data-ui=nova] #mf-ccb-baixar,#mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-bs-buscar{background:#2563eb;color:#fff;border-color:#2563eb}
-        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-cac-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin{background:#16a34a;color:#fff;border-color:#16a34a}
+        #mf-p[data-ui=nova] #mf-ccb-baixar,#mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-at-registrar,#mf-p[data-ui=nova] #mf-at-plano-gerar,#mf-p[data-ui=nova] #mf-eq-salvar,#mf-p[data-ui=nova] #mf-bs-buscar{background:#2563eb;color:#fff;border-color:#2563eb}
+        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-at-copiar,#mf-p[data-ui=nova] #mf-at-msg-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin{background:#16a34a;color:#fff;border-color:#16a34a}
         #mf-p[data-ui=nova] #mf-ini:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-gerar:hover,#mf-p[data-ui=nova] #mf-cac-buscar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-tm-criar:hover,
         #mf-p[data-ui=nova] #mf-lb-salvar:hover,#mf-p[data-ui=nova] #mf-ccb-baixar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-conta-trocar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-frases:hover,#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled){background:#1d4ed8}
-        #mf-p[data-ui=nova] #mf-cop:hover,#mf-p[data-ui=nova] #mf-ng-copiar:hover,#mf-p[data-ui=nova] #mf-cac-copiar:hover,#mf-p[data-ui=nova] #mf-dval:hover,#mf-p[data-ui=nova] #mf-dlin:hover{background:#15803d}
+        #mf-p[data-ui=nova] #mf-cop:hover,#mf-p[data-ui=nova] #mf-ng-copiar:hover,#mf-p[data-ui=nova] #mf-at-copiar:hover,#mf-p[data-ui=nova] #mf-at-msg-copiar:hover,#mf-p[data-ui=nova] #mf-dval:hover,#mf-p[data-ui=nova] #mf-dlin:hover{background:#15803d}
         #mf-p[data-ui=nova] .mf-mini{border:0;background:transparent;color:#fff;padding:2px 8px;font-size:18px}
         #mf-p[data-ui=nova] .mf-mini:hover{background:#334155}
         #mf-p[data-ui=nova] .mf-lb-filtros button{background:#f1f5f9;border:0;color:#475569;font-weight:600;padding:6px 2px}
@@ -1063,7 +1093,7 @@
             <div id="mf-bs-res" style="display:none"></div>
             <div id="mf-bs-usar" class="mf-linha" style="display:none;flex-wrap:wrap;gap:4px;margin:6px 0 0">
               <span class="mf-info" id="mf-bs-usar-rot">Usar em:</span>
-              <button id="mf-bs-usar-neg" class="cinza mf-bs-mini">Negociações</button>
+              <button id="mf-bs-usar-neg" class="cinza mf-bs-mini">Atendimento</button>
               <button id="mf-bs-usar-cac" class="cinza mf-bs-mini">CAC</button>
               <button id="mf-bs-usar-lem" class="cinza mf-bs-mini">Lembretes</button>
               <button id="mf-bs-limpar" class="vermelho mf-bs-mini">Limpar</button>
@@ -1071,13 +1101,14 @@
           </div>
         </div>
         <div class="mf-abas">
-          <button data-aba="rel">Relatórios</button>
-          <button data-aba="ccb">CCBs</button>
-          <button data-aba="cac">CAC</button>
-          <button data-aba="cta">Contas</button>
-          <button data-aba="neg">Negociações</button>
+          <button data-aba="neg">Atendimento</button>
+          <button data-aba="his">Histórico <span id="mf-hs-badge" class="mf-badge" style="display:none"></span></button>
           <button data-aba="lem">Lembretes <span id="mf-lb-badge" class="mf-badge" style="display:none"></span></button>
           <button data-aba="tim">Timers <span id="mf-tm-badge" class="mf-badge" style="display:none"></span></button>
+          <button data-aba="rel">Relatórios</button>
+          <button data-aba="cac">Consulta CAC</button>
+          <button data-aba="ccb">CCBs</button>
+          <button data-aba="cta">Contas</button>
           <button data-aba="cfg">Configurações</button>
         </div>
 
@@ -1188,17 +1219,7 @@
           <div class="mf-sec" id="mf-cac-res" style="display:none">
             <div class="mf-tit">Resultado do CAC</div>
             <div id="mf-cac-tabela"></div>
-            <div class="mf-tit" style="margin-top:10px">Preenchimento manual</div>
-            <div class="mf-grade">
-              <label class="mf-lb-rot">Proposta<input id="mf-cac-proposta" type="text" autocomplete="off"></label>
-              <label class="mf-lb-rot">IMEI<input id="mf-cac-imei" type="text" autocomplete="off"></label>
-              <label class="mf-lb-rot">Atendente<input id="mf-cac-atendente" type="text" autocomplete="off"></label>
-              <label class="mf-lb-rot">Número Contato (RD Station)<input id="mf-cac-contato" type="text" autocomplete="off"></label>
-              <label class="mf-lb-rot">Quem negociou<input id="mf-cac-quem" type="text" autocomplete="off" placeholder="Paymobi / Recupere"></label>
-              <label class="mf-lb-rot">Data do Contato<input id="mf-cac-data" type="date"></label>
-            </div>
             <div class="mf-grade" style="margin-top:8px">
-              <button id="mf-cac-copiar" class="verde mf-cheia">Copiar linha (Proposta → Vencimento Mais Antigo)</button>
               <button id="mf-cac-limpar" class="cinza mf-cheia">Nova consulta</button>
             </div>
             <div class="mf-info" style="margin-top:6px">O resultado fica só nesta aba do navegador (some ao fechar a aba) e não é enviado a lugar nenhum.</div>
@@ -1206,41 +1227,104 @@
         </div>
 
         <div data-pag="neg">
-          <div class="mf-sec">
-            <div class="mf-tit">Gerador de negociações</div>
-            <select id="mf-ng-modelo"></select>
-            <select id="mf-ng-modalidade" style="margin-top:6px;display:none" title="Tipo de acordo realizado"></select>
-            <div id="mf-ng-desc" class="mf-info" style="margin-top:6px"></div>
+          <div class="mf-ui-seg mf-at-seg">
+            <button data-at="negociacao">Negociação</button><button data-at="renegociacao">Renegociação</button><button data-at="mensagens">Mensagens</button>
           </div>
-          <details class="mf-grupo" id="mf-ng-dados" open><summary>Dados</summary>
-            <div id="mf-ng-campos"></div>
-          </details>
-          <details class="mf-grupo" id="mf-ng-saida" open><summary>Texto</summary>
-            <div class="mf-grade" style="margin-bottom:8px">
-              <button id="mf-ng-gerar" class="azul">Gerar texto</button>
-              <button id="mf-ng-copiar" class="verde">Copiar texto</button>
+          <div id="mf-at-form">
+            <details class="mf-grupo" id="mf-at-g-cliente" open><summary>Cliente</summary>
+              <div class="mf-linha" style="flex-wrap:wrap;gap:6px;margin:2px 0 6px">
+                <button id="mf-at-aplicar" class="cinza mf-bs-mini" title="Preenche com o cliente da busca do topo. O número de contato nunca é preenchido pelo telefone da proposta.">Aplicar cliente atual</button>
+              </div>
+              <div id="mf-at-cliente" class="mf-grade"></div>
+            </details>
+            <details class="mf-grupo" id="mf-at-g-cobranca"><summary>Cobrança</summary>
+              <div id="mf-at-cobranca" class="mf-grade"></div>
+            </details>
+            <details class="mf-grupo" id="mf-at-g-acordo" open><summary>Acordo</summary>
+              <div class="mf-grade">
+                <label class="mf-lb-rot" id="mf-at-resultado-rot">Resultado *<select id="mf-ng-frase-tipo">
+                  <option value="fechou">Cliente fechou (acordo realizado)</option>
+                  <option value="solicitou">Cliente solicitou (simulação / pendente)</option>
+                  <option value="nao">Negociação não concluída</option>
+                </select></label>
+                <label class="mf-lb-rot">Modalidade *<select id="mf-at-modalidade"></select></label>
+              </div>
+              <div id="mf-at-modal" style="margin-top:6px"></div>
+            </details>
+            <details class="mf-grupo" id="mf-at-g-reneg" open><summary>Renegociação</summary>
+              <div id="mf-at-reneg" class="mf-grade"></div>
+              <div class="mf-tit" style="margin-top:10px">Plano de parcelas</div>
+              <div id="mf-at-plano-cfg" class="mf-grade"></div>
+              <button id="mf-at-plano-gerar" class="azul" style="width:100%;margin-top:6px">Montar parcelas</button>
+              <div id="mf-at-plano" style="margin-top:6px"></div>
+            </details>
+            <details class="mf-grupo" id="mf-at-g-textos" open><summary>Textos da planilha</summary>
+              <button id="mf-ng-frases" class="azul" style="width:100%;margin-bottom:8px">Gerar textos</button>
+              <label class="mf-lb-rot"><span id="mf-at-rot-pedido">Pedido do cliente</span><textarea id="mf-ng-f-pedido" style="height:54px"></textarea></label>
+              <button id="mf-ng-copiar-pedido" class="cinza" style="width:100%;margin:4px 0 8px">Copiar</button>
+              <label class="mf-lb-rot">Acordo Realizado<textarea id="mf-ng-f-acordo" style="height:54px"></textarea></label>
+              <button id="mf-ng-copiar-acordo" class="cinza" style="width:100%;margin-top:4px">Copiar</button>
+              <div class="mf-linha" id="mf-at-linha-parcela" style="margin-top:8px"><input id="mf-ng-f-parcela" type="text" placeholder="A partir de qual parcela" style="flex:1"><button id="mf-ng-copiar-parcela" class="cinza" style="padding:7px 9px">Copiar</button></div>
+            </details>
+            <details class="mf-grupo" id="mf-at-g-acomp"><summary>Acompanhamento (opcional)</summary>
+              <button id="mf-at-sugerir" class="cinza mf-bs-mini" style="margin-bottom:6px" title="Preenche Data 1° pagamento e Quantidade de parcelas com o que foi digitado no acordo">Trazer do acordo</button>
+              <div id="mf-at-acomp" class="mf-grade"></div>
+            </details>
+            <div class="mf-sec">
+              <div class="mf-grade">
+                <button id="mf-at-copiar" class="verde mf-cheia">Copiar linha da planilha</button>
+                <button id="mf-at-registrar" class="azul">Registrar no histórico</button>
+                <button id="mf-at-mensagem" class="cinza">Mensagem p/ grupo</button>
+                <button id="mf-at-novo" class="cinza mf-cheia">Novo atendimento</button>
+              </div>
+              <div id="mf-at-msg-caixa" style="display:none;margin-top:8px">
+                <textarea id="mf-at-msg-texto" style="height:150px" placeholder="Mensagem do acordo (pode editar antes de copiar)"></textarea>
+                <button id="mf-at-msg-copiar" class="verde" style="width:100%;margin-top:4px">Copiar mensagem</button>
+              </div>
+              <div class="mf-info" style="margin-top:6px">Os campos ficam só nesta página até você registrar no histórico. O número de contato é sempre o informado pelo cliente (RD Station), nunca o telefone da proposta.</div>
             </div>
-            <textarea id="mf-ng-texto" style="height:180px" placeholder="O texto gerado aparece aqui e pode ser editado antes de copiar."></textarea>
-            <div class="mf-grade" style="margin-top:8px">
-              <button id="mf-ng-limpar" class="cinza">Limpar campos</button>
-              <button id="mf-ng-novo" class="cinza">Novo texto</button>
+          </div>
+          <div id="mf-at-mensagens">
+            <div class="mf-sec">
+              <div class="mf-tit">Mensagens para o grupo</div>
+              <select id="mf-ng-modelo"></select>
+              <select id="mf-ng-modalidade" style="margin-top:6px;display:none" title="Tipo de acordo realizado"></select>
+              <div id="mf-ng-desc" class="mf-info" style="margin-top:6px"></div>
             </div>
-            <div class="mf-info" style="margin-top:6px">Os dados digitados ficam só nesta página: não são salvos nem enviados.</div>
-          </details>
-          <details class="mf-grupo"><summary>Frases para a planilha</summary>
-            <div class="mf-linha">
-              <select id="mf-ng-frase-tipo" style="flex:1">
-                <option value="fechou">Cliente fechou o acordo</option>
-                <option value="solicitou">Simulação (cliente solicitou)</option>
+            <details class="mf-grupo" id="mf-ng-dados" open><summary>Dados</summary>
+              <div id="mf-ng-slot"><div id="mf-ng-campos"></div></div>
+            </details>
+            <details class="mf-grupo" id="mf-ng-saida" open><summary>Texto</summary>
+              <div class="mf-grade" style="margin-bottom:8px">
+                <button id="mf-ng-gerar" class="azul">Gerar texto</button>
+                <button id="mf-ng-copiar" class="verde">Copiar texto</button>
+              </div>
+              <textarea id="mf-ng-texto" style="height:180px" placeholder="O texto gerado aparece aqui e pode ser editado antes de copiar."></textarea>
+              <div class="mf-grade" style="margin-top:8px">
+                <button id="mf-ng-limpar" class="cinza">Limpar campos</button>
+                <button id="mf-ng-novo" class="cinza">Novo texto</button>
+              </div>
+              <div class="mf-info" style="margin-top:6px">Os mesmos dados do Atendimento: o que foi digitado lá já aparece aqui. Nada é enviado.</div>
+            </details>
+          </div>
+        </div>
+
+        <div data-pag="his">
+          <div class="mf-sec">
+            <div class="mf-tit">Histórico de acordos da equipe <span id="mf-hs-qtd" style="font-weight:400"></span></div>
+            <input id="mf-hs-busca" type="text" placeholder="Nome, proposta, telefone ou responsável" autocomplete="off">
+            <div class="mf-grade" style="margin-top:6px">
+              <select id="mf-hs-status">
+                <option value="">Todas as situações</option><option value="realizado">Acordos realizados</option><option value="pendente">Solicitações pendentes</option>
+                <option value="nao_concluido">Não concluídas</option><option value="anulado">Anulados</option>
               </select>
-              <button id="mf-ng-frases" class="azul" style="padding:8px 10px">Gerar frases</button>
+              <select id="mf-hs-modal"><option value="">Todas as modalidades</option></select>
+              <select id="mf-hs-func"><option value="">Todos os funcionários</option></select>
+              <select id="mf-hs-periodo"><option value="30">Últimos 30 dias</option><option value="7">Últimos 7 dias</option><option value="1">Hoje</option></select>
             </div>
-            <label class="mf-lb-rot">Pedido do cliente<textarea id="mf-ng-f-pedido" style="height:54px"></textarea></label>
-            <button id="mf-ng-copiar-pedido" class="cinza" style="width:100%;margin:4px 0 8px">Copiar "Pedido do cliente"</button>
-            <label class="mf-lb-rot">Acordo Realizado<textarea id="mf-ng-f-acordo" style="height:54px"></textarea></label>
-            <button id="mf-ng-copiar-acordo" class="cinza" style="width:100%;margin-top:4px">Copiar "Acordo Realizado"</button>
-            <div class="mf-linha" style="margin-top:8px"><input id="mf-ng-f-parcela" type="text" placeholder="A partir de qual parcela" style="flex:1"><button id="mf-ng-copiar-parcela" class="cinza" style="padding:7px 9px">Copiar</button></div>
-          </details>
+            <div id="mf-hs-equipe" class="mf-info" style="margin-top:6px"></div>
+            <div id="mf-hs-lista" style="margin-top:8px"></div>
+          </div>
         </div>
 
         <div data-pag="lem">
@@ -1253,13 +1337,14 @@
               <button data-filtro="encerrados">Concluídos</button>
               <button data-filtro="todos">Todos</button>
             </div>
-            <input id="mf-lb-busca" type="text" placeholder="Buscar por proposta ou cliente" autocomplete="off" style="margin-top:8px">
+            <input id="mf-lb-busca" type="text" placeholder="Buscar por proposta, cliente, telefone ou responsável" autocomplete="off" style="margin-top:8px">
             <div id="mf-lb-lista" style="margin-top:8px"></div>
           </div>
           <details class="mf-grupo" id="mf-lb-form-grupo"><summary id="mf-lb-form-tit">Novo lembrete</summary>
             <div class="mf-grade">
               <input id="mf-lb-cliente" type="text" placeholder="Cliente (opcional)" autocomplete="off">
               <input id="mf-lb-proposta" type="text" placeholder="Nº da proposta" autocomplete="off">
+              <label class="mf-lb-rot mf-cheia">Telefone de contato (opcional)<input id="mf-lb-telefone" type="text" inputmode="tel" placeholder="(11) 91234-5678" autocomplete="off"></label>
               <label class="mf-lb-rot">Valor total<input id="mf-lb-total" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
               <label class="mf-lb-rot"><span id="mf-lb-pago-rot">Valor pago agora</span><input id="mf-lb-pago" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
               <label class="mf-lb-rot">Data do pagamento<input id="mf-lb-data-pag" type="date"></label>
@@ -1267,6 +1352,7 @@
             </div>
             <div id="mf-lb-saldo" class="mf-info" style="margin:6px 0"></div>
             <textarea id="mf-lb-obs" style="height:54px" placeholder="Observações"></textarea>
+            <label class="mf-opc" id="mf-lb-compartilhar-rot" style="display:none"><input type="checkbox" id="mf-lb-compartilhar" checked><span><b>Compartilhar com a equipe</b><small>Aparece para os funcionários conectados e entra no acompanhamento da equipe.</small></span></label>
             <label class="mf-lb-rot" id="mf-lb-status-rot" style="display:none">Status
               <select id="mf-lb-status"><option value="pendente">Pendente</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option></select></label>
             <div class="mf-grade" style="margin-top:8px">
@@ -1281,7 +1367,7 @@
             </div>
             <input id="mf-lb-arquivo" type="file" accept=".json,application/json" style="display:none">
             <button id="mf-lb-notif" class="cinza" style="width:100%;margin-top:8px">Ativar notificações do navegador</button>
-            <div class="mf-info" style="margin-top:6px">Os lembretes ficam só neste navegador (armazenamento do Tampermonkey) e continuam após atualizar o script. Não são sincronizados entre computadores ou perfis: use o backup para levar a outro lugar. Os avisos só aparecem com uma página do sistema aberta.</div>
+            <div class="mf-info" style="margin-top:6px">Os lembretes ficam neste navegador (armazenamento do Tampermonkey) e continuam após atualizar o script. Os marcados "Compartilhar com a equipe" vão para os funcionários conectados (Configurações > Equipe); os outros ficam só aqui. Os avisos só aparecem com uma página do sistema aberta.</div>
           </details>
         </div>
 
@@ -1361,12 +1447,30 @@
             </div>
             <button id="mf-ng-pag-salvar" class="cinza" style="width:100%;margin-top:6px">Salvar dados para pagamento</button>
           </details>
+          <details class="mf-grupo" data-grupo="equipe"><summary>Equipe (compartilhamento)</summary>
+            <div id="mf-eq-status" style="font-weight:600;margin-bottom:6px"></div>
+            <label class="mf-lb-rot">Seu nome (como a equipe vê)<input id="mf-eq-nome" type="text" autocomplete="off" maxlength="40"></label>
+            <label class="mf-lb-rot" style="margin-top:6px">Secret do Pusher
+              <span style="display:flex;gap:6px"><input id="mf-eq-secret" type="password" autocomplete="new-password" spellcheck="false" style="flex:1"><button id="mf-eq-secret-ver" class="cinza" type="button" style="padding:4px 9px">👁</button></span></label>
+            <label class="mf-lb-rot" style="margin-top:6px">Chave da equipe (a mesma nos 4 computadores)
+              <span style="display:flex;gap:6px"><input id="mf-eq-chave" type="password" autocomplete="new-password" spellcheck="false" style="flex:1"><button id="mf-eq-chave-ver" class="cinza" type="button" style="padding:4px 9px">👁</button></span></label>
+            <label class="mf-opc"><input type="checkbox" id="mf-eq-ativa"><span><b>Compartilhar lembretes e histórico com a equipe</b><small>Novos lembretes compartilhados e acordos registrados aparecem para quem estiver com o sistema aberto.</small></span></label>
+            <div class="mf-grade">
+              <button id="mf-eq-salvar" class="azul mf-cheia">Salvar e conectar</button>
+              <button id="mf-eq-sync" class="cinza">Sincronizar agora</button>
+              <button id="mf-eq-exportar" class="cinza">Exportar backup</button>
+              <button id="mf-eq-importar" class="cinza mf-cheia">Importar backup</button>
+            </div>
+            <input id="mf-eq-arquivo" type="file" accept=".json,application/json" style="display:none">
+            <div class="mf-info" style="margin-top:6px">A secret e a chave ficam só neste navegador (armazenamento do Tampermonkey); esse armazenamento não é criptografado e elas nunca vão para o código ou o GitHub. As mensagens saem criptografadas com a chave da equipe: o Pusher só repassa, não guarda nem consegue ler. Quem estiver offline recebe o que faltou quando outro funcionário estiver conectado ao mesmo tempo. Registros da equipe ficam 30 dias (lembretes pendentes ficam até serem concluídos).</div>
+          </details>
           <details class="mf-grupo" data-grupo="aparencia" open><summary>Aparência da interface</summary>
-            <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="nova"><span><b>Nova UI</b><small>Abas reorganizadas (menu "Mais"), botões principais em destaque, ajuda em ⓘ.</small></span></label>
-            <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="antiga"><span><b>UI Antiga</b><small>O visual anterior, sem mudanças.</small></span></label>
+            <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="nova"><span><b>Nova UI</b><small>Visual moderno, botões principais em destaque, ajuda em ⓘ.</small></span></label>
+            <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="antiga"><span><b>UI Antiga</b><small>Cores e tamanhos anteriores, com a mesma organização das abas.</small></span></label>
             <button id="mf-ui-previsualizar" class="cinza" style="width:100%">Pré-visualizar a outra aparência</button>
           </details>
-          <details class="mf-grupo" data-grupo="painel"><summary>Painel e diagnóstico</summary>
+          <details class="mf-grupo" data-grupo="painel"><summary>Painel, navegação e diagnóstico</summary>
+            <label class="mf-opc"><input type="checkbox" id="mf-nav-auto"><span><b>Abrir sozinho a tela necessária</b><small>Busca e Relatórios abrem a Mesa de Crédito; CCBs abrem a Fila de Propostas, pelo menu do próprio sistema.</small></span></label>
             <button id="mf-pos" class="cinza" style="width:100%" title="Arraste o painel pela barra escura do título; a posição fica salva.">Restaurar posição original do painel</button>
             <div class="mf-grade" style="margin-top:8px">
               <button id="mf-fal" class="cinza">Faltantes</button>
@@ -1385,13 +1489,13 @@
 
     /* ---------- abas ---------- */
     const mostrarAba = a => {
-      if (!['rel', 'ccb', 'cac', 'cta', 'neg', 'lem', 'tim', 'cfg'].includes(a)) a = 'rel';
+      if (!['rel', 'ccb', 'cac', 'cta', 'neg', 'his', 'lem', 'tim', 'cfg'].includes(a)) a = 'neg';
       painel.querySelectorAll('[data-pag]').forEach(p => { p.style.display = p.dataset.pag === a ? 'block' : 'none'; });
       painel.querySelectorAll('.mf-abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === a));
       GM_setValue('abaPainel', a);
     };
     painel.querySelectorAll('.mf-abas button').forEach(b => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
-    mostrarAba(GM_getValue('abaPainel', 'rel'));
+    mostrarAba(GM_getValue('abaPainel', 'neg'));
 
     /* ---------- posição do painel (arrastar, salvar, restaurar) ---------- */
     const topo = $('.mf-top'), corpo = $('.mf-corpo');
@@ -1523,6 +1627,38 @@
       return null;
     };
     const ehConfCad = txt => /\bCONF\s*CAD\b/i.test(txt || '');         // situação "20 - CONF CAD": proposta em digitação, não concluída
+
+    /* ---- telas do sistema que algumas funções precisam (ver "NAVEGAÇÃO AUTOMÁTICA" no fim) ---- */
+    const TELAS = {
+      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') },
+      fila: { nome: 'Fila de Propostas', menu: 'FilaPropostas', pronta: () => !!document.querySelector('#tabPropostasLista, #txtPropostasPesquisa') },
+    };
+    let navOcupado = false;
+    async function irParaTela(t) {
+      const tela = TELAS[t];
+      if (tela.pronta()) return true;
+      if (!cfg('navAuto')) { msg('Abra a ' + tela.nome + ' pelo menu do sistema (ou ligue "Abrir sozinho a tela necessária" em Configurações).'); return false; }
+      if (navOcupado) return false;
+      if (document.querySelector('#txtSenha, input[type=password]:not(#mf-p input)') && !document.querySelector('#divNomeCliente')) { msg('Entre no sistema antes (tela de login).'); return false; }
+      const rx = new RegExp("MostraConsulta\\(\\s*['\"]" + tela.menu + "['\"]\\s*\\)");
+      const link = [...document.querySelectorAll('a[onclick]')].find(a => !painel.contains(a) && rx.test(a.getAttribute('onclick') || ''));
+      if (!link) { msg('Não achei "' + tela.nome + '" no menu do sistema nesta página (a conta tem acesso a ela?). Abra a tela pelo menu e tente de novo.'); return false; }
+      navOcupado = true;
+      msg('Abrindo a ' + tela.nome + ' (menu do sistema)…');
+      try {
+        // a mesma chamada do onclick do menu; o link (href=".") não é seguido, para a página não recarregar
+        if (typeof PAGINA.MostraConsulta === 'function') PAGINA.MostraConsulta(tela.menu);
+        else link.click();
+        const ate = Date.now() + 25000;
+        while (!tela.pronta() && Date.now() < ate) await sleep(250);
+        if (!tela.pronta()) { msg('A ' + tela.nome + ' não abriu a tempo. Abra pelo menu do sistema e tente de novo.'); return false; }
+        await sleep(300);   // espera a tela terminar de carregar a lista
+        const ate2 = Date.now() + 10000;
+        while (Date.now() < ate2 && PAGINA.jQuery && PAGINA.jQuery.active > 0) await sleep(250);
+        msg(tela.nome + ' aberta.');
+        return true;
+      } finally { navOcupado = false; }
+    }
 
     /* ---------- leitura da tela ---------- */
     let confCadIgnoradas = 0;   // propostas "20 - CONF CAD" (em digitação) deixadas de fora na última leitura
@@ -1897,6 +2033,28 @@
       let d = String(t).replace(/\D/g, '');
       if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
       return d.length === 10 || d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2) : null;
+    };
+    // telefone brasileiro informado pelo funcionário: valida DDD e celular (9 dígitos começando por 9) e devolve no
+    // formato que a planilha já usa, "(11) 921539364". '' = não é um telefone válido (o texto digitado não é alterado).
+    const telDigitos = t => {
+      let d = String(t || '').replace(/\D/g, '');
+      if ((d.length === 12 || d.length === 13) && d.startsWith('55')) d = d.slice(2);
+      if ((d.length === 11 || d.length === 12) && d.startsWith('0')) d = d.slice(1);
+      if (!(d.length === 10 || d.length === 11) || !/^[1-9][1-9]/.test(d)) return '';
+      if (d.length === 11 && d[2] !== '9') return '';
+      if (d.length === 10 && !/[2-5]/.test(d[2])) return '';   // fixo: 2 a 5 (celular antigo sem o 9 não é aceito)
+      return d;
+    };
+    const telFormatar = t => { const d = telDigitos(t); return d ? '(' + d.slice(0, 2) + ') ' + d.slice(2) : ''; };
+    // telefones escritos num texto livre (ex.: observações antigas dos lembretes), sem confundir com CPF, valores ou datas
+    const telExtrair = t => {
+      const achados = [];
+      const txt = String(t || '');
+      txt.replace(/(?<![\d.,\/-])(?:\+?55[\s.-]?)?(?:\(\s*0?[1-9][1-9]\s*\)|0?[1-9][1-9])[\s.-]?9?\d{4}[\s.-]?\d{4}(?![\d.,\/-]*\d)/g, (m, pos) => {
+        if (/cpf\W{0,6}$/i.test(txt.slice(Math.max(0, pos - 12), pos))) return m;   // "CPF 11912345678" não é telefone
+        const f = telFormatar(m); if (f && !achados.includes(f)) achados.push(f); return m;
+      });
+      return achados;
     };
     const DETALHES = ['/MesaCredito/MesaAnaliseProposta?lngProposta=', '/MesaCredito/DetalheProposta?lngProposta='];
     const proprio = el => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
@@ -2704,7 +2862,7 @@
     $('#mf-ccb-ler').onclick = () => {
       if (ccb.rodando) return;
       const ls = linhasFila();
-      if (!ls.length) return msg('Não achei a lista da Fila de Propostas nesta tela (#tabPropostasLista). Abra a Fila de Propostas.');
+      if (!ls.length) return msg(document.querySelector('#tabPropostasLista') ? 'A Fila de Propostas está aberta, mas a lista está vazia: pesquise na Fila e clique de novo.' : 'Não achei a lista da Fila de Propostas nesta tela (#tabPropostasLista). Abra a Fila de Propostas.');
       const ign = cfg('ignorarCanceladasTestes');
       const eleg = ls.filter(l => elegivelCCB(l) && !(ign && motivoIgnorar(l.cels)));
       $('#mf-ccb-lista').value = [...new Set(eleg.map(l => l.numero || l.id))].join('\n');
@@ -3172,7 +3330,12 @@
     const NG_ALL = { ...NG_MODELOS };
     Object.entries(NG_MODALIDADES).forEach(([k, md]) => { if (k !== 'geral') NG_ALL['acordo:' + k] = { ...md, nome: 'Acordo realizado — ' + md.nome, desc: 'Acordo realizado: ' + md.nome + '. Registra só o que foi efetivamente combinado.' }; });
     const ngModalidade = () => (GM_getValue('negModalidade', 'mensal') in NG_MODALIDADES ? GM_getValue('negModalidade', 'mensal') : 'mensal');
-    const ngChave = () => (ngModeloAtual() === 'acordo' && ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : ngModeloAtual());
+    // contexto: 'negociacao' / 'renegociacao' (Atendimento: sempre o acordo da modalidade) ou 'mensagens' (todos os modelos)
+    let ngCtx = GM_getValue('atModelo', 'negociacao');
+    if (!['negociacao', 'renegociacao', 'mensagens'].includes(ngCtx)) ngCtx = 'negociacao';
+    const ngNoAtendimento = () => ngCtx !== 'mensagens';
+    const ngChave = () => ngNoAtendimento() ? (ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : 'acordo')
+      : (ngModeloAtual() === 'acordo' && ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : ngModeloAtual());
     const ngDef = () => NG_ALL[ngChave()];
     const ngOrdinal = n => n + '°';
     const ngValores = {};   // SÓ em memória: some ao recarregar a página
@@ -3217,6 +3380,7 @@
       if (v == null || String(v).trim() === '') return '';
       if (def.tipo === 'moeda') { const c = ngCentavos(v); return c == null ? '' : ngReais(c); }
       if (def.tipo === 'data') return ngData(v);
+      if (def.tipo === 'fone') return telFormatar(v) || String(v).trim();
       return String(v).trim().replace(/\s*\n\s*/g, def.tipo === 'area' ? '\n' : ' ');
     }
     // monta o texto a partir do modelo; nunca deixa {{...}} no resultado
@@ -3243,6 +3407,8 @@
       return saida.join('\n\n').replace(/\{\{[^}]*\}\}/g, '').trim();
     }
     const ngModeloAtual = () => GM_getValue('negModeloAtual', 'pedido') in NG_MODELOS ? GM_getValue('negModeloAtual', 'pedido') : 'pedido';
+    // campos que no Atendimento ficam nos blocos fixos (Cliente / Cobrança), e não repetidos na modalidade
+    const AT_FIXOS = new Set(['nome', 'proposta', 'cpf', 'parcela_atual', 'valor_parcela', 'parcelas_atraso', 'dias_atraso', 'vencimento_antigo']);
     function ngDesenharCampos() {
       const k = ngModeloAtual(), m = ngDef();
       $('#mf-ng-desc').textContent = m.desc;
@@ -3254,40 +3420,53 @@
       m.campos.forEach(c => {
         const def = NG_CAMPOS[c];
         if (def.tipo === 'calc') return;
+        if (ngNoAtendimento() && AT_FIXOS.has(c)) return;
         const rot = (m.rotulos && m.rotulos[c]) || def.rot;
         const obrig = m.obrig.includes(c);
-        const lab = document.createElement('label');
-        lab.className = 'mf-lb-rot' + (def.tipo === 'area' || def.tipo === 'check' ? ' mf-cheia' : '');
-        let inp;
-        if (def.tipo === 'area') { inp = document.createElement('textarea'); inp.style.height = '54px'; }
-        else if (def.tipo === 'select') {
-          inp = document.createElement('select');
-          def.opcoes.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; inp.appendChild(o); });
-        } else {
-          inp = document.createElement('input');
-          inp.type = def.tipo === 'data' ? 'date' : def.tipo === 'check' ? 'checkbox' : 'text';
-          if (def.tipo === 'moeda') { inp.inputMode = 'decimal'; inp.placeholder = '0,00'; }
-          if (def.tipo === 'num' || def.tipo === 'dia') inp.inputMode = 'numeric';
-          inp.autocomplete = 'off';
-        }
-        inp.dataset.campo = c;
-        if (def.tipo === 'check') inp.checked = ngValores[c] != null ? !!ngValores[c] : 'padrao' in def ? !!def.padrao : !!(ngPagamento().banco || ngPagamento().conta);
-        else if (def.tipo === 'select') inp.value = ngValores[c] != null ? ngValores[c] : def.opcoes[0][0];
-        else inp.value = ngValores[c] || '';
-        if (def.tipo === 'check') ngValores[c] = inp.checked;
-        if (def.tipo === 'select') ngValores[c] = inp.value;
-        inp.addEventListener(def.tipo === 'check' || def.tipo === 'select' ? 'change' : 'input', () => {
-          ngValores[c] = def.tipo === 'check' ? inp.checked : inp.value;
-          inp.classList.remove('mf-erro');
-          if (c === 'abrangencia_tipo' || c === 'tipo_antecipacao') ngMostrarDependentes();
-        });
-        if (def.tipo === 'check') { lab.style.flexDirection = 'row'; lab.style.alignItems = 'center'; lab.append(inp, document.createTextNode(' ' + rot)); }
-        else lab.append(document.createTextNode(rot + (obrig ? ' *' : '')), inp);
+        const lab = ngCampoEl(c, rot, obrig);
         lab.dataset.bloco = def.tipo === 'area' ? 'textos' : ['nome', 'proposta', 'cpf', 'parcela_atual'].includes(c) ? 'cliente' : NG_ABR.includes(c) ? 'abrangencia'
           : (['pedido', 'solicitacao'].includes(k) && ['valor_parcela', 'parcelas_atraso', 'dias_atraso', 'vencimento_antigo', 'vencimento'].includes(c)) ? 'situacao' : 'condicoes';
         grade.appendChild(lab);
       });
-      if (painel.dataset.ui !== 'nova') { caixa.appendChild(grade); ngSaldoHook(); ngMostrarDependentes(); return; }
+      if (painel.dataset.ui !== 'nova' || ngNoAtendimento()) { caixa.appendChild(grade); ngSaldoHook(); ngMostrarDependentes(); return; }
+      ngBlocosNova(grade, m);
+    }
+    // um campo (rótulo + entrada) ligado a ngValores: o mesmo valor em todas as telas
+    function ngCampoEl(c, rot, obrig) {
+      const def = NG_CAMPOS[c];
+      const lab = document.createElement('label');
+      lab.className = 'mf-lb-rot' + (def.tipo === 'area' || def.tipo === 'check' ? ' mf-cheia' : '');
+      let inp;
+      if (def.tipo === 'area') { inp = document.createElement('textarea'); inp.style.height = '54px'; }
+      else if (def.tipo === 'select') {
+        inp = document.createElement('select');
+        def.opcoes.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; inp.appendChild(o); });
+      } else {
+        inp = document.createElement('input');
+        inp.type = def.tipo === 'data' ? 'date' : def.tipo === 'check' ? 'checkbox' : 'text';
+        if (def.tipo === 'moeda') { inp.inputMode = 'decimal'; inp.placeholder = '0,00'; }
+        if (def.tipo === 'fone') { inp.inputMode = 'tel'; inp.placeholder = '(11) 912345678'; inp.addEventListener('blur', () => { const f = telFormatar(inp.value); if (f && f !== inp.value) { inp.value = f; ngValores[c] = f; } }); }
+        if (def.tipo === 'num' || def.tipo === 'dia') inp.inputMode = 'numeric';
+        inp.autocomplete = 'off';
+      }
+      inp.dataset.campo = c;
+      if (def.tipo === 'check') inp.checked = ngValores[c] != null ? !!ngValores[c] : 'padrao' in def ? !!def.padrao : !!(ngPagamento().banco || ngPagamento().conta);
+      else if (def.tipo === 'select') inp.value = ngValores[c] != null ? ngValores[c] : def.padrao != null ? def.padrao : def.opcoes[0][0];
+      else inp.value = ngValores[c] || '';
+      if (def.tipo === 'check') ngValores[c] = inp.checked;
+      if (def.tipo === 'select') ngValores[c] = inp.value;
+      inp.addEventListener(def.tipo === 'check' || def.tipo === 'select' ? 'change' : 'input', () => {
+        ngValores[c] = def.tipo === 'check' ? inp.checked : inp.value;
+        inp.classList.remove('mf-erro');
+        if (c === 'abrangencia_tipo' || c === 'tipo_antecipacao') ngMostrarDependentes();
+      });
+      if (def.tipo === 'check') { lab.style.flexDirection = 'row'; lab.style.alignItems = 'center'; lab.append(inp, document.createTextNode(' ' + rot)); }
+      else lab.append(document.createTextNode(rot + (obrig ? ' *' : '')), inp);
+      if (def.dica) lab.title = def.dica;
+      return lab;
+    }
+    function ngBlocosNova(grade, m) {
+      const caixa = $('#mf-ng-campos');
       // Nova UI: os mesmos campos em blocos recolhíveis; abre o bloco com campo obrigatório ou já preenchido
       const nomes = { cliente: 'Cliente', abrangencia: 'Abrangência', situacao: 'Situação atual', condicoes: 'Condições', textos: 'Textos e observações' };
       const essenciais = new Set([...m.obrig, ...(m.umDe || []).flat()]);
@@ -3434,8 +3613,11 @@
        - Migração de formato antigo: copia o original para 'mfLembretesBackup_v<versão>' antes de converter.
        - Registros que não se reconhecem vão para "invalidos" (preservados, não apagados).
        - O estado dos avisos (pop-up adiado) fica em 'mfLembretesAviso', separado dos registros.
-       - Datas sempre 'AAAA-MM-DD' no horário LOCAL do navegador (sem conversão de fuso). Valores em centavos. */
-    const LB_VERSAO = 1, LB_CHAVE = 'mfLembretes';
+       - Datas sempre 'AAAA-MM-DD' no horário LOCAL do navegador (sem conversão de fuso). Valores em centavos.
+       - v2 (script 12.0): telefone de contato, autor/versão (rev) de cada mudança, id em cada pagamento e "compartilhado"
+         (equipe). Telefones achados nas observações são COPIADOS para o campo (1 telefone) ou sugeridos (vários);
+         as observações não são alteradas. Lembretes que já existiam continuam só neste navegador até alguém compartilhar. */
+    const LB_VERSAO = 2, LB_CHAVE = 'mfLembretes';
     const lbHoje = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
     const lbDataOk = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
     const lbNovoId = () => 'lb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -3465,29 +3647,52 @@
       base.itens.forEach(x => {
         if (!lbItemValido(x)) { base.invalidos.push(x); return; }
         if (vistos.has(x.id)) return;
-        vistos.add(x.id); ok.push(x);
+        vistos.add(x.id); ok.push(lbV2(x));
       });
       base.itens = ok;
       return base;
     }
     // versão 0 (lista simples): aceita { proposta, total, pago, proxima, ... } e converte sem perder campos
+    // v1 -> v2 (idempotente: só completa o que falta)
+    function lbV2(x) {
+      const y = { ...x };
+      if (typeof y.telefone !== 'string') {
+        const t = telExtrair(y.obs);
+        y.telefone = t.length === 1 ? t[0] : '';
+        if (t.length === 1) y.telefoneOrigem = 'obs';
+        if (t.length > 1) y.telefonesObs = t;
+      }
+      y.pagamentos = (y.pagamentos || []).map((p, i) => p && p.id ? p : { ...p, id: 'pg' + Number(p && p.registradoEm || y.criadoEm || 0).toString(36) + '_' + i });
+      if (!Number.isFinite(y.rev)) y.rev = 1;
+      y.compartilhado = !!y.compartilhado;
+      return y;
+    }
     function lbMigrar(x) {
-      if (lbItemValido(x)) return x;
+      if (lbItemValido(x)) return lbV2(x);
       if (!x || typeof x !== 'object') return null;
       const total = Number.isFinite(x.total) ? x.total : ngCentavos(x.total);
       if (total == null) return null;
       const pago = x.pago != null ? (Number.isFinite(x.pago) ? x.pago : ngCentavos(x.pago)) : 0;
-      return {
+      return lbV2({
         id: typeof x.id === 'string' ? x.id : lbNovoId(), cliente: String(x.cliente || ''), proposta: String(x.proposta || ''), total,
         pagamentos: pago ? [{ valor: pago, data: lbDataOk(x.dataPagamento) ? x.dataPagamento : '', registradoEm: Date.now() }] : [],
         proxima: lbDataOk(x.proxima) ? x.proxima : '', obs: String(x.obs || ''), status: ['pendente', 'concluido', 'cancelado'].includes(x.status) ? x.status : 'pendente',
         historico: [], criadoEm: x.criadoEm || Date.now(), atualizadoEm: Date.now(), original: x,
-      };
+      });
     }
     let lbBase = lbCarregar();
+    const lbSujos = new Set();   // ids alterados AQUI (só esses são enviados para a equipe; o que chega da equipe não volta)
+    const LB_EXCLUIDOS = 'mfLembretesExcluidos';   // exclusões de lembretes compartilhados (para a equipe também excluir)
+    // toda mudança feita pelo funcionário: nova versão (rev), quando e quem
+    const lbTocar = it => { it.atualizadoEm = Date.now(); it.rev = (it.rev || 1) + 1; it.atualizadoPor = eqId(); it.atualizadoPorNome = eqNomeLocal(); lbSujos.add(it.id); };
     const lbSalvar = () => {
       if (lbBase.somenteLeitura) { msg('Os lembretes salvos são de uma versão mais nova do script: atualize o script antes de alterar.'); return false; }
       GM_setValue(LB_CHAVE, { versao: LB_VERSAO, itens: lbBase.itens, invalidos: lbBase.invalidos });
+      eqMarcarVersao();
+      // compartilhados alterados aqui vão para a equipe
+      const enviar = lbBase.itens.filter(it => lbSujos.has(it.id) && it.compartilhado);
+      lbSujos.clear();
+      enviar.forEach(it => eqEnviar('lb', it));
       lbAtualizar();
       return true;
     };
@@ -3510,7 +3715,11 @@
       painel.querySelectorAll('.mf-lb-filtros button').forEach(b => b.classList.toggle('ativa', b.dataset.filtro === lbFiltro));
       const busca = $('#mf-lb-busca').value.trim().toLowerCase();
       let lista = itens.filter(it => lbFiltro === 'todos' ? true : lbFiltro === 'atencao' ? lbAtencao(it) : lbFiltro === 'pendentes' ? it.status === 'pendente' : it.status !== 'pendente');
-      if (busca) lista = lista.filter(it => (it.proposta + ' ' + it.cliente).toLowerCase().includes(busca));
+      if (busca) {
+        const dig = busca.replace(/\D/g, '');
+        lista = lista.filter(it => (it.proposta + ' ' + it.cliente + ' ' + (it.criadoPorNome || '') + ' ' + (it.atualizadoPorNome || '')).toLowerCase().includes(busca)
+          || (dig.length >= 4 && String(it.telefone || '').replace(/\D/g, '').includes(dig)));
+      }
       lista.sort((a, b) => (a.proxima || '9999') .localeCompare(b.proxima || '9999'));
       const caixa = $('#mf-lb-lista');
       caixa.innerHTML = '';
@@ -3519,17 +3728,23 @@
         const el = document.createElement('div');
         el.className = 'mf-lb-item' + (lbVencido(it) ? ' atrasado' : lbAtencao(it) ? ' hoje' : '') + (it.status !== 'pendente' ? ' encerrado' : '');
         const l1 = document.createElement('div'); l1.className = 'mf-lb-l1';
-        l1.textContent = (it.proposta ? 'Proposta ' + it.proposta : 'Sem proposta') + (it.cliente ? ' · ' + it.cliente : '');
+        l1.textContent = (it.proposta ? 'Proposta ' + it.proposta : 'Sem proposta') + (it.cliente ? ' · ' + it.cliente : '') + (it.telefone ? ' · ' + it.telefone : '');
+        if (it.compartilhado) { const tg = document.createElement('span'); tg.className = 'mf-tag'; tg.textContent = 'equipe'; tg.title = 'Compartilhado com a equipe'; l1.appendChild(tg); }
         const l2 = document.createElement('div'); l2.className = 'mf-lb-l2';
         const st = it.status === 'pendente' ? (lbVencido(it) ? 'ATRASADO' : lbAtencao(it) ? 'HOJE' : 'pendente') : it.status === 'concluido' ? 'concluído' : 'cancelado';
-        l2.textContent = 'Saldo ' + ngReais(lbSaldo(it)) + ' de ' + ngReais(it.total) + ' · próx.: ' + (ngData(it.proxima) || '—') + ' · ' + st;
+        l2.textContent = 'Saldo ' + ngReais(lbSaldo(it)) + ' de ' + ngReais(it.total) + ' · próx.: ' + (ngData(it.proxima) || '—') + ' · ' + st + (it.criadoPorNome ? ' · por ' + it.criadoPorNome : '');
         el.append(l1, l2);
         if (lbAberto === it.id) {
           const det = document.createElement('div'); det.className = 'mf-lb-det';
-          det.textContent = 'Pagamentos: ' + (it.pagamentos.length ? it.pagamentos.map(p => ngReais(p.valor) + (p.data ? ' em ' + ngData(p.data) : '')).join('; ') : 'nenhum') +
-            (it.obs ? '\nObs.: ' + it.obs : '') + (it.historico && it.historico.length ? '\n' + it.historico.slice(-3).map(h => h.texto).join('\n') : '');
+          det.textContent = (it.telefone ? 'Telefone: ' + it.telefone + (it.telefoneOrigem === 'obs' ? ' (copiado das observações)' : '') + '\n' : '') +
+            (it.telefonesObs && it.telefonesObs.length && !it.telefone ? 'Telefones nas observações: ' + it.telefonesObs.join(', ') + ' (clique em "Usar telefone" para escolher)\n' : '') +
+            'Pagamentos: ' + (it.pagamentos.length ? it.pagamentos.map(p => ngReais(p.valor) + (p.data ? ' em ' + ngData(p.data) : '') + (p.por ? ' (' + p.por + ')' : '')).join('; ') : 'nenhum') +
+            (it.obs ? '\nObs.: ' + it.obs : '') + (it.historico && it.historico.length ? '\nAcompanhamento:\n' + it.historico.slice(-6).map(h => h.texto + (h.por ? ' — ' + h.por : '')).join('\n') : '');
           const acoes = document.createElement('div'); acoes.className = 'mf-lb-acoes';
           const bt = (t, cls, fn) => { const b = document.createElement('button'); b.className = cls; b.textContent = t; b.onclick = e => { e.stopPropagation(); fn(); }; acoes.appendChild(b); };
+          if (it.telefone) bt('Copiar telefone', 'cinza', () => { GM_setClipboard(it.telefone, 'text'); msg('Telefone copiado: ' + it.telefone); });
+          (it.telefone ? [] : it.telefonesObs || []).forEach(t => bt('Usar telefone ' + t, 'cinza', () => lbUsarTelefone(it.id, t)));
+          if (!it.compartilhado && eqPronta()) bt('Compartilhar com a equipe', 'azul', () => lbCompartilhar(it.id));
           if (it.status === 'pendente') {
             bt('Pagamento', 'verde', () => lbAbrirForm(it, 'pagamento'));
             bt('Editar', 'cinza', () => lbAbrirForm(it, 'editar'));
@@ -3543,22 +3758,42 @@
         caixa.appendChild(el);
       });
     }
-    const lbHist = (it, texto) => { it.historico = [...(it.historico || []), { em: Date.now(), texto: new Date().toLocaleDateString() + ': ' + texto }].slice(-30); };
+    const lbHist = (it, texto) => { it.historico = [...(it.historico || []), { em: Date.now(), texto: new Date().toLocaleDateString() + ': ' + texto, por: eqNomeLocal() }].slice(-60); };
     function lbMudarStatus(id, st) {
       lbRecarregar();
       const it = lbBase.itens.find(x => x.id === id);
       if (!it) return;
       const nome = { concluido: 'concluir', cancelado: 'cancelar', pendente: 'reabrir' }[st];
       if (!confirm('Confirma ' + nome + ' o lembrete' + (it.proposta ? ' da proposta ' + it.proposta : '') + '?')) return;
-      it.status = st; it.atualizadoEm = Date.now(); lbHist(it, { concluido: 'concluído', cancelado: 'cancelado', pendente: 'reaberto' }[st]);
+      it.status = st; lbTocar(it); lbHist(it, { concluido: 'concluído', cancelado: 'cancelado', pendente: 'reaberto' }[st]);
       if (lbSalvar()) msg('Lembrete ' + { concluido: 'concluído', cancelado: 'cancelado', pendente: 'reaberto' }[st] + '.');
     }
     function lbExcluir(id) {
       lbRecarregar();
       const it = lbBase.itens.find(x => x.id === id);
-      if (!it || !confirm('EXCLUIR definitivamente o lembrete' + (it.proposta ? ' da proposta ' + it.proposta : '') + '? Esta ação não pode ser desfeita.')) return;
+      if (!it || !confirm('EXCLUIR definitivamente o lembrete' + (it.proposta ? ' da proposta ' + it.proposta : '') + '?' + (it.compartilhado ? ' Ele é compartilhado: sai também para a equipe.' : '') + ' Esta ação não pode ser desfeita.')) return;
       lbBase.itens = lbBase.itens.filter(x => x.id !== id);
+      if (it.compartilhado) {   // a exclusão também vai para a equipe (fica 30 dias para quem estava offline receber)
+        const marca = { id, excluido: true, rev: (it.rev || 1) + 1, atualizadoEm: Date.now(), atualizadoPor: eqId(), atualizadoPorNome: eqNomeLocal(), proposta: it.proposta };
+        GM_setValue(LB_EXCLUIDOS, { ...(GM_getValue(LB_EXCLUIDOS, {}) || {}), [id]: marca });
+        eqEnviar('lb', marca);
+      }
       if (lbSalvar()) msg('Lembrete excluído.');
+    }
+    function lbUsarTelefone(id, t) {
+      lbRecarregar();
+      const it = lbBase.itens.find(x => x.id === id);
+      if (!it) return;
+      it.telefone = t; it.telefoneOrigem = 'obs'; lbHist(it, 'telefone ' + t + ' (das observações)'); lbTocar(it);
+      if (lbSalvar()) msg('Telefone ' + t + ' salvo no lembrete (as observações continuam iguais).');
+    }
+    function lbCompartilhar(id) {
+      lbRecarregar();
+      const it = lbBase.itens.find(x => x.id === id);
+      if (!it || !confirm('Compartilhar este lembrete' + (it.proposta ? ' da proposta ' + it.proposta : '') + ' com a equipe? Ele passa a aparecer para os funcionários conectados.')) return;
+      it.compartilhado = true; if (!it.criadoPorNome) { it.criadoPor = eqId(); it.criadoPorNome = eqNomeLocal(); }
+      lbHist(it, 'compartilhado com a equipe'); lbTocar(it);
+      if (lbSalvar()) msg('Lembrete compartilhado com a equipe.');
     }
     // formulário: novo, editar ou registrar novo pagamento
     function lbAbrirForm(it, modoForm) {
@@ -3566,6 +3801,9 @@
       $('#mf-lb-form-grupo').open = true;
       $('#mf-lb-form-tit').textContent = !it ? 'Novo lembrete' : modoForm === 'pagamento' ? 'Registrar pagamento (proposta ' + (it.proposta || '—') + ')' : 'Editar lembrete';
       $('#mf-lb-cliente').value = it ? it.cliente : ''; $('#mf-lb-proposta').value = it ? it.proposta : '';
+      $('#mf-lb-telefone').value = it ? it.telefone || '' : '';
+      $('#mf-lb-compartilhar-rot').style.display = eqPronta() && !(it && it.compartilhado) ? '' : 'none';
+      $('#mf-lb-compartilhar').checked = !it;
       $('#mf-lb-total').value = it ? (it.total / 100).toFixed(2).replace('.', ',') : '';
       $('#mf-lb-pago').value = '';
       $('#mf-lb-pago-rot').textContent = it ? 'Novo pagamento (opcional)' : 'Valor pago agora';
@@ -3574,7 +3812,7 @@
       $('#mf-lb-obs').value = it ? it.obs : '';
       $('#mf-lb-status').value = it ? it.status : 'pendente';
       $('#mf-lb-status-rot').style.display = it && modoForm === 'editar' ? '' : 'none';
-      ['#mf-lb-cliente', '#mf-lb-proposta', '#mf-lb-total'].forEach(s => { $(s).disabled = !!it && modoForm === 'pagamento'; });
+      ['#mf-lb-cliente', '#mf-lb-proposta', '#mf-lb-total', '#mf-lb-telefone'].forEach(s => { $(s).disabled = !!it && modoForm === 'pagamento'; });
       lbAtualizarSaldoForm();
       mostrarAba('lem');
     }
@@ -3595,7 +3833,9 @@
       const pagoTxt = $('#mf-lb-pago').value.trim(), pago = pagoTxt ? ngCentavos(pagoTxt) : 0;
       const dataPag = $('#mf-lb-data-pag').value, proxima = $('#mf-lb-proxima').value;
       const proposta = $('#mf-lb-proposta').value.trim().slice(0, 40), cliente = $('#mf-lb-cliente').value.trim().slice(0, 120);
+      const telTxt = $('#mf-lb-telefone').value.trim(), telefone = telTxt ? telFormatar(telTxt) : '';
       const erros = [];
+      if (telTxt && !telefone) erros.push('telefone válido (DDD + número) ou deixe em branco');
       if (!proposta && !cliente) erros.push('proposta ou cliente');
       if (total == null || total <= 0) erros.push('valor total válido');
       if (pago == null || pago < 0) erros.push('valor pago válido');
@@ -3613,17 +3853,20 @@
       const totalFinal = it && lbEditando && lbEditando.modo === 'pagamento' ? it.total : total;
       if (jaPago + pago > totalFinal) return msg('O valor pago (' + ngReais(jaPago + pago) + ') passa do total (' + ngReais(totalFinal) + '): o saldo não pode ficar negativo.');
       if (!it) {
-        it = { id: lbNovoId(), cliente, proposta, total, pagamentos: [], proxima: '', obs: '', status: 'pendente', historico: [], criadoEm: Date.now(), atualizadoEm: Date.now() };
+        it = { id: lbNovoId(), cliente, proposta, telefone, total, pagamentos: [], proxima: '', obs: '', status: 'pendente', historico: [], criadoEm: Date.now(), atualizadoEm: Date.now(),
+          rev: 1, criadoPor: eqId(), criadoPorNome: eqNomeLocal(), compartilhado: eqPronta() && $('#mf-lb-compartilhar').checked };
         lbBase.itens.push(it);
         lbHist(it, 'criado');
       } else if (!(lbEditando && lbEditando.modo === 'pagamento')) {
+        if (telefone !== (it.telefone || '')) { lbHist(it, 'telefone ' + (it.telefone || '—') + ' → ' + (telefone || '—')); it.telefone = telefone; delete it.telefoneOrigem; }
         it.cliente = cliente; it.proposta = proposta; it.total = total;
       }
-      if (pago > 0) { it.pagamentos.push({ valor: pago, data: dataPag, registradoEm: Date.now() }); lbHist(it, 'pagamento de ' + ngReais(pago) + (dataPag ? ' em ' + ngData(dataPag) : '')); }
+      if (!it.compartilhado && eqPronta() && $('#mf-lb-compartilhar-rot').style.display !== 'none' && $('#mf-lb-compartilhar').checked) { it.compartilhado = true; lbHist(it, 'compartilhado com a equipe'); }
+      if (pago > 0) { it.pagamentos.push({ id: 'pg' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), valor: pago, data: dataPag, registradoEm: Date.now(), por: eqNomeLocal() }); lbHist(it, 'pagamento de ' + ngReais(pago) + (dataPag ? ' em ' + ngData(dataPag) : '')); }
       if (lbDataOk(proxima) && proxima !== it.proxima) { if (it.proxima) lbHist(it, 'acompanhamento ' + ngData(it.proxima) + ' → ' + ngData(proxima)); it.proxima = proxima; }
       if ($('#mf-lb-obs').value.trim() !== it.obs) it.obs = $('#mf-lb-obs').value.trim().slice(0, 1000);
       if (st !== it.status) { it.status = st; lbHist(it, 'status: ' + st); }
-      it.atualizadoEm = Date.now();
+      lbTocar(it);
       if (!lbSalvar()) return;
       lbAberto = it.id; lbEditando = null;
       $('#mf-lb-form-grupo').open = false; lbAbrirForm(null); $('#mf-lb-form-grupo').open = false;
@@ -3732,7 +3975,7 @@
             lbRecarregar();
             const x = lbBase.itens.find(z => z.id === it.id);
             if (!x) return;
-            lbHist(x, 'adiado de ' + ngData(x.proxima) + ' para ' + ngData(inp.value)); x.proxima = inp.value; x.atualizadoEm = Date.now();
+            lbHist(x, 'adiado de ' + ngData(x.proxima) + ' para ' + ngData(inp.value)); x.proxima = inp.value; lbTocar(x);
             if (lbSalvar()) msg('Lembrete adiado para ' + ngData(inp.value) + '.');
           };
           adiarBt.after(inp, ok);
@@ -3957,7 +4200,7 @@
         cacSSSet({ etapa: 'resultado', resultado, voltar: extra.voltar || st.voltar || '', quando: Date.now(), abrirAba: !(extra.origemBusca || st.origemBusca) });
         cacMostrar(resultado);
         cacStatus('');
-        msg('CAC: dados de ' + resultado.cliente.nome + ' lidos. Confira, preencha os campos manuais e copie a linha.');
+        msg('CAC: dados de ' + resultado.cliente.nome + ' lidos. Para a planilha, use o Atendimento ("Aplicar cliente atual").');
         cacVoltarConta(extra);
       } finally {
         if (!dentro) cacOcupado = false;
@@ -4024,11 +4267,10 @@
       }
     }
 
-    const CAC_LINHA = [   // aba "Negociação": colunas Proposta ... Vencimento Mais Antigo
-      ['Proposta', 'm:proposta'], ['Nome', 'nome'], ['CPF', 'cpf'], ['IMEI', 'm:imei'], ['Data da Proposta', 'dataProposta'], ['Filial', 'filial'],
-      ['Atendente', 'm:atendente'], ['Número Contato', 'm:contato'], ['Quem negociou', 'm:quem'], ['Data do Contato', 'm:data'],
-      ['Valor parcela', 'valorParcela'], ['FPD', 'fpd'], ['Parcelas Em Atraso', 'parcelasAtraso'], ['Dias Atraso', 'diasAtraso'], ['Vencimento Mais Antigo', 'vencMaisAntigo'],
-    ];
+    // dados do CAC mostrados no resultado (o preenchimento manual e a cópia da linha saíram na v12: a linha completa
+    // da planilha Negociação agora sai do Atendimento, que recebe estes mesmos dados pela Busca de cliente)
+    const CAC_EXIBIR = [['Data da Proposta', 'dataProposta'], ['Filial', 'filial'], ['Valor parcela', 'valorParcela'], ['FPD', 'fpd'],
+      ['Parcelas Em Atraso', 'parcelasAtraso'], ['Dias Atraso', 'diasAtraso'], ['Vencimento Mais Antigo', 'vencMaisAntigo']];
     function cacMostrar(res) {
       $('#mf-cac-res').style.display = res ? '' : 'none';
       if (!res) return;
@@ -4044,7 +4286,7 @@
       add('Cliente', res.cliente.nome + (res.cliente.cpf ? ' (' + res.cliente.cpf + ')' : ''));
       add('Contrato', res.contrato + (res.outrosContratos.length ? ' (outros: ' + res.outrosContratos.join(', ') + ')' : ''));
       add('Situação', res.situacao);
-      CAC_LINHA.filter(([, k]) => !k.startsWith('m:') && k !== 'nome' && k !== 'cpf').forEach(([rot, k]) => add(rot, res.campos[k], res.origem[k]));
+      CAC_EXIBIR.forEach(([rot, k]) => add(rot, res.campos[k], res.origem[k]));
       add('Parcela atual', res.campos.parcelaAtual, res.origem.parcelaAtual);
       add('Total de parcelas', res.campos.totalParcelas, res.origem.totalParcelas);
       const info = document.createElement('div'); info.className = 'mf-info'; info.style.marginTop = '4px';
@@ -4053,21 +4295,9 @@
     }
     $('#mf-cac-buscar').onclick = () => { cacSSSet(null); cacConsultar($('#mf-cac-termo').value); };
     $('#mf-cac-termo').addEventListener('keydown', e => { if (e.key === 'Enter') $('#mf-cac-buscar').click(); });
-    $('#mf-cac-copiar').onclick = () => {
-      const st = cacSS();
-      if (!st || !st.resultado) return msg('Faça uma consulta antes de copiar.');
-      const res = st.resultado, man = k => limpoTxt($('#mf-cac-' + k).value);
-      const linha = CAC_LINHA.map(([, k]) => {
-        if (k === 'm:data') return ngData($('#mf-cac-data').value);
-        if (k.startsWith('m:')) return man(k.slice(2));
-        return res.campos[k] != null && res.campos[k] !== '' ? res.campos[k] : 'N/A';
-      });
-      GM_setClipboard(textoTab([linha]), 'text');
-      msg('Linha copiada (' + CAC_LINHA.length + ' colunas: Proposta → Vencimento Mais Antigo). Cole na coluna Proposta da aba Negociação. Campos manuais vazios vão em branco.');
-    };
     $('#mf-cac-limpar').onclick = () => {
       cacSSSet(null); cacMostrar(null); cacStatus('');
-      ['termo', 'proposta', 'imei', 'atendente', 'contato', 'quem', 'data'].forEach(k => { $('#mf-cac-' + k).value = ''; });
+      $('#mf-cac-termo').value = '';
       msg('Pronto para uma nova consulta.');
     };
     // Configurações: conta master e opções
@@ -4091,7 +4321,7 @@
     /* ---- Gerador: frases de uma linha para a planilha (colunas "Pedido do cliente" e "Acordo Realizado") ----
        "fechou" = acordo fechado; "solicitou" = simulação para ver se é viável. Só usa o que foi digitado. */
     function ngFrases(tipo) {
-      const m = ngModeloAtual(), v = ngValor;
+      const m = ngNoAtendimento() ? 'acordo' : ngModeloAtual(), v = ngValor;   // Atendimento: sempre o acordo da modalidade
       const verbo = tipo === 'fechou' ? 'fechou' : 'solicitou';
       if (m === 'acordo' && ngModalidade() !== 'geral') {
         const md = NG_MODALIDADES[ngModalidade()];
@@ -4132,14 +4362,19 @@
       if (ent && dEnt) return { pedido: 'Cliente ' + verbo + ' pagar ' + ent + ' no dia ' + dEnt, acordo: 'Prosseguimos com o pagamento de ' + ent + ' no dia ' + dEnt };
       return { erro: 'Para a frase, preencha: quantidade e valor das parcelas, ou valor da parcela e dia de vencimento, ou entrada com data.' };
     }
-    $('#mf-ng-frases').onclick = () => {
-      const r = ngFrases($('#mf-ng-frase-tipo').value);
-      if (r.erro) return msg(r.erro);
-      $('#mf-ng-f-pedido').value = r.pedido; $('#mf-ng-f-acordo').value = r.acordo;
-      const pi = ngValor('parcela_inicial') || (ngValores.abrangencia_tipo === 'apartir' ? '' : '');
+    // Atendimento: Resultado decide o verbo (Renegociação = acordo já fechado). "Não concluída": só o pedido, se houver dados.
+    function ngGerarTextos(silencioso) {
+      const res = ngCtx === 'renegociacao' ? 'fechou' : $('#mf-ng-frase-tipo').value;
+      const r = ngFrases(res === 'nao' ? 'solicitou' : res);
+      if (r.erro && res !== 'nao') { if (!silencioso) msg(r.erro); return false; }
+      $('#mf-ng-f-pedido').value = r.erro ? '' : r.pedido;
+      $('#mf-ng-f-acordo').value = res === 'nao' || r.erro ? '' : r.acordo;
+      const pi = ngValor('parcela_inicial');
       $('#mf-ng-f-parcela').value = pi ? 'A partir da ' + ngOrdinal(pi) : '';
-      msg('Frases geradas. Copie cada uma para a coluna correspondente.');
-    };
+      if (!silencioso) msg(res === 'nao' && r.erro ? 'Negociação não concluída: sem dados de acordo, os textos ficam em branco (pode digitar).' : 'Textos gerados. Revise (pode editar) e copie.');
+      return true;
+    }
+    $('#mf-ng-frases').onclick = () => ngGerarTextos(false);
     $('#mf-ng-copiar-pedido').onclick = () => { const t = $('#mf-ng-f-pedido').value; if (!t.trim()) return msg('Gere as frases antes.'); GM_setClipboard(t, 'text'); msg('Frase do "Pedido do cliente" copiada.'); };
     $('#mf-ng-copiar-parcela').onclick = () => { const t = $('#mf-ng-f-parcela').value; if (!t.trim()) return msg('Informe "A partir da parcela" e gere as frases.'); GM_setClipboard(t, 'text'); msg('"A partir de qual parcela" copiado.'); };
     $('#mf-ng-copiar-acordo').onclick = () => { const t = $('#mf-ng-f-acordo').value; if (!t.trim()) return msg('Gere as frases antes.'); GM_setClipboard(t, 'text'); msg('Frase do "Acordo Realizado" copiada.'); };
@@ -4149,6 +4384,294 @@
       if (vazio) { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; $('#mf-ng-f-parcela').value = ''; }
     }));
     $('#mf-ng-modelo').addEventListener('change', () => { $('#mf-ng-f-pedido').value = ''; $('#mf-ng-f-acordo').value = ''; });
+
+    /* ================= ATENDIMENTO: Modelo 1 Negociação · Modelo 2 Renegociação =================
+       Uma ficha só (ngValores, em memória) alimenta as duas planilhas, os textos e as mensagens do grupo.
+         Negociação  : 1 linha por proposta, 30 colunas (Proposta … Negociação Concluída?)
+         Renegociação: 1 linha por PARCELA do acordo, 26 colunas (Proposta … Negociação Concluída?)
+       Regras tiradas da planilha real (Negociação.Renegociação.xlsx): Ação "Pagamento Parcela 01/24" (PIX semanal:
+       "Pagamentos 01/88"); a 1ª linha é sempre a entrada, "Efetivado (Entrada)" (quitação: "Efetivado (Quitação)");
+       as demais "Em Aberto" com Valor Pago "N/A". O Número de Contato é SEMPRE digitado (RD Station): o telefone da
+       proposta nunca entra aqui. */
+    Object.assign(NG_CAMPOS, {
+      imei: { rot: 'IMEI', tipo: 'texto' },
+      data_proposta: { rot: 'Data da proposta', tipo: 'data' },
+      filial: { rot: 'Filial', tipo: 'texto' },
+      atendente: { rot: 'Atendente', tipo: 'texto' },
+      contato: { rot: 'Número de contato (RD Station)', tipo: 'fone', dica: 'O número que o cliente usou para falar com a equipe. Nunca é preenchido com o telefone da proposta.' },
+      quem_negociou: { rot: 'Quem negociou', tipo: 'select', opcoes: [['Paymobi', 'Paymobi'], ['Recupere', 'Recupere']] },
+      data_contato: { rot: 'Data do contato', tipo: 'data' },
+      fpd: { rot: 'FPD', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO']] },
+      data_envio: { rot: 'Data do envio da proposta', tipo: 'data' },
+      data_1pag: { rot: 'Data 1° pagamento', tipo: 'data' },
+      vencimentos: { rot: 'Vencimento(s)', tipo: 'data' },
+      parcelas_negociadas: { rot: 'Parcela(s) negociadas', tipo: 'texto', dica: 'Quantidade (ex.: 12) ou "Todo Contrato"' },
+      qtd_parcelas_neg: { rot: 'Quantidade de parcelas', tipo: 'num' },
+      pag_entrada: { rot: 'Pagamento da entrada', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO'], ['N/A', 'N/A']] },
+      boleto_disp: { rot: 'Boleto disponibilizado', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO'], ['N/A', 'N/A']] },
+      contrato_novo: { rot: 'Número contrato novo', tipo: 'texto' },
+      data_reneg: { rot: 'Data renegociação', tipo: 'data', dica: 'Data do comprovante de pagamento' },
+      regua: { rot: 'Procedimento na régua', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['Não foi necessário', 'Não foi necessário']] },
+      recebeu_boletos: { rot: 'Recebeu boletos?', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO'], ['N/A', 'N/A'], ['Pix Automático', 'Pix Automático']] },
+      concluida: { rot: 'Negociação concluída?', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO'], ['N/A', 'N/A']] },
+      responsavel: { rot: 'Responsável pela negociação', tipo: 'texto' },
+      formalizou: { rot: 'Formalizou o acordo?', tipo: 'select', opcoes: [['SIM', 'SIM'], ['NÃO', 'NÃO']] },
+      obs_reneg: { rot: 'Observação (todas as linhas)', tipo: 'texto', dica: 'Ex.: Boletos no App' },
+      plano_entrada_valor: { rot: 'Entrada (linha 1)', tipo: 'moeda' },
+      plano_entrada_data: { rot: 'Data da entrada', tipo: 'data' },
+      plano_qtd: { rot: 'Nº de parcelas', tipo: 'num' },
+      plano_valor: { rot: 'Valor de cada parcela', tipo: 'moeda' },
+      plano_periodo: { rot: 'Periodicidade', tipo: 'select', opcoes: [['mensal', 'Mensal'], ['semanal', 'Semanal (PIX)']] },
+      plano_inicio: { rot: '1º vencimento das parcelas', tipo: 'data' },
+    });
+    const AT_CLIENTE = ['proposta', 'nome', 'cpf', 'imei', 'data_proposta', 'filial', 'atendente', 'contato', 'quem_negociou', 'data_contato'];
+    const AT_COBRANCA = ['valor_parcela', 'fpd', 'parcelas_atraso', 'dias_atraso', 'vencimento_antigo', 'parcela_atual'];
+    const AT_ACOMP = ['data_envio', 'data_1pag', 'vencimentos', 'parcelas_negociadas', 'qtd_parcelas_neg', 'pag_entrada', 'boleto_disp', 'contrato_novo', 'data_reneg', 'regua', 'recebeu_boletos', 'concluida'];
+    const AT_RENEG = ['responsavel', 'formalizou', 'data_reneg', 'contrato_novo', 'obs_reneg', 'regua', 'recebeu_boletos', 'concluida'];
+    const AT_PLANO = ['plano_entrada_valor', 'plano_entrada_data', 'plano_qtd', 'plano_valor', 'plano_periodo', 'plano_inicio'];
+    const AT_COL_NEG = [['Proposta', 'proposta'], ['Nome', 'nome'], ['CPF', 'cpf'], ['IMEI', 'imei'], ['Data da Proposta', 'data_proposta'], ['Filial', 'filial'],
+      ['Atendente', 'atendente'], ['Número Contato', 'contato'], ['Quem negociou', 'quem_negociou'], ['Data do Contato', 'data_contato'], ['Valor parcela', 'valor_parcela'],
+      ['FPD', 'fpd'], ['Parcelas Em Atraso', 'parcelas_atraso'], ['Dias Atraso', 'dias_atraso'], ['Vencimento Mais Antigo', 'vencimento_antigo'],
+      ['A partir de qual parcela pediu acordo', 't:parcela'], ['Pedido do cliente', 't:pedido'], ['Acordo Realizado', 't:acordo'], ['Data do envio da proposta', 'data_envio'],
+      ['Data 1° Pagamento', 'data_1pag'], ['Vencimento(s)', 'vencimentos'], ['Parcela (s) negociadas', 'parcelas_negociadas'], ['Quantidade de parcelas', 'qtd_parcelas_neg'],
+      ['Pagamento da entrada', 'pag_entrada'], ['Disponibilizado boleto para o cliente', 'boleto_disp'], ['Número Contrato Novo', 'contrato_novo'],
+      ['Data Renegociação (comprovante pag.)', 'data_reneg'], ['Procedimento feito na regua', 'regua'], ['Recebeu Boletos?', 'recebeu_boletos'], ['Negociação Concluída?', 'concluida']];
+    const AT_COL_RENEG = [['Proposta', 'proposta'], ['Nome', 'nome'], ['Responsável pela Negociação', 'responsavel'], ['Formalizou o acordo?', 'formalizou'], ['CPF', 'cpf'],
+      ['IMEI', 'imei'], ['Data da Proposta (Contrato Original)', 'data_proposta'], ['Data Renegociação', 'data_reneg'], ['Filial', 'filial'], ['Atendente', 'atendente'],
+      ['Acordo Solicitado', 't:pedido'], ['Acordo Realizado', 't:acordo'], ['Valor parcela', 'p:valor'], ['Valor Pago', 'p:pago'], ['Número Contato', 'contato'],
+      ['Data do Contato', 'data_contato'], ['Ação', 'p:acao'], ['Situação', 'p:situacao'], ['Baixa Parcela ER', 'p:baixa'], ['Quebra de Acordo', 'p:quebra'],
+      ['Vencimento', 'p:venc'], ['Observação', 'obs_reneg'], ['Número Contrato Novo', 'contrato_novo'], ['Procedimento feito na regua', 'regua'],
+      ['Recebeu Boletos?', 'recebeu_boletos'], ['Negociação Concluída?', 'concluida']];
+    const AT_SITUACOES = ['Efetivado (Entrada)', 'Em Aberto', 'Pendente', 'Efetivado', 'Efetivado (Quitação)', 'Pendente (ATRASO)', 'Pendente (QUEBRA DE ACORDO)'];
+    let atPlano = [];   // linhas da Renegociação (em memória, como o resto da ficha)
+    const atIso = br => { const m = String(br || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
+    const atNomeEquipe = () => String(GM_getValue('equipeNome', '') || '').trim();
+    const atResponsavelPadrao = () => atNomeEquipe() || ((contaAtiva() || {}).apelido || '');
+
+    function atBloco(sel, campos) {
+      const g = $(sel); g.innerHTML = '';
+      const obrig = ngCtx === 'renegociacao' ? ['proposta', 'nome', 'responsavel'] : ['proposta', 'nome'];
+      campos.forEach(c => g.appendChild(ngCampoEl(c, NG_CAMPOS[c].rot, obrig.includes(c))));
+    }
+    function atDesenhar() {
+      const at = ngNoAtendimento(), reneg = ngCtx === 'renegociacao';
+      painel.querySelectorAll('.mf-at-seg button').forEach(b => b.classList.toggle('ativa', b.dataset.at === ngCtx));
+      $('#mf-at-form').style.display = at ? '' : 'none';
+      $('#mf-at-mensagens').style.display = at ? 'none' : '';
+      // o mesmo bloco de campos da modalidade serve às duas telas
+      (at ? $('#mf-at-modal') : $('#mf-ng-slot')).appendChild($('#mf-ng-campos'));
+      if (at) {
+        if (ngValores.data_contato == null) ngValores.data_contato = lbHoje();
+        if (reneg && !ngValores.responsavel) ngValores.responsavel = atResponsavelPadrao();
+        atBloco('#mf-at-cliente', AT_CLIENTE);
+        atBloco('#mf-at-cobranca', AT_COBRANCA);
+        atBloco('#mf-at-acomp', AT_ACOMP);
+        atBloco('#mf-at-reneg', AT_RENEG);
+        $('#mf-at-g-cobranca').style.display = reneg ? 'none' : '';
+        $('#mf-at-g-acomp').style.display = reneg ? 'none' : '';
+        $('#mf-at-g-reneg').style.display = reneg ? '' : 'none';
+        $('#mf-at-resultado-rot').style.display = reneg ? 'none' : '';
+        $('#mf-at-linha-parcela').style.display = reneg ? 'none' : '';
+        $('#mf-at-rot-pedido').textContent = reneg ? 'Acordo Solicitado' : 'Pedido do cliente';
+        $('#mf-at-copiar').textContent = reneg ? 'Copiar linhas da Renegociação' : 'Copiar linha da Negociação';
+        $('#mf-at-modalidade').value = ngModalidade();
+        if (reneg) atPlanoCampos();
+      }
+      ngDesenharCampos();
+      if (at && reneg) atPlanoDesenhar();
+    }
+    function atTrocar(ctx) {
+      ngCtx = ctx; GM_setValue('atModelo', ctx);
+      $('#mf-ng-texto').value = '';
+      atDesenhar();
+    }
+    painel.querySelectorAll('.mf-at-seg button').forEach(b => b.addEventListener('click', () => atTrocar(b.dataset.at)));
+    const selAtMod = $('#mf-at-modalidade');
+    [...$('#mf-ng-modalidade').options].forEach(o => selAtMod.appendChild(o.cloneNode(true)));
+    selAtMod.addEventListener('change', () => {
+      GM_setValue('negModalidade', selAtMod.value); $('#mf-ng-modalidade').value = selAtMod.value;
+      ['#mf-ng-f-pedido', '#mf-ng-f-acordo', '#mf-ng-f-parcela'].forEach(x => { $(x).value = ''; });
+      atPlano = []; AT_PLANO.forEach(k => delete ngValores[k]); atPlanoAuto = {};
+      atDesenhar();
+    });
+    $('#mf-ng-modalidade').addEventListener('change', () => { selAtMod.value = $('#mf-ng-modalidade').value; });
+
+    /* ---- plano de parcelas (Renegociação) ---- */
+    const atPad = n => String(n).padStart(2, '0');
+    function atSomarMeses(iso, n) {
+      const [a, m, d] = iso.split('-').map(Number);
+      const alvo = new Date(a, m - 1 + n, 1), fim = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate();
+      return alvo.getFullYear() + '-' + atPad(alvo.getMonth() + 1) + '-' + atPad(Math.min(d, fim));   // dia 31 em mês curto: último dia do mês
+    }
+    function atSomarDias(iso, n) { const [a, m, d] = iso.split('-').map(Number); const x = new Date(a, m - 1, d + n); return x.getFullYear() + '-' + atPad(x.getMonth() + 1) + '-' + atPad(x.getDate()); }
+    // o que a modalidade já informa vira o plano sugerido; linhas "especiais" quando o acordo não é parcelado
+    function atSugestao() {
+      const mod = ngModalidade(), v = k => ngValores[k], c = k => ngCentavos(v(k));
+      if (mod === 'parcial' || mod === 'folego') {
+        const l = [];
+        if (c('valor_pago_parcial') != null) l.push({ valor: c('valor_pago_parcial'), venc: v('data_pagamento') || '' });
+        if (c('valor_restante') != null) l.push({ valor: c('valor_restante'), venc: v('data_restante') || '' });
+        return { especial: l };
+      }
+      if (mod === 'antecipacao') return { especial: c('valor_antecipacao') != null ? [{ valor: c('valor_antecipacao'), venc: v('data_pagamento') || '', situacao: v('tipo_antecipacao') === 'quitacao' ? 'Efetivado (Quitação)' : '' }] : [] };
+      if (mod === 'regularizacao' && !(v('dividir_qtd') && c('dividir_valor') != null)) return { especial: c('valor_regularizar') != null ? [{ valor: c('valor_regularizar'), venc: v('data_pagamento') || '' }] : [] };
+      const s = { periodo: 'mensal' };
+      if (mod === 'entrada') Object.assign(s, { entradaValor: v('valor_entrada'), entradaData: v('data_entrada'), qtd: v('quantidade_parcelas'), valor: v('valor_parcela_acordo') });
+      if (mod === 'mensal' || mod === 'parcelamento') Object.assign(s, { qtd: v('quantidade_parcelas'), valor: v('valor_parcela_acordo') });
+      if (mod === 'pix') Object.assign(s, { periodo: 'semanal', qtd: v('qtd_semanas'), valor: v('valor_semanal'), entradaValor: v('valor_entrada') });
+      if (mod === 'regularizacao') Object.assign(s, { qtd: v('dividir_qtd'), valor: v('dividir_valor'), inicio: v('data_pagamento') });
+      if (mod === 'vencimento') Object.assign(s, { qtd: /^\d+$/.test(String(v('parcelas_afetadas') || '').trim()) ? v('parcelas_afetadas') : '', valor: v('valor_parcela_acordo') });
+      // 1º vencimento: o próximo "dia D" depois da entrada (só quando os dois foram informados)
+      const dia = +(v('dia_vencimento') || v('novo_dia') || 0);
+      if (!s.inicio && s.entradaData && dia >= 1 && dia <= 31) {
+        const mesmoMes = atSomarMeses(s.entradaData.slice(0, 8) + atPad(dia), 0);
+        s.inicio = mesmoMes > s.entradaData ? mesmoMes : atSomarMeses(s.entradaData.slice(0, 8) + atPad(dia), 1);
+      }
+      return s;
+    }
+    // sugestões do acordo: preenchem o que está vazio ou o que ainda é a sugestão anterior (o que foi editado à mão fica)
+    let atPlanoAuto = {};
+    function atPlanoCampos() {
+      const sug = atSugestao(), esp = !!sug.especial;
+      if (!esp) {
+        const mapa = { plano_entrada_valor: 'entradaValor', plano_entrada_data: 'entradaData', plano_qtd: 'qtd', plano_valor: 'valor', plano_periodo: 'periodo', plano_inicio: 'inicio' };
+        Object.entries(mapa).forEach(([k, s2]) => {
+          const atual = ngValores[k] == null ? '' : String(ngValores[k]);
+          if (atual !== '' && atual !== (atPlanoAuto[k] || '')) return;
+          const novo = sug[s2] == null ? '' : String(sug[s2]);
+          if (novo === '' && atual === '') return;
+          ngValores[k] = novo; atPlanoAuto[k] = novo;
+        });
+      }
+      atBloco('#mf-at-plano-cfg', esp ? [] : AT_PLANO);
+      $('#mf-at-plano-cfg').style.display = esp ? 'none' : '';
+      $('#mf-at-plano-gerar').textContent = esp ? 'Montar parcelas com os valores do acordo' : 'Montar parcelas';
+    }
+    function atMontarPlano() {
+      atPlanoCampos();   // o acordo pode ter sido preenchido depois de abrir a tela
+      const sug = atSugestao(), linhas = [], erros = [];
+      let semanal = false;
+      if (sug.especial) {
+        if (!sug.especial.length) erros.push('os valores do acordo (bloco Acordo)');
+        sug.especial.forEach(l => linhas.push(l));
+      } else {
+        const qtd = +String(ngValores.plano_qtd || '').trim(), valor = ngCentavos(ngValores.plano_valor), ini = ngValores.plano_inicio || '';
+        semanal = ngValores.plano_periodo === 'semanal';
+        const ent = String(ngValores.plano_entrada_valor || '').trim() ? ngCentavos(ngValores.plano_entrada_valor) : null;
+        if (!(qtd >= 1 && qtd <= 240)) erros.push('Nº de parcelas');
+        if (valor == null) erros.push('Valor de cada parcela');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ini)) erros.push('1º vencimento das parcelas');
+        if (String(ngValores.plano_entrada_valor || '').trim() && ent == null) erros.push('Entrada (valor inválido)');
+        if (!erros.length) {
+          if (ent != null) linhas.push({ valor: ent, venc: ngValores.plano_entrada_data || '' });
+          for (let i = 0; i < qtd; i++) linhas.push({ valor, venc: semanal ? atSomarDias(ini, 7 * i) : atSomarMeses(ini, i) });
+        }
+      }
+      if (erros.length) return msg('Para montar as parcelas, preencha: ' + erros.join(', ') + '.');
+      const n = linhas.length, pre = semanal ? 'Pagamentos ' : 'Pagamento Parcela ';
+      atPlano = linhas.map((l, i) => ({ acao: pre + atPad(i + 1) + '/' + atPad(n), valor: l.valor, pago: i === 0 ? ngReais(l.valor) : 'N/A', venc: l.venc,
+        situacao: i === 0 ? (l.situacao || 'Efetivado (Entrada)') : 'Em Aberto', baixa: '', quebra: '' }));
+      atPlanoDesenhar();
+      msg(n + ' linha(s) montadas. A 1ª é a entrada; revise valores, vencimentos e situações antes de copiar.');
+    }
+    $('#mf-at-plano-gerar').onclick = atMontarPlano;
+    function atPlanoDesenhar() {
+      const caixa = $('#mf-at-plano'); caixa.innerHTML = '';
+      if (!atPlano.length) { const i = document.createElement('div'); i.className = 'mf-info'; i.textContent = 'Nenhuma parcela montada.'; caixa.appendChild(i); return; }
+      const cab = document.createElement('div'); cab.className = 'mf-info'; cab.textContent = atPlano.length + ' linha(s). Em cada uma: Ação; Valor e Vencimento; Situação e Valor pago.'; caixa.appendChild(cab);
+      atPlano.forEach((l, i) => {
+        const d = document.createElement('div'); d.className = 'mf-pl-lin'; d.title = 'Linha ' + (i + 1);
+        const inp = (val, fn, tipo, dica) => { const x = document.createElement('input'); x.type = tipo || 'text'; x.value = val; x.title = dica; x.addEventListener('input', () => fn(x.value)); d.appendChild(x); return x; };
+        inp(l.acao, v => { l.acao = v; }, 'text', 'Ação').className = 'mf-pl-acao';
+        inp((l.valor / 100).toFixed(2).replace('.', ','), v => { const c = ngCentavos(v); if (c != null) l.valor = c; }, 'text', 'Valor da parcela').inputMode = 'decimal';
+        inp(l.venc, v => { l.venc = v; }, 'date', 'Vencimento');
+        const sel = document.createElement('select'); sel.title = 'Situação';
+        [...new Set([...AT_SITUACOES, l.situacao])].forEach(t => { const o = document.createElement('option'); o.value = o.textContent = t; sel.appendChild(o); });
+        sel.value = l.situacao; sel.onchange = () => { l.situacao = sel.value; };
+        d.appendChild(sel);
+        inp(l.pago, v => { l.pago = v; }, 'text', 'Valor pago');
+        caixa.appendChild(d);
+      });
+    }
+
+    /* ---- cópia para a planilha ---- */
+    const atTexto = k => ({ pedido: $('#mf-ng-f-pedido').value, acordo: $('#mf-ng-f-acordo').value, parcela: $('#mf-ng-f-parcela').value }[k] || '').replace(/\s*\n\s*/g, ' ').trim();
+    function atValidar() {
+      const obrig = ngCtx === 'renegociacao' ? ['proposta', 'nome', 'responsavel'] : ['proposta', 'nome'];
+      const falta = obrig.filter(k => !ngValor(k)).map(k => NG_CAMPOS[k].rot);
+      painel.querySelectorAll('#mf-at-form [data-campo]').forEach(i => i.classList.toggle('mf-erro', falta.includes(NG_CAMPOS[i.dataset.campo].rot)));
+      if (ngValores.contato && !telFormatar(ngValores.contato)) falta.push('Número de contato válido (DDD + número) ou deixe em branco');
+      return falta;
+    }
+    function atLinhas() {
+      if (ngCtx === 'renegociacao') return atPlano.map(l => AT_COL_RENEG.map(([, k]) => {
+        if (k.startsWith('t:')) return atTexto(k.slice(2));
+        if (k === 'p:valor') return ngReais(l.valor);
+        if (k === 'p:venc') return ngData(l.venc);
+        if (k.startsWith('p:')) return l[k.slice(2)] || '';
+        return ngValor(k);
+      }));
+      return [AT_COL_NEG.map(([, k]) => k.startsWith('t:') ? atTexto(k.slice(2)) : ngValor(k))];
+    }
+    $('#mf-at-copiar').onclick = () => {
+      const falta = atValidar();
+      if (falta.length) return msg('Preencha antes de copiar:\n- ' + falta.join('\n- '));
+      if (ngCtx === 'renegociacao' && !atPlano.length) return msg('Monte as parcelas (bloco Renegociação) antes de copiar.');
+      if (!atTexto('pedido') && !atTexto('acordo') && !ngGerarTextos(true) && !confirm('Os textos "Pedido" e "Acordo Realizado" não puderam ser gerados (faltam dados do acordo). Copiar a linha com eles em branco?')) return;
+      const linhas = atLinhas();
+      GM_setClipboard(textoTab(linhas), 'text');
+      msg(ngCtx === 'renegociacao' ? linhas.length + ' linha(s) copiadas (' + AT_COL_RENEG.length + ' colunas, Proposta → Negociação Concluída?). Cole na coluna Proposta da aba Renegociação.'
+        : 'Linha copiada (' + AT_COL_NEG.length + ' colunas, Proposta → Negociação Concluída?). Cole na coluna Proposta da aba Negociação. Campos vazios vão em branco.');
+    };
+    $('#mf-at-mensagem').onclick = () => {
+      const f = ngFaltando();
+      if (f.length) return msg('Para a mensagem, preencha:\n- ' + f.join('\n- '));
+      $('#mf-at-msg-caixa').style.display = '';
+      $('#mf-at-msg-texto').value = ngMontar(ngTextoModelo(ngChave()));
+      msg('Mensagem gerada (modelo editável em Configurações > Gerador de negociações). Revise e copie.');
+    };
+    $('#mf-at-msg-copiar').onclick = () => { const t = $('#mf-at-msg-texto').value; if (!t.trim()) return msg('Gere a mensagem antes.'); GM_setClipboard(t, 'text'); msg('Mensagem copiada.'); };
+    $('#mf-at-sugerir').onclick = () => {
+      const feitos = [];
+      const set = (k, v, rot) => { if (v && !String(ngValores[k] || '').trim()) { ngValores[k] = v; feitos.push(rot); } };
+      set('data_1pag', ngValores.data_entrada || ngValores.data_pagamento || '', 'Data 1° pagamento');
+      set('qtd_parcelas_neg', String(ngValores.quantidade_parcelas || ngValores.qtd_semanas || ngValores.dividir_qtd || '').trim(), 'Quantidade de parcelas');
+      if (ngValores.abrangencia_tipo === 'inteiro') set('parcelas_negociadas', 'Todo Contrato', 'Parcela(s) negociadas');
+      atBloco('#mf-at-acomp', AT_ACOMP);
+      msg(feitos.length ? 'Preenchido do acordo: ' + feitos.join(', ') + '. Revise.' : 'Nada a trazer: os campos já estão preenchidos ou o acordo não tem essas informações.');
+    };
+    $('#mf-at-novo').onclick = () => {
+      if ((ngTemDados() || atPlano.length) && !confirm('Começar um novo atendimento? Os dados digitados serão apagados (o que já foi registrado no histórico continua lá).')) return;
+      Object.keys(ngValores).forEach(k => delete ngValores[k]);
+      atPlano = []; atPlanoAuto = {};
+      ['#mf-ng-f-pedido', '#mf-ng-f-acordo', '#mf-ng-f-parcela', '#mf-at-msg-texto', '#mf-ng-texto'].forEach(x => { $(x).value = ''; });
+      $('#mf-at-msg-caixa').style.display = 'none';
+      atDesenhar(); msg('Pronto para um novo atendimento.');
+    };
+    // cliente da busca do topo -> ficha (pergunta antes de trocar o que já foi digitado). NUNCA o telefone da proposta.
+    function atAplicarCliente() {
+      const st = bsGet();
+      if (!st || !st.cliente) return msg('Busque um cliente antes (campo "Buscar cliente" no topo).');
+      const c = st.cliente.campos;
+      const num = v => String(v || '').replace(/\D/g, '');
+      const novos = {
+        nome: c.nome, proposta: c.proposta, cpf: c.cpf, imei: c.imei, data_proposta: atIso(c.dataProposta), filial: c.filial, atendente: c.vendedor,
+        valor_parcela: c.valorParcela ? bsReais(c.valorParcela) : '', fpd: c.fpd, parcelas_atraso: num(c.parcelasAtraso), dias_atraso: num(c.diasAtraso),
+        vencimento_antigo: atIso(c.vencMaisAntigo), parcela_atual: num(c.parcelaAtual),
+      };
+      if (c.parcelaAtual && !String(ngValores.parcela_inicial || '').trim()) novos.parcela_inicial = num(c.parcelaAtual);
+      const conflitos = Object.entries(novos).filter(([k, v]) => v && String(ngValores[k] || '').trim() && String(ngValores[k]).trim() !== String(v));
+      if (conflitos.length && !confirm(conflitos.length + ' campo(s) já preenchido(s) serão substituídos pelos dados do cliente atual. Continuar?')) return;
+      let n = 0;
+      Object.entries(novos).forEach(([k, v]) => { if (v) { ngValores[k] = v; n++; } });
+      if (novos.parcela_inicial && !ngValores.abrangencia_tipo) ngValores.abrangencia_tipo = 'apartir';
+      if (ngCtx === 'mensagens') atTrocar('negociacao'); else atDesenhar();
+      mostrarAba('neg');
+      msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + n + ' campo(s)). O número de contato não vem da proposta: digite o que o cliente usou.');
+    }
+    $('#mf-at-aplicar').onclick = atAplicarCliente;
+    atDesenhar();
+
 
 
     /* ================= TIMERS E LEMBRETES ATIVOS =================
@@ -4488,23 +5011,23 @@
     (async () => { for (;;) { await sleep(500); try { tmTick(false); if (++tmVoltas % 120 === 0) tmIniciarExpediente(false); } catch (e) { console.warn('[PaymobiFin] timers', e && e.message); } } })();
 
 
-    /* ================= APARÊNCIA (Nova UI / UI Antiga) =================
-       Camada só visual: o painel recebe data-ui="nova" ou "antiga". A Nova UI é CSS escopado + este organizador,
-       que usa OS MESMOS botões de aba e as mesmas páginas (nada é duplicado nem removido). Na UI Antiga,
-       os elementos .mf-ui-nova ficam ocultos e o visual é exatamente o anterior. Módulos novos entram nas duas. */
-    const UI_MAIS = [['cac', 'CAC'], ['ccb', 'CCBs'], ['cta', 'Contas'], ['cfg', 'Configurações']];
+    /* ================= NAVEGAÇÃO E APARÊNCIA (Nova UI / UI Antiga) =================
+       A organização das abas é a mesma nas duas aparências (v12): Atendimento · Histórico · Agenda (Lembretes | Timers)
+       · Relatórios · Mais ▾ (Consulta CAC, CCBs, Contas, Configurações). As páginas e botões de aba são os mesmos de
+       sempre (nada duplicado). A aparência só muda o visual: data-ui="nova" (CSS escopado, ⓘ, chip da conta) ou "antiga". */
+    const UI_MAIS = [['cac', 'Consulta CAC'], ['ccb', 'CCBs'], ['cta', 'Contas'], ['cfg', 'Configurações']];
     const uiAtual = () => painel.dataset.ui;
     // menu "Mais ▾" e o botão "Agenda" (Pagamentos | Timers)
     const abas = $('.mf-abas');
     const btAgenda = document.createElement('button');
-    btAgenda.className = 'mf-ui-nova'; btAgenda.dataset.uiAba = 'agenda';
+    btAgenda.dataset.uiAba = 'agenda';
     btAgenda.innerHTML = 'Agenda <span class="mf-badge" style="display:none"></span>';
     const btMais = document.createElement('button');
-    btMais.className = 'mf-ui-nova'; btMais.dataset.uiAba = 'mais'; btMais.textContent = 'Mais ▾';
+    btMais.dataset.uiAba = 'mais'; btMais.textContent = 'Mais ▾';
     const menu = document.createElement('div');
-    menu.className = 'mf-ui-menu mf-ui-nova';
+    menu.className = 'mf-ui-menu';
     UI_MAIS.forEach(([a, rot]) => { const b = document.createElement('button'); b.dataset.vai = a; b.textContent = rot; b.onclick = () => { menu.classList.remove('aberto'); mostrarAba(a); }; menu.appendChild(b); });
-    abas.querySelector('[data-aba="neg"]').after(btAgenda);
+    abas.querySelector('[data-aba="his"]').after(btAgenda);
     abas.append(btMais, menu);
     btAgenda.onclick = () => mostrarAba(GM_getValue('uiAgenda', 'lem') === 'tim' ? 'tim' : 'lem');
     btMais.onclick = e => { e.stopPropagation(); menu.classList.toggle('aberto'); };
@@ -4512,8 +5035,8 @@
     // sub-abas da Agenda, no topo das duas páginas
     ['lem', 'tim'].forEach(pg => {
       const seg = document.createElement('div');
-      seg.className = 'mf-ui-seg mf-ui-nova';
-      [['lem', 'Pagamentos'], ['tim', 'Timers']].forEach(([a, rot]) => {
+      seg.className = 'mf-ui-seg';
+      [['lem', 'Lembretes'], ['tim', 'Timers']].forEach(([a, rot]) => {
         const b = document.createElement('button'); b.textContent = rot; b.dataset.vai = a; b.classList.toggle('ativa', a === pg);
         b.onclick = () => { GM_setValue('uiAgenda', a); mostrarAba(a); };
         seg.appendChild(b);
@@ -4549,10 +5072,11 @@
     });
     // contadores e estado das abas (Agenda = lembretes + timers vencidos)
     function uiSincronizar() {
-      const a = GM_getValue('abaPainel', 'rel');
+      const a = GM_getValue('abaPainel', 'neg');
       btAgenda.classList.toggle('ativa', a === 'lem' || a === 'tim');
       btMais.classList.toggle('ativa', UI_MAIS.some(([x]) => x === a));
-      btMais.textContent = (UI_MAIS.find(([x]) => x === a) || [, 'Mais'])[1] + ' ▾';
+      btMais.textContent = ({ cac: 'CAC', ccb: 'CCBs', cta: 'Contas', cfg: 'Config.' }[a] || 'Mais') + ' ▾';   // curto: cabe na linha das abas
+      btMais.title = (UI_MAIS.find(([x]) => x === a) || [, 'Mais opções'])[1];
       menu.querySelectorAll('button').forEach(b => b.classList.toggle('ativa', b.dataset.vai === a));
       const n = ['#mf-lb-badge', '#mf-tm-badge'].reduce((s, sel) => s + ($(sel).style.display === 'none' ? 0 : +$(sel).textContent || 0), 0);
       const bd = btAgenda.querySelector('.mf-badge'); bd.textContent = n; bd.style.display = n ? '' : 'none';
@@ -4588,6 +5112,701 @@
     $('#mf-ui-prev-voltar').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); aplicarUI(cfg('aparencia')); };
     aplicarUI(cfg('aparencia'));
 
+    /* ================= EQUIPE: compartilhamento entre os funcionários (Pusher) =================
+       O armazenamento do Tampermonkey é de cada navegador. Para a equipe ver os mesmos lembretes e acordos:
+         · Pusher Channels, canal de PRESENÇA privado: só entra quem assina com a secret do app (a assinatura é feita aqui,
+           com a secret guardada SÓ neste navegador; nada de segredo no código, que é público no GitHub).
+         · Cada mensagem vai criptografada (AES-GCM, chave derivada da "chave da equipe" com PBKDF2): o Pusher só repassa
+           texto cifrado. O Pusher NÃO guarda nada: cada computador mantém a sua cópia local, e quem estava offline recebe
+           o que faltou quando outro funcionário estiver conectado ao mesmo tempo (troca de "resumos").
+         · Uma aba por navegador mantém a conexão (as outras leem o armazenamento); envio pela API REST do Pusher.
+         · Retenção: registros da equipe ficam 30 dias depois da última alteração (lembrete pendente fica até encerrar).
+       Coleções: 'lb' = lembretes compartilhados (e exclusões), 'ac' = histórico de acordos. */
+    const EQ = { app: '2208097', key: 'dabed4eab8cfd1428193', cluster: 'sa1', canal: 'presence-paymobifin-equipe' };
+    const EQ_RETENCAO = 30 * 24 * 3600 * 1000, EQ_LIMITE = 9500, EQ_ABA = 'aba' + Math.random().toString(36).slice(2, 10);
+    function eqId() { let id = GM_getValue('equipeId', ''); if (!id) { id = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); GM_setValue('equipeId', id); } return id; }
+    function eqNomeLocal() { return String(GM_getValue('equipeNome', '') || '').trim() || (typeof contaAtiva === 'function' && contaAtiva() && contaAtiva().apelido) || 'Este computador'; }
+    function eqCfg() { return { nome: String(GM_getValue('equipeNome', '') || '').trim(), secret: String(GM_getValue('equipeSecret', '') || '').trim(), chave: String(GM_getValue('equipeChave', '') || ''), ativa: !!cfg('equipeAtiva') }; }
+    function eqPronta() { const c = eqCfg(); return !!(c.ativa && c.nome && c.secret && c.chave); }
+    function eqMarcarVersao() { GM_setValue('equipeVersao', (GM_getValue('equipeVersao', 0) || 0) + 1); }
+
+    /* ---- criptografia (WebCrypto do navegador) ---- */
+    const eqTE = new TextEncoder(), eqTD = new TextDecoder();
+    const eqB64 = buf => { const b = new Uint8Array(buf); let t = ''; for (let i = 0; i < b.length; i += 0x8000) t += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(t); };
+    const eqDeB64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+    const eqHex = buf => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+    async function eqHmac(segredo, texto) {
+      const k = await crypto.subtle.importKey('raw', eqTE.encode(segredo), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      return eqHex(await crypto.subtle.sign('HMAC', k, eqTE.encode(texto)));
+    }
+    let eqChaveCache = null;
+    async function eqChaveAes() {
+      const c = eqCfg().chave;
+      if (eqChaveCache && eqChaveCache.de === c) return eqChaveCache.k;
+      const base = await crypto.subtle.importKey('raw', eqTE.encode(c), 'PBKDF2', false, ['deriveKey']);
+      const k = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: eqTE.encode('paymobifin-equipe-v1'), iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+      eqChaveCache = { de: c, k };
+      return k;
+    }
+    // verificador da chave (6 hex de outra derivação lenta): mostra quem está com a chave diferente, sem revelar a chave
+    let eqVerifCache = null;
+    async function eqVerificador() {
+      const c = eqCfg().chave;
+      if (eqVerifCache && eqVerifCache.de === c) return eqVerifCache.v;
+      const base = await crypto.subtle.importKey('raw', eqTE.encode(c), 'PBKDF2', false, ['deriveBits']);
+      const v = eqHex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: eqTE.encode('paymobifin-verificador-v1'), iterations: 150000, hash: 'SHA-256' }, base, 64)).slice(0, 6);
+      eqVerifCache = { de: c, v };
+      return v;
+    }
+    async function eqCifrar(obj) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await eqChaveAes(), eqTE.encode(JSON.stringify(obj)));
+      return { v: 1, iv: eqB64(iv), c: eqB64(ct) };
+    }
+    async function eqDecifrar(env) {
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: eqDeB64(env.iv) }, await eqChaveAes(), eqDeB64(env.c));
+      return JSON.parse(eqTD.decode(pt));
+    }
+    // MD5 (exigido pela assinatura da API REST do Pusher: body_md5)
+    function eqMd5(str) {
+      const b = eqTE.encode(str), n = b.length, w = new Uint32Array((((n + 8) >> 6) + 1) * 16);
+      for (let i = 0; i < n; i++) w[i >> 2] |= b[i] << ((i % 4) * 8);
+      w[n >> 2] |= 0x80 << ((n % 4) * 8);
+      w[w.length - 2] = n * 8;
+      const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21], K = [];
+      for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) >>> 0;
+      let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+      for (let o = 0; o < w.length; o += 16) {
+        let A = a0, B = b0, C = c0, D = d0;
+        for (let i = 0; i < 64; i++) {
+          let F, g;
+          if (i < 16) { F = (B & C) | (~B & D); g = i; } else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+          else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; } else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+          F = (F + A + K[i] + w[o + g]) >>> 0;
+          A = D; D = C; C = B;
+          const r = S[(i >> 4) * 4 + (i % 4)];
+          B = (B + ((F << r) | (F >>> (32 - r)))) >>> 0;
+        }
+        a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+      }
+      return [a0, b0, c0, d0].map(x => [0, 8, 16, 24].map(sh => ((x >>> sh) & 255).toString(16).padStart(2, '0')).join('')).join('');
+    }
+
+    /* ---- envio: API REST do Pusher (assinada com a secret local); fila com lotes de até 10 eventos ---- */
+    async function eqPost(caminho, corpo) {
+      const c = eqCfg(), body = JSON.stringify(corpo), ts = Math.floor(Date.now() / 1000);
+      const q = 'auth_key=' + EQ.key + '&auth_timestamp=' + ts + '&auth_version=1.0&body_md5=' + eqMd5(body);
+      const path = '/apps/' + EQ.app + caminho;
+      const sig = await eqHmac(c.secret, 'POST\n' + path + '\n' + q);
+      return new Promise(res => {
+        try {
+          GM_xmlhttpRequest({ method: 'POST', url: 'https://api-' + EQ.cluster + '.pusher.com' + path + '?' + q + '&auth_signature=' + sig, headers: { 'Content-Type': 'application/json' }, data: body, timeout: 15000,
+            onload: r => res({ ok: r.status >= 200 && r.status < 300, status: r.status }), onerror: () => res({ ok: false, status: 0 }), ontimeout: () => res({ ok: false, status: 0 }) });
+        } catch (_) { res({ ok: false, status: 0 }); }
+      });
+    }
+    const eqFila = [];
+    let eqEnviando = false, eqErroEnvio = '';
+    function eqEnfileirar(nome, dados) { if (!eqPronta()) return; eqFila.push({ nome, dados }); eqDespachar(); }
+    async function eqDespachar() {
+      if (eqEnviando) return;
+      eqEnviando = true;
+      try {
+        while (eqFila.length && eqPronta()) {
+          const lote = [];
+          while (eqFila.length && lote.length < 10) {
+            const ev = eqFila.shift(), dados = JSON.stringify(await eqCifrar(ev.dados));
+            if (dados.length > EQ_LIMITE) { eqErroEnvio = 'um registro passou do limite de tamanho do Pusher e não foi enviado (' + (ev.dados.rec && ev.dados.rec.proposta || '') + ')'; continue; }
+            lote.push({ channel: EQ.canal, name: ev.nome, data: dados, ...(eqSocket ? { socket_id: eqSocket } : {}) });
+          }
+          if (!lote.length) continue;
+          let r = await eqPost('/batch_events', { batch: lote });
+          if (!r.ok) { await sleep(2000); r = await eqPost('/batch_events', { batch: lote }); }
+          eqErroEnvio = r.ok ? '' : 'falha ao enviar para o Pusher (HTTP ' + r.status + (r.status === 401 ? ': secret incorreta' : '') + '). O registro está salvo aqui e vai na próxima sincronização.';
+          await sleep(250);
+        }
+      } finally { eqEnviando = false; eqStatusUI(); }
+    }
+    // registro alterado aqui -> equipe (os outros mesclam pela versão)
+    function eqEnviar(col, rec) { if (eqPronta()) eqEnfileirar('mf-reg', { col, rec: eqEnxugar(col, rec), de: eqId() }); }
+    // cabe no limite de 10 KB do Pusher: corta o histórico mais antigo se precisar (a cópia local fica inteira)
+    function eqEnxugar(col, rec) {
+      let r = rec;
+      for (let corte = 40; JSON.stringify(r).length > 6500 && corte >= 0; corte -= 10) {
+        r = { ...r };
+        if (Array.isArray(r.historico)) r.historico = r.historico.slice(-corte);
+        if (Array.isArray(r.revisoes)) r.revisoes = r.revisoes.slice(-Math.max(1, Math.floor(corte / 4)));
+        if (corte === 0 && r.original) delete r.original;
+      }
+      return r;
+    }
+
+    /* ---- coleções: lista local, mescla e retenção ---- */
+    const eqExpirado = (col, r) => {
+      const idade = Date.now() - (r.atualizadoEm || r.criadoEm || 0);
+      if (col === 'lb') return (r.excluido || r.status !== 'pendente') && idade > EQ_RETENCAO;
+      return idade > EQ_RETENCAO;
+    };
+    // impressão digital do conteúdo: mesma versão com conteúdo diferente (dois funcionários alterando ao mesmo tempo, sem
+    // conexão) também é detectada, e os dois lados trocam e somam os registros
+    const eqN = (col, r) => eqMd5(JSON.stringify(col === 'lb'
+      ? [r.excluido ? 1 : 0, r.atualizadoEm, r.atualizadoPor, (r.pagamentos || []).map(p => p.id || p.registradoEm).sort(), (r.historico || []).map(h => h.em + '|' + h.texto).sort()]
+      : [r.atualizadoEm, r.atualizadoPor, (r.revisoes || []).map(v => v.id).sort()])).slice(0, 10);
+    function eqTodos(col) {
+      if (col === 'lb') {
+        lbRecarregar();
+        const marcas = Object.values(GM_getValue(LB_EXCLUIDOS, {}) || {});
+        return [...lbBase.itens.filter(it => it.compartilhado), ...marcas].filter(r => !eqExpirado('lb', r));
+      }
+      acRecarregar();
+      return acBase.itens.filter(r => !eqExpirado('ac', r));
+    }
+    // quem vence: versão maior; empate: alteração mais recente; empate: id do autor (todos decidem igual)
+    function eqVence(a, b) {
+      if (!a) return true;
+      if ((b.rev || 1) !== (a.rev || 1)) return (b.rev || 1) > (a.rev || 1);
+      if ((b.atualizadoEm || 0) !== (a.atualizadoEm || 0)) return (b.atualizadoEm || 0) > (a.atualizadoEm || 0);
+      return String(b.atualizadoPor || '') > String(a.atualizadoPor || '');
+    }
+    // pagamentos, acompanhamento e revisões se SOMAM (dois funcionários mexendo ao mesmo tempo não perdem nada)
+    function eqUnir(col, a, b) {
+      const base = JSON.parse(JSON.stringify(eqVence(a, b) ? b : a));
+      if (!a || a.excluido || b.excluido) return base;
+      const uniao = (x, y, chave, ord) => { const m = new Map(); [...(x || []), ...(y || [])].forEach(i => { if (i) m.set(chave(i), i); }); return [...m.values()].sort(ord); };
+      if (col === 'lb') {
+        base.pagamentos = uniao(a.pagamentos, b.pagamentos, p => p.id || p.registradoEm + ':' + p.valor, (x, y) => (x.registradoEm || 0) - (y.registradoEm || 0));
+        base.historico = uniao(a.historico, b.historico, h => h.em + '|' + h.texto, (x, y) => x.em - y.em).slice(-60);
+      } else base.revisoes = uniao(a.revisoes, b.revisoes, r => r.id, (x, y) => x.em - y.em);
+      return base;
+    }
+    // aplica um registro vindo da equipe na cópia local; avisa quem está com o sistema aberto
+    function eqAplicar(col, rec) {
+      if (!rec || typeof rec.id !== 'string' || eqExpirado(col, rec)) return false;
+      if (col === 'lb') {
+        lbRecarregar();
+        if (lbBase.somenteLeitura) return false;
+        const marcas = GM_getValue(LB_EXCLUIDOS, {}) || {};
+        const atual = lbBase.itens.find(x => x.id === rec.id) || marcas[rec.id];
+        if (rec.excluido) {
+          if (atual && !eqVence(atual, rec)) return false;
+          if (atual && atual.excluido && atual.rev === rec.rev) return false;
+          lbBase.itens = lbBase.itens.filter(x => x.id !== rec.id);
+          GM_setValue(LB_EXCLUIDOS, { ...marcas, [rec.id]: rec });
+          GM_setValue(LB_CHAVE, { versao: LB_VERSAO, itens: lbBase.itens, invalidos: lbBase.invalidos });
+          eqMarcarVersao(); lbAtualizar();
+          if (atual && !atual.excluido) eqAvisar('Lembrete excluído por ' + (rec.atualizadoPorNome || 'outro funcionário'), (atual.proposta ? 'Proposta ' + atual.proposta : '') + (atual.cliente ? ' · ' + atual.cliente : ''), null);
+          return true;
+        }
+        if (atual && atual.excluido && !eqVence(atual, rec)) return false;
+        const vivo = atual && !atual.excluido ? atual : null;
+        const novo = lbV2({ ...eqUnir('lb', vivo, rec), compartilhado: true });
+        if (vivo && JSON.stringify(vivo) === JSON.stringify(novo)) return false;
+        const i = lbBase.itens.findIndex(x => x.id === rec.id);
+        if (i >= 0) lbBase.itens[i] = novo; else lbBase.itens.push(novo);
+        GM_setValue(LB_CHAVE, { versao: LB_VERSAO, itens: lbBase.itens, invalidos: lbBase.invalidos });
+        eqMarcarVersao(); lbAtualizar();
+        if (rec.atualizadoPor !== eqId()) eqAvisarLembrete(vivo, novo);
+        return true;
+      }
+      acRecarregar();
+      if (acBase.somenteLeitura) return false;
+      const atual = acBase.itens.find(x => x.id === rec.id);
+      const novo = eqUnir('ac', atual, rec);
+      if (atual && JSON.stringify(atual) === JSON.stringify(novo)) return false;
+      const i = acBase.itens.findIndex(x => x.id === rec.id);
+      if (i >= 0) acBase.itens[i] = novo; else acBase.itens.push(novo);
+      acGravar();
+      if (rec.atualizadoPor !== eqId()) eqAvisar(atual ? 'Acordo alterado por ' + (novo.atualizadoPorNome || 'outro funcionário') : 'Novo acordo registrado por ' + (novo.criadoPorNome || 'outro funcionário'),
+        'Proposta ' + (novo.cliente.proposta || '—') + ' · ' + (novo.cliente.nome || '') + ' · ' + (HS_STATUS[novo.status] || novo.status), { aba: 'his', id: novo.id });
+      return true;
+    }
+    function eqAvisarLembrete(antes, depois) {
+      const quem = depois.atualizadoPorNome || depois.criadoPorNome || 'outro funcionário';
+      const cab = (depois.proposta ? 'Proposta ' + depois.proposta : 'Sem proposta') + (depois.cliente ? ' · ' + depois.cliente : '');
+      const alvo = { aba: 'lem', id: depois.id };
+      if (!antes) return eqAvisar('Novo lembrete de pagamento — ' + quem, cab + '\nSaldo ' + ngReais(lbSaldo(depois)) + ' de ' + ngReais(depois.total) + (depois.proxima ? ' · acompanhar em ' + ngData(depois.proxima) : ''), alvo);
+      const novosPg = (depois.pagamentos || []).filter(p => !(antes.pagamentos || []).some(q => (q.id || '') === (p.id || '')));
+      if (novosPg.length) return eqAvisar('Pagamento registrado — ' + quem, cab + '\n' + novosPg.map(p => ngReais(p.valor) + (p.data ? ' em ' + ngData(p.data) : '')).join('; ') + ' · saldo ' + ngReais(lbSaldo(depois)), alvo);
+      if (antes.status !== depois.status) return eqAvisar('Lembrete ' + ({ concluido: 'concluído', cancelado: 'cancelado', pendente: 'reaberto' }[depois.status] || depois.status) + ' — ' + quem, cab, alvo);
+      eqAvisar('Lembrete atualizado — ' + quem, cab, alvo);
+    }
+    // retenção: tira da cópia local o que passou de 30 dias (só registros da equipe; lembretes só deste navegador ficam)
+    function eqLimpar() {
+      let n = 0;
+      lbRecarregar();
+      if (!lbBase.somenteLeitura) {
+        const antes = lbBase.itens.length;
+        lbBase.itens = lbBase.itens.filter(it => !(it.compartilhado && eqExpirado('lb', it)));
+        const marcas = GM_getValue(LB_EXCLUIDOS, {}) || {}, ficam = {};
+        Object.entries(marcas).forEach(([k, v]) => { if (!eqExpirado('lb', v)) ficam[k] = v; else n++; });
+        if (lbBase.itens.length !== antes || Object.keys(ficam).length !== Object.keys(marcas).length) {
+          n += antes - lbBase.itens.length;
+          GM_setValue(LB_CHAVE, { versao: LB_VERSAO, itens: lbBase.itens, invalidos: lbBase.invalidos });
+          GM_setValue(LB_EXCLUIDOS, ficam);
+        }
+      }
+      acRecarregar();
+      if (!acBase.somenteLeitura) {
+        const antes = acBase.itens.length;
+        acBase.itens = acBase.itens.filter(r => !eqExpirado('ac', r));
+        if (acBase.itens.length !== antes) { n += antes - acBase.itens.length; GM_setValue(AC_CHAVE, { versao: AC_VERSAO, itens: acBase.itens }); }
+      }
+      if (n) { eqMarcarVersao(); GM_setValue('equipeLimpeza', { em: Date.now(), removidos: n }); }
+      return n;
+    }
+
+    /* ---- recebimento ---- */
+    const eqVistos = new Map();   // id -> { n (impressão digital), em } que passaram pelo canal (não reenvia o que outro acabou de mandar)
+    let eqFalhasChave = 0;
+    async function eqReceber(evento, bruto) {
+      let p;
+      try { p = await eqDecifrar(typeof bruto === 'string' ? JSON.parse(bruto) : bruto); }
+      catch (_) { eqFalhasChave++; eqStatusUI(); return; }   // outra chave da equipe (ou mensagem que não é nossa): ignora
+      if (!p || !p.col || !['lb', 'ac'].includes(p.col)) return;
+      if (evento === 'mf-reg' && p.rec) { eqVistos.set(p.rec.id, { n: eqN(p.col, p.rec), em: Date.now() }); eqAplicar(p.col, p.rec); }
+      if (evento === 'mf-resumo') eqResumoRecebido(p);
+    }
+    // resumo = lista [id, versão, impressão digital] de tudo o que o funcionário tem; quem tem algo mais novo (ou diferente) manda
+    let eqUltimoResumo = 0, eqResumosResposta = [];
+    async function eqEnviarResumo(forcar, resposta) {
+      if (!eqPronta()) return;
+      if (resposta) {   // pedido do que falta aqui: rápido, mas limitado (nunca vira ping-pong)
+        eqResumosResposta = eqResumosResposta.filter(t => Date.now() - t < 60000);
+        if (eqResumosResposta.length >= 8 || Date.now() - (eqResumosResposta.slice(-1)[0] || 0) < 3000) return;
+        eqResumosResposta.push(Date.now());
+      } else if (!forcar && Date.now() - eqUltimoResumo < 15000) return;
+      eqUltimoResumo = Date.now();
+      eqLimpar();
+      for (const col of ['lb', 'ac']) {
+        const itens = eqTodos(col).map(r => [r.id, r.rev || 1, eqN(col, r)]);
+        const partes = Math.max(1, Math.ceil(itens.length / 150));
+        for (let i = 0; i < partes; i++) eqEnfileirar('mf-resumo', { col, de: eqId(), lote: eqUltimoResumo, parte: i, total: partes, itens: itens.slice(i * 150, i * 150 + 150) });
+      }
+    }
+    const eqResumos = {};
+    function eqResumoRecebido(p) {
+      if (p.de === eqId()) return;
+      const k = p.de + '|' + p.col + '|' + p.lote;
+      const r = eqResumos[k] = eqResumos[k] || { partes: new Set(), itens: new Map() };
+      r.partes.add(p.parte);
+      (p.itens || []).forEach(([id, rev, n]) => r.itens.set(id, { rev, n }));
+      if (r.partes.size < p.total) return;
+      delete eqResumos[k];
+      const meus = eqTodos(p.col), meusPorId = new Map(meus.map(x => [x.id, x]));
+      const faltaLa = meus.filter(x => { const d = r.itens.get(x.id); return !d || d.rev < (x.rev || 1) || (d.rev === (x.rev || 1) && d.n !== eqN(p.col, x)); });
+      const faltaAqui = [...r.itens].some(([id, d]) => { const x = meusPorId.get(id); return !x || (x.rev || 1) < d.rev || ((x.rev || 1) === d.rev && eqN(p.col, x) !== d.n); });
+      if (faltaAqui) setTimeout(() => eqEnviarResumo(false, true), 500 + Math.random() * 1500);   // pede o que falta aqui
+      if (!faltaLa.length) return;
+      // espera um pouco: se outro funcionário já mandou o mesmo registro DEPOIS deste pedido, não manda de novo
+      const pedidoEm = Date.now();
+      setTimeout(() => faltaLa.forEach(x => {
+        const v = eqVistos.get(x.id), n = eqN(p.col, x);
+        if (v && v.n === n && v.em >= pedidoEm) return;
+        eqVistos.set(x.id, { n, em: Date.now() });
+        eqEnfileirar('mf-reg', { col: p.col, rec: eqEnxugar(p.col, x), de: eqId() });
+      }), 300 + Math.random() * 1700);
+    }
+
+    /* ---- conexão: uma aba por navegador (as outras acompanham pelo armazenamento) ---- */
+    let eqPusher = null, eqCanal = null, eqSocket = null, eqEstado = 'desligado', eqMembros = [], eqChaveDiferente = [];
+    const eqLib = () => (typeof Pusher !== 'undefined' ? Pusher : window.Pusher || PAGINA.Pusher);
+    function eqConectar() {
+      const Lib = eqLib();
+      if (!Lib) { eqEstado = 'biblioteca do Pusher não carregou (sem internet ou bloqueada)'; return eqStatusUI(); }
+      const c = eqCfg();
+      try {
+        eqPusher = new Lib(EQ.key, {
+          cluster: EQ.cluster, forceTLS: true,
+          channelAuthorization: {
+            customHandler: (prm, cb) => {
+              eqVerificador().then(v => {
+                const dados = JSON.stringify({ user_id: eqId(), user_info: { nome: c.nome, v } });
+                return eqHmac(c.secret, prm.socketId + ':' + prm.channelName + ':' + dados).then(sig => cb(null, { auth: EQ.key + ':' + sig, channel_data: dados }));
+              }).catch(e => cb(e, null));
+            },
+          },
+        });
+      } catch (e) { eqEstado = 'erro ao iniciar o Pusher'; eqPusher = null; return eqStatusUI(); }
+      eqPusher.connection.bind('state_change', st => { eqEstado = st.current; if (st.current !== 'connected') eqSocket = null; eqStatusUI(); });
+      eqPusher.connection.bind('connected', () => { eqSocket = eqPusher.connection.socket_id; });
+      eqCanal = eqPusher.subscribe(EQ.canal);
+      const membros = async () => {
+        const l = [], dif = [], meu = await eqVerificador();
+        try { eqCanal.members.each(m => { const n = (m.info && m.info.nome) || m.id; l.push(n); if (m.id !== eqId() && m.info && m.info.v && m.info.v !== meu) dif.push(n); }); } catch (_) {}
+        eqMembros = l; eqChaveDiferente = dif;
+        GM_setValue('equipeOnline', { em: Date.now(), nomes: l, dif });
+        eqStatusUI();
+      };
+      eqCanal.bind('pusher:subscription_succeeded', () => { eqEstado = 'conectado'; membros(); eqEnviarResumo(true); });
+      eqCanal.bind('pusher:subscription_error', () => { eqEstado = 'acesso negado ao canal (confira a secret do Pusher)'; eqStatusUI(); });
+      eqCanal.bind('pusher:member_added', membros);
+      eqCanal.bind('pusher:member_removed', membros);
+      ['mf-reg', 'mf-resumo'].forEach(ev => eqCanal.bind(ev, d => eqReceber(ev, d)));
+    }
+    function eqDesconectar() {
+      try { if (eqPusher) eqPusher.disconnect(); } catch (_) {}
+      eqPusher = eqCanal = eqSocket = null; eqMembros = []; eqEstado = eqPronta() ? 'em espera (outra aba está conectada)' : 'desligado';
+      eqStatusUI();
+    }
+    function eqCiclo() {
+      const pronta = eqPronta(), l = GM_getValue('equipeLider', null), agora = Date.now();
+      const livre = !l || l.aba === EQ_ABA || agora - (l.em || 0) > 15000;
+      if (pronta && livre) {
+        GM_setValue('equipeLider', { aba: EQ_ABA, em: agora });
+        if (!eqPusher) setTimeout(() => { const x = GM_getValue('equipeLider', null); if (x && x.aba === EQ_ABA && !eqPusher && eqPronta()) eqConectar(); }, 400);   // duas abas ao mesmo tempo: fica uma
+      } else if (eqPusher) eqDesconectar();
+      if (!pronta && eqEstado !== 'desligado') { eqEstado = 'desligado'; }
+      eqStatusUI();
+    }
+    window.addEventListener('beforeunload', () => { const l = GM_getValue('equipeLider', null); if (l && l.aba === EQ_ABA) GM_deleteValue('equipeLider'); });
+
+    /* ---- avisos (todas as abas mostram; fechar em uma fecha em todas) ---- */
+    function eqAvisar(titulo, texto, alvo) {
+      const lista = (GM_getValue('equipeAvisos', []) || []).filter(a => Date.now() - a.em < 30 * 60 * 1000).slice(-19);
+      const av = { id: 'av' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), em: Date.now(), titulo, texto, alvo };
+      GM_setValue('equipeAvisos', [...lista, av]);
+      eqDesenharAvisos();
+      if (window.Notification && Notification.permission === 'granted') { try { new Notification('PaymobiFin - ' + titulo, { body: texto }); } catch (_) {} }
+    }
+    let eqCaixaAvisos = null;
+    function eqDesenharAvisos() {
+      const vistos = GM_getValue('equipeAvisosVistos', []) || [], todos = GM_getValue('equipeAvisos', []) || [];
+      const recentes = todos.filter(a => Date.now() - a.em < 30 * 60 * 1000);
+      if (recentes.length !== todos.length) GM_setValue('equipeAvisos', recentes);   // avisos têm nome/proposta: não ficam guardados
+      const ativos = recentes.filter(a => !vistos.includes(a.id));
+      if (!ativos.length) { if (eqCaixaAvisos) { eqCaixaAvisos.remove(); eqCaixaAvisos = null; } return; }
+      if (!eqCaixaAvisos) {
+        eqCaixaAvisos = document.createElement('div'); eqCaixaAvisos.id = 'mf-eq-avisos';
+        document.body.appendChild(eqCaixaAvisos);
+      }
+      eqCaixaAvisos.innerHTML = '';
+      const st = document.createElement('style');
+      st.textContent = '#mf-eq-avisos{position:fixed;right:16px;top:16px;z-index:2147483646;width:330px;max-width:calc(100vw - 32px);display:flex;flex-direction:column;gap:8px;font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif}' +
+        '#mf-eq-avisos .av{background:#fff;color:#1f2937;border:1px solid #bfdbfe;border-left:5px solid #2563eb;border-radius:10px;box-shadow:0 10px 30px #0003;padding:10px 12px}' +
+        '#mf-eq-avisos b{display:block;margin-bottom:2px}#mf-eq-avisos p{margin:0;white-space:pre-wrap;color:#475569}' +
+        '#mf-eq-avisos button{cursor:pointer;border:0;border-radius:6px;padding:4px 8px;margin:6px 6px 0 0;font-size:12px;font-weight:600;background:#e2e8f0;color:#1e293b}#mf-eq-avisos button.pri{background:#2563eb;color:#fff}';
+      eqCaixaAvisos.appendChild(st);
+      const fechar = ids => { GM_setValue('equipeAvisosVistos', [...(GM_getValue('equipeAvisosVistos', []) || []), ...ids].slice(-200)); eqDesenharAvisos(); };
+      ativos.slice(-4).forEach(a => {
+        const d = document.createElement('div'); d.className = 'av';
+        const b = document.createElement('b'); b.textContent = '👥 ' + a.titulo;
+        const p = document.createElement('p'); p.textContent = a.texto;
+        d.append(b, p);
+        if (a.alvo) {
+          const ver = document.createElement('button'); ver.className = 'pri'; ver.textContent = 'Ver';
+          ver.onclick = () => {
+            if (GM_getValue('min', false)) { GM_setValue('min', false); aplicarMin(false); trazerParaTela(); }
+            if (a.alvo.aba === 'lem') { lbRecarregar(); lbAberto = a.alvo.id; lbFiltro = 'todos'; mostrarAba('lem'); lbDesenhar(); }
+            else { hsAberto = a.alvo.id; mostrarAba('his'); hsDesenhar(); }
+            fechar([a.id]);
+          };
+          d.appendChild(ver);
+        }
+        const ok = document.createElement('button'); ok.textContent = 'OK'; ok.onclick = () => fechar([a.id]);
+        d.appendChild(ok);
+        eqCaixaAvisos.appendChild(d);
+      });
+      if (ativos.length > 1) { const t = document.createElement('button'); t.textContent = 'Fechar todos (' + ativos.length + ')'; t.onclick = () => fechar(ativos.map(a => a.id)); eqCaixaAvisos.appendChild(t); }
+    }
+
+    /* ---- configuração (Configurações > Equipe) ---- */
+    function eqStatusUI() {
+      const c = eqCfg(), onl = GM_getValue('equipeOnline', null);
+      let t;
+      if (!c.ativa) t = 'Compartilhamento desligado: lembretes e histórico ficam só neste navegador.';
+      else if (!c.nome || !c.secret || !c.chave) t = 'Falta preencher: ' + [!c.nome && 'seu nome', !c.secret && 'secret do Pusher', !c.chave && 'chave da equipe'].filter(Boolean).join(', ') + '.';
+      else if (eqPusher) t = 'Equipe: ' + eqEstado + (eqMembros.length ? ' · online: ' + eqMembros.join(', ') : '');
+      else t = 'Equipe: ' + (onl && Date.now() - onl.em < 60000 ? 'conectada por outra aba · online: ' + (onl.nomes || []).join(', ') : eqEstado);
+      const dif = eqPusher ? eqChaveDiferente : ((onl && Date.now() - onl.em < 60000 && onl.dif) || []);
+      if (c.ativa && dif.length) t += ' · ⚠ chave da equipe diferente de: ' + dif.join(', ') + ' (vocês não conseguem ler as mensagens um do outro; combinem a mesma chave)';
+      else if (eqFalhasChave) t += ' · ' + eqFalhasChave + ' mensagem(ns) com outra chave da equipe (ignoradas)';
+      if (eqErroEnvio) t += ' · ' + eqErroEnvio;
+      const lim = GM_getValue('equipeLimpeza', null);
+      [$('#mf-eq-status'), $('#mf-hs-equipe')].forEach(el => { if (el) el.textContent = t; });
+      if (lim && $('#mf-hs-equipe') && Date.now() - lim.em < 24 * 3600 * 1000) $('#mf-hs-equipe').textContent += ' · ' + lim.removidos + ' registro(s) com mais de 30 dias saíram hoje';
+    }
+    $('#mf-eq-nome').value = eqCfg().nome;
+    $('#mf-eq-secret').value = eqCfg().secret ? '••••••••' : '';
+    $('#mf-eq-chave').value = eqCfg().chave ? '••••••••' : '';
+    $('#mf-eq-ativa').checked = cfg('equipeAtiva');
+    [['#mf-eq-secret-ver', '#mf-eq-secret'], ['#mf-eq-chave-ver', '#mf-eq-chave']].forEach(([b, i]) => { $(b).onclick = () => { $(i).type = $(i).type === 'password' ? 'text' : 'password'; }; });
+    ['#mf-eq-secret', '#mf-eq-chave'].forEach(i => $(i).addEventListener('focus', () => { if ($(i).value === '••••••••') $(i).value = ''; }));
+    $('#mf-eq-salvar').onclick = () => {
+      const nome = limpoTxt($('#mf-eq-nome').value).slice(0, 40), sec = $('#mf-eq-secret').value.trim(), ch = $('#mf-eq-chave').value;
+      if (!nome) return msg('Informe seu nome (é como a equipe vê quem registrou).');
+      GM_setValue('equipeNome', nome);
+      if (sec && sec !== '••••••••') { if (!/^[0-9a-f]{20}$/i.test(sec)) return msg('A secret do Pusher tem 20 caracteres (letras a–f e números). Confira no painel do Pusher, em App Keys.'); GM_setValue('equipeSecret', sec); }
+      if (ch && ch !== '••••••••') { if (ch.length < 8) return msg('A chave da equipe precisa ter pelo menos 8 caracteres (use a mesma nos 4 computadores).'); GM_setValue('equipeChave', ch); eqChaveCache = null; }
+      GM_setValue('equipeAtiva', $('#mf-eq-ativa').checked);
+      $('#mf-eq-secret').value = eqCfg().secret ? '••••••••' : ''; $('#mf-eq-chave').value = eqCfg().chave ? '••••••••' : '';
+      $('#mf-eq-secret').type = $('#mf-eq-chave').type = 'password';
+      eqDesconectar(); GM_deleteValue('equipeLider'); eqCiclo();
+      msg(eqPronta() ? 'Equipe configurada. Conectando…' : 'Configuração salva. ' + ($('#mf-eq-ativa').checked ? 'Preencha secret e chave para conectar.' : 'Compartilhamento desligado.'));
+      lbDesenhar();
+    };
+    $('#mf-eq-sync').onclick = () => { if (!eqPronta()) return msg('Configure e ligue o compartilhamento antes.'); if (!eqPusher) return msg('A conexão está em outra aba do sistema: a sincronização acontece por lá.'); eqEnviarResumo(true); msg('Sincronizando com quem está online…'); };
+    $('#mf-eq-exportar').onclick = () => {
+      lbRecarregar(); acRecarregar();
+      const json = JSON.stringify({ tipo: 'PaymobiFin-Assistente-equipe', versao: 1, exportadoEm: new Date().toISOString(), lembretes: lbBase.itens.filter(i => i.compartilhado),
+        exclusoes: GM_getValue(LB_EXCLUIDOS, {}) || {}, acordos: acBase.itens }, null, 1);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = 'equipe-paymobifin-' + lbHoje() + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      msg('Backup da equipe exportado. O arquivo tem dados de clientes: guarde em local restrito.');
+    };
+    $('#mf-eq-importar').onclick = () => $('#mf-eq-arquivo').click();
+    $('#mf-eq-arquivo').addEventListener('change', async () => {
+      const f = $('#mf-eq-arquivo').files[0]; $('#mf-eq-arquivo').value = '';
+      if (!f) return;
+      let d; try { d = JSON.parse(await f.text()); } catch (_) { return msg('Arquivo inválido: não é um JSON.'); }
+      if (!d || d.tipo !== 'PaymobiFin-Assistente-equipe') return msg('Arquivo não reconhecido como backup da equipe.');
+      let n = 0;
+      (d.lembretes || []).forEach(r => { const y = lbMigrar(r); if (y && eqAplicar('lb', { ...y, compartilhado: true })) n++; });
+      Object.values(d.exclusoes || {}).forEach(r => { if (eqAplicar('lb', r)) n++; });
+      (d.acordos || []).forEach(r => { if (r && r.cliente && eqAplicar('ac', r)) n++; });
+      msg('Importação: ' + n + ' registro(s) novos ou mais recentes. Nada foi apagado (registros com mais de 30 dias não entram).');
+      hsDesenhar();
+    });
+    // outras abas: acompanham as mudanças pelo armazenamento
+    let eqVersaoVista = GM_getValue('equipeVersao', 0);
+    setInterval(() => {
+      const v = GM_getValue('equipeVersao', 0);
+      if (v !== eqVersaoVista) { eqVersaoVista = v; lbRecarregar(); lbAtualizar(); acRecarregar(); hsDesenhar(); }
+      eqDesenharAvisos();
+    }, 2000);
+    setInterval(() => { if (eqLimpar()) { lbAtualizar(); hsDesenhar(); } }, 60 * 60 * 1000);
+    setInterval(eqCiclo, 5000);
+
+    /* ================= HISTÓRICO DE ACORDOS DA EQUIPE =================
+       GM 'mfAcordos' = { versao, itens }. Registro: cliente (nome, proposta, número de contato), modalidade, situação,
+       textos da planilha, campos digitados (sem CPF), parcelas da Renegociação, autor e revisões. Nada é sobrescrito:
+       cada correção vira uma revisão (quem, quando, motivo, de → para). "Anular" muda a situação; não apaga. */
+    const AC_CHAVE = 'mfAcordos', AC_VERSAO = 1;
+    const HS_STATUS = { realizado: 'Acordo realizado', pendente: 'Solicitação pendente', nao_concluido: 'Não concluída', anulado: 'Anulado' };
+    function acCarregar() {
+      const raw = GM_getValue(AC_CHAVE, null);
+      if (!raw || typeof raw !== 'object') return { versao: AC_VERSAO, itens: [] };
+      if ((raw.versao | 0) > AC_VERSAO) return { versao: raw.versao, itens: Array.isArray(raw.itens) ? raw.itens : [], somenteLeitura: true };
+      return { versao: AC_VERSAO, itens: Array.isArray(raw.itens) ? raw.itens.filter(x => x && typeof x.id === 'string' && x.cliente) : [] };
+    }
+    let acBase = acCarregar(), hsAberto = null, hsCorrigindo = null;
+    function acRecarregar() { acBase = acCarregar(); }
+    function acGravar() { GM_setValue(AC_CHAVE, { versao: AC_VERSAO, itens: acBase.itens }); eqMarcarVersao(); hsDesenhar(); }
+    function acSalvar(rec) {
+      if (acBase.somenteLeitura) { msg('O histórico salvo é de uma versão mais nova do script: atualize o script antes de alterar.'); return false; }
+      acGravar();
+      if (rec) eqEnviar('ac', rec);
+      return true;
+    }
+    const hsResumoValores = r => {
+      const v = r.valores || {}, l = [];
+      Object.entries(v).forEach(([k, x]) => {
+        const def = NG_CAMPOS[k];
+        if (!def || ['nome', 'proposta', 'contato', 'observacoes'].includes(k) || def.tipo === 'check' || k.startsWith('plano_') || x === '' || x == null) return;
+        const val = def.tipo === 'moeda' ? (ngCentavos(x) != null ? ngReais(ngCentavos(x)) : x) : def.tipo === 'data' ? ngData(x) : def.tipo === 'select' ? ((def.opcoes.find(o => o[0] === x) || [, x])[1]) : String(x);
+        if (val) l.push(def.rot + ': ' + val);
+      });
+      return l;
+    };
+    // diferenças entre duas versões (para a revisão)
+    function hsDiferencas(a, b) {
+      const out = [], cmp = (rot, x, y) => { x = x == null ? '' : String(x); y = y == null ? '' : String(y); if (x !== y) out.push({ campo: rot, de: x.slice(0, 200), para: y.slice(0, 200) }); };
+      cmp('Situação', HS_STATUS[a.status] || a.status, HS_STATUS[b.status] || b.status);
+      cmp('Modalidade', (NG_MODALIDADES[a.modalidade] || {}).nome || a.modalidade, (NG_MODALIDADES[b.modalidade] || {}).nome || b.modalidade);
+      cmp('Número de contato', a.cliente.contato, b.cliente.contato);
+      cmp('Nome', a.cliente.nome, b.cliente.nome);
+      ['pedido', 'acordo', 'parcela'].forEach(k => cmp({ pedido: 'Pedido do cliente', acordo: 'Acordo Realizado', parcela: 'A partir de qual parcela' }[k], (a.textos || {})[k], (b.textos || {})[k]));
+      cmp('Observações', a.obs, b.obs);
+      const ks = new Set([...Object.keys(a.valores || {}), ...Object.keys(b.valores || {})]);
+      ks.forEach(k => { if (!['nome', 'contato'].includes(k) && NG_CAMPOS[k]) cmp(NG_CAMPOS[k].rot, (a.valores || {})[k], (b.valores || {})[k]); });
+      if (JSON.stringify(a.plano || []) !== JSON.stringify(b.plano || [])) out.push({ campo: 'Parcelas da renegociação', de: (a.plano || []).length + ' linha(s)', para: (b.plano || []).length + ' linha(s)' });
+      return out;
+    }
+    function hsRevisar(rec, novo, motivo) {
+      const mud = hsDiferencas(rec, novo);
+      if (!mud.length) return null;
+      const r = { ...novo, revisoes: [...(rec.revisoes || []), { id: 'rv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), em: Date.now(), por: eqId(), porNome: eqNomeLocal(), motivo, mudancas: mud }],
+        rev: (rec.rev || 1) + 1, atualizadoEm: Date.now(), atualizadoPor: eqId(), atualizadoPorNome: eqNomeLocal() };
+      return r;
+    }
+    // registra o que está no Atendimento (evita duplicado: mesma proposta -> atualizar o existente, com revisão)
+    function atRegistrar() {
+      const falta = atValidar();
+      if (falta.length) return msg('Preencha antes de registrar:\n- ' + falta.join('\n- '));
+      if (ngCtx === 'renegociacao' && !atPlano.length && !confirm('As parcelas da renegociação não foram montadas. Registrar assim mesmo?')) return;
+      if (!atTexto('pedido') && !atTexto('acordo')) ngGerarTextos(true);
+      const status = ngCtx === 'renegociacao' ? 'realizado' : { fechou: 'realizado', solicitou: 'pendente', nao: 'nao_concluido' }[$('#mf-ng-frase-tipo').value] || 'pendente';
+      const valores = {};
+      Object.entries(ngValores).forEach(([k, v]) => {
+        if (k === 'cpf' || k.startsWith('_') || !NG_CAMPOS[k] || NG_CAMPOS[k].tipo === 'calc') return;   // CPF não vai para o histórico
+        if (v === '' || v == null || v === false) return;
+        valores[k] = typeof v === 'string' ? v.slice(0, 600) : v;
+      });
+      const agora = Date.now();
+      const rec = {
+        id: 'ac' + agora.toString(36) + Math.random().toString(36).slice(2, 7), tipo: ngCtx, modalidade: ngModalidade(), status,
+        cliente: { nome: ngValor('nome'), proposta: String(ngValores.proposta || '').trim(), contato: telFormatar(ngValores.contato) || '' },
+        valores, textos: { pedido: atTexto('pedido'), acordo: atTexto('acordo'), parcela: atTexto('parcela') },
+        plano: ngCtx === 'renegociacao' ? atPlano.map(l => ({ ...l })) : [], obs: '',
+        criadoEm: agora, criadoPor: eqId(), criadoPorNome: eqNomeLocal(), atualizadoEm: agora, atualizadoPor: eqId(), atualizadoPorNome: eqNomeLocal(), rev: 1, revisoes: [],
+      };
+      acRecarregar();
+      const mesmos = acBase.itens.filter(x => x.cliente.proposta === rec.cliente.proposta && x.status !== 'anulado' && !eqExpirado('ac', x)).sort((a, b) => b.atualizadoEm - a.atualizadoEm);
+      const igual = mesmos.find(x => x.tipo === rec.tipo && x.modalidade === rec.modalidade && x.status === rec.status && JSON.stringify(x.textos) === JSON.stringify(rec.textos) && JSON.stringify(x.valores) === JSON.stringify(rec.valores));
+      if (igual) { hsAberto = igual.id; mostrarAba('his'); hsDesenhar(); return msg('Este acordo já está no histórico (' + new Date(igual.criadoEm).toLocaleString('pt-BR') + ', por ' + igual.criadoPorNome + '). Nada foi duplicado.'); }
+      if (mesmos.length) {
+        const x = mesmos[0];
+        if (confirm('Já existe registro da proposta ' + rec.cliente.proposta + ': ' + (HS_STATUS[x.status] || x.status) + ', ' + new Date(x.atualizadoEm).toLocaleString('pt-BR') + ' por ' + (x.atualizadoPorNome || x.criadoPorNome) + '.\n\nOK = ATUALIZAR esse registro (a mudança fica nas alterações, com o valor anterior)\nCancelar = outras opções')) {
+          const novo = hsRevisar(x, { ...x, tipo: rec.tipo, modalidade: rec.modalidade, status: rec.status, cliente: rec.cliente, valores: rec.valores, textos: rec.textos, plano: rec.plano }, 'Atualizado pelo Atendimento');
+          if (!novo) { hsAberto = x.id; mostrarAba('his'); hsDesenhar(); return msg('Nada mudou em relação ao registro existente.'); }
+          acBase.itens[acBase.itens.findIndex(y => y.id === x.id)] = novo;
+          if (acSalvar(novo)) { hsAberto = novo.id; msg('Registro da proposta ' + rec.cliente.proposta + ' atualizado (' + novo.revisoes.slice(-1)[0].mudancas.length + ' alteração(ões)).'); }
+          return;
+        }
+        if (!confirm('Criar um registro NOVO, separado, para a mesma proposta ' + rec.cliente.proposta + '?')) return msg('Nada foi registrado.');
+      }
+      acBase.itens.push(rec);
+      if (acSalvar(rec)) { hsAberto = rec.id; msg('Registrado no histórico' + (eqPronta() ? ' e enviado para a equipe' : ' (só neste navegador: ligue o compartilhamento em Configurações > Equipe)') + '.'); }
+    }
+    $('#mf-at-registrar').onclick = atRegistrar;
+
+    /* ---- tela do histórico ---- */
+    const selHsModal = $('#mf-hs-modal');
+    Object.entries(NG_MODALIDADES).forEach(([k, md]) => { const o = document.createElement('option'); o.value = k; o.textContent = md.nome; selHsModal.appendChild(o); });
+    ['#mf-hs-status', '#mf-hs-modal', '#mf-hs-func', '#mf-hs-periodo'].forEach(sl => $(sl).addEventListener('change', () => hsDesenhar()));
+    $('#mf-hs-busca').addEventListener('input', () => hsDesenhar());
+    function hsDesenhar() {
+      const caixa = $('#mf-hs-lista');
+      if (!caixa) return;
+      const itens = acBase.itens.filter(r => !eqExpirado('ac', r));
+      // funcionários (filtro)
+      const sf = $('#mf-hs-func'), atualF = sf.value, nomes = [...new Set(itens.flatMap(r => [r.criadoPorNome, r.atualizadoPorNome]).filter(Boolean))].sort();
+      sf.innerHTML = '<option value="">Todos os funcionários</option>';
+      nomes.forEach(n => { const o = document.createElement('option'); o.value = o.textContent = n; sf.appendChild(o); });
+      sf.value = nomes.includes(atualF) ? atualF : '';
+      const busca = $('#mf-hs-busca').value.trim().toLowerCase(), dig = busca.replace(/\D/g, '');
+      const fSt = $('#mf-hs-status').value, fMod = $('#mf-hs-modal').value, fFunc = sf.value, dias = +$('#mf-hs-periodo').value || 30;
+      const desde = dias === 1 ? new Date(new Date().setHours(0, 0, 0, 0)).getTime() : Date.now() - dias * 24 * 3600 * 1000;
+      const lista = itens.filter(r => (!fSt || r.status === fSt) && (!fMod || r.modalidade === fMod) && (!fFunc || r.criadoPorNome === fFunc || r.atualizadoPorNome === fFunc)
+        && (r.atualizadoEm || r.criadoEm) >= desde
+        && (!busca || [r.cliente.nome, r.cliente.proposta, r.criadoPorNome, r.atualizadoPorNome, (r.valores || {}).responsavel].join(' ').toLowerCase().includes(busca)
+          || (dig.length >= 4 && String(r.cliente.contato || '').replace(/\D/g, '').includes(dig))))
+        .sort((a, b) => (b.atualizadoEm || 0) - (a.atualizadoEm || 0));
+      $('#mf-hs-qtd').textContent = '(' + lista.length + ' de ' + itens.length + ')';
+      caixa.innerHTML = '';
+      if (!lista.length) { const v = document.createElement('div'); v.className = 'mf-info'; v.textContent = itens.length ? 'Nenhum registro com esses filtros.' : 'Nenhum acordo registrado ainda. No Atendimento, use "Registrar no histórico".'; caixa.appendChild(v); }
+      lista.slice(0, 150).forEach(r => caixa.appendChild(hsItem(r)));
+      hsBadge();
+      eqStatusUI();
+    }
+    const hsCopiar = (t, rot) => { if (!String(t || '').trim()) return msg('Nada para copiar em ' + rot + '.'); GM_setClipboard(t, 'text'); msg(rot + ' copiado.'); };
+    function hsItem(r) {
+      const el = document.createElement('div'); el.className = 'mf-hs-item ' + r.status;
+      const l1 = document.createElement('div'); l1.className = 'mf-lb-l1';
+      l1.textContent = 'Proposta ' + (r.cliente.proposta || '—') + (r.cliente.nome ? ' · ' + r.cliente.nome : '') + (r.cliente.contato ? ' · ' + r.cliente.contato : '');
+      const l2 = document.createElement('div');
+      l2.textContent = (HS_STATUS[r.status] || r.status) + ' · ' + ((NG_MODALIDADES[r.modalidade] || {}).nome || r.modalidade) + (r.tipo === 'renegociacao' ? ' · Renegociação' : '') +
+        ' · ' + (r.criadoPorNome || '—') + ', ' + new Date(r.criadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ((r.revisoes || []).length ? ' · ' + r.revisoes.length + ' alteração(ões)' : '');
+      el.append(l1, l2);
+      el.onclick = () => { hsAberto = hsAberto === r.id ? null : r.id; hsCorrigindo = null; hsDesenhar(); };
+      if (hsAberto !== r.id) return el;
+      const det = document.createElement('div'); det.className = 'mf-hs-det';
+      det.onclick = e => e.stopPropagation();
+      const linhas = [];
+      if (r.textos.pedido) linhas.push((r.tipo === 'renegociacao' ? 'Acordo Solicitado: ' : 'Pedido do cliente: ') + r.textos.pedido);
+      if (r.textos.acordo) linhas.push('Acordo Realizado: ' + r.textos.acordo);
+      if (r.textos.parcela) linhas.push('A partir de qual parcela: ' + r.textos.parcela);
+      linhas.push(...hsResumoValores(r));
+      if ((r.plano || []).length) linhas.push('Parcelas: ' + r.plano.length + ' (' + r.plano.slice(0, 3).map(l => l.acao + ' ' + ngReais(l.valor) + ' ' + ngData(l.venc)).join('; ') + (r.plano.length > 3 ? '…' : '') + ')');
+      if (r.obs) linhas.push('Observações: ' + r.obs);
+      linhas.push('Registrado por ' + (r.criadoPorNome || '—') + ' em ' + new Date(r.criadoEm).toLocaleString('pt-BR') + (r.rev > 1 ? ' · última alteração: ' + (r.atualizadoPorNome || '—') + ' em ' + new Date(r.atualizadoEm).toLocaleString('pt-BR') : ''));
+      (r.revisoes || []).slice(-5).forEach(v => linhas.push('↳ ' + new Date(v.em).toLocaleString('pt-BR') + ' ' + (v.porNome || '') + (v.motivo ? ' (' + v.motivo + ')' : '') + ': ' + v.mudancas.map(m => m.campo + ' "' + (m.de || '—') + '" → "' + (m.para || '—') + '"').join('; ')));
+      det.textContent = linhas.join('\n');
+      const acoes = document.createElement('div'); acoes.className = 'mf-lb-acoes';
+      const bt = (t, cls, fn) => { const b = document.createElement('button'); b.className = cls; b.textContent = t; b.onclick = e => { e.stopPropagation(); fn(); }; acoes.appendChild(b); };
+      bt('Copiar pedido', 'cinza', () => hsCopiar(r.textos.pedido, '"Pedido do cliente"'));
+      bt('Copiar acordo', 'cinza', () => hsCopiar(r.textos.acordo, '"Acordo Realizado"'));
+      if (r.cliente.contato) bt('Copiar telefone', 'cinza', () => hsCopiar(r.cliente.contato, 'Telefone'));
+      bt('Copiar resumo', 'cinza', () => hsCopiar(['Proposta ' + r.cliente.proposta + ' · ' + r.cliente.nome + (r.cliente.contato ? ' · ' + r.cliente.contato : ''), HS_STATUS[r.status] + ' · ' + ((NG_MODALIDADES[r.modalidade] || {}).nome || ''), r.textos.pedido, r.textos.acordo].filter(Boolean).join('\n'), 'Resumo'));
+      bt('Abrir no Atendimento', 'azul', () => hsAbrirNoAtendimento(r));
+      if (r.status !== 'anulado') { bt('Corrigir', 'cinza', () => { hsCorrigindo = r.id; hsDesenhar(); }); bt('Anular', 'vermelho', () => hsAnular(r.id)); }
+      el.append(det, acoes);
+      if (hsCorrigindo === r.id) el.appendChild(hsEditor(r));
+      return el;
+    }
+    function hsEditor(r) {
+      const f = document.createElement('div'); f.className = 'mf-hs-det';
+      f.onclick = e => e.stopPropagation();
+      const campo = (rot, el) => { const l = document.createElement('label'); l.className = 'mf-lb-rot'; l.style.marginTop = '6px'; l.append(rot, el); f.appendChild(l); return el; };
+      const sel = document.createElement('select');
+      Object.entries(HS_STATUS).filter(([k]) => k !== 'anulado').forEach(([k, t]) => { const o = document.createElement('option'); o.value = k; o.textContent = t; sel.appendChild(o); });
+      sel.value = r.status;
+      campo('Situação', sel);
+      const tel = campo('Número de contato', Object.assign(document.createElement('input'), { value: r.cliente.contato || '' }));
+      const ped = campo(r.tipo === 'renegociacao' ? 'Acordo Solicitado' : 'Pedido do cliente', Object.assign(document.createElement('textarea'), { value: r.textos.pedido || '' }));
+      const aco = campo('Acordo Realizado', Object.assign(document.createElement('textarea'), { value: r.textos.acordo || '' }));
+      const obs = campo('Observações', Object.assign(document.createElement('textarea'), { value: r.obs || '' }));
+      const mot = campo('Motivo da correção *', Object.assign(document.createElement('input'), { placeholder: 'Ex.: cliente mudou o dia de pagamento' }));
+      const acoes = document.createElement('div'); acoes.className = 'mf-lb-acoes';
+      const salvar = document.createElement('button'); salvar.className = 'verde'; salvar.textContent = 'Salvar correção';
+      const cancelar = document.createElement('button'); cancelar.className = 'cinza'; cancelar.textContent = 'Cancelar';
+      cancelar.onclick = e => { e.stopPropagation(); hsCorrigindo = null; hsDesenhar(); };
+      salvar.onclick = e => {
+        e.stopPropagation();
+        if (!mot.value.trim()) { mot.classList.add('mf-erro'); return msg('Informe o motivo da correção (fica registrado).'); }
+        if (tel.value.trim() && !telFormatar(tel.value)) { tel.classList.add('mf-erro'); return msg('Número de contato inválido (DDD + número) ou deixe em branco.'); }
+        acRecarregar();
+        const atual = acBase.itens.find(x => x.id === r.id);
+        if (!atual) return msg('O registro não existe mais (pode ter passado de 30 dias).');
+        const novo = hsRevisar(atual, { ...atual, status: sel.value, cliente: { ...atual.cliente, contato: telFormatar(tel.value) || '' }, textos: { ...atual.textos, pedido: ped.value.trim(), acordo: aco.value.trim() }, obs: obs.value.trim().slice(0, 1000) }, mot.value.trim().slice(0, 200));
+        if (!novo) return msg('Nada foi alterado.');
+        acBase.itens[acBase.itens.findIndex(x => x.id === r.id)] = novo;
+        hsCorrigindo = null;
+        if (acSalvar(novo)) msg('Correção salva (o valor anterior fica nas alterações).');
+      };
+      acoes.append(salvar, cancelar);
+      f.appendChild(acoes);
+      return f;
+    }
+    function hsAnular(id) {
+      acRecarregar();
+      const atual = acBase.itens.find(x => x.id === id);
+      if (!atual) return;
+      const motivo = prompt('Anular o registro da proposta ' + atual.cliente.proposta + '? Ele continua no histórico como "Anulado".\nMotivo:');
+      if (motivo == null) return;
+      if (!motivo.trim()) return msg('Informe o motivo para anular.');
+      const novo = hsRevisar(atual, { ...atual, status: 'anulado' }, 'Anulado: ' + motivo.trim().slice(0, 200));
+      acBase.itens[acBase.itens.findIndex(x => x.id === id)] = novo;
+      if (acSalvar(novo)) msg('Registro anulado.');
+    }
+    function hsAbrirNoAtendimento(r) {
+      if ((ngTemDados() || atPlano.length) && !confirm('Substituir os dados que estão no Atendimento pelos deste registro?')) return;
+      Object.keys(ngValores).forEach(k => delete ngValores[k]);
+      Object.assign(ngValores, r.valores || {});
+      GM_setValue('negModalidade', r.modalidade); $('#mf-ng-modalidade').value = r.modalidade;
+      atPlano = (r.plano || []).map(l => ({ ...l }));
+      $('#mf-ng-f-pedido').value = r.textos.pedido || ''; $('#mf-ng-f-acordo').value = r.textos.acordo || ''; $('#mf-ng-f-parcela').value = r.textos.parcela || '';
+      if (r.tipo !== 'renegociacao') $('#mf-ng-frase-tipo').value = { realizado: 'fechou', pendente: 'solicitou', nao_concluido: 'nao' }[r.status] || 'fechou';
+      atTrocar(r.tipo === 'renegociacao' ? 'renegociacao' : 'negociacao');
+      mostrarAba('neg');
+      msg('Registro aberto no Atendimento. O CPF não fica no histórico: use "Aplicar cliente atual" se precisar dele na planilha.');
+    }
+    // contador da aba: registros de outros funcionários desde a última vez que o histórico foi aberto
+    function hsBadge() {
+      const visto = GM_getValue('hsVistoEm', 0) || 0;
+      if (GM_getValue('abaPainel', 'neg') === 'his') GM_setValue('hsVistoEm', Date.now());
+      const n = GM_getValue('abaPainel', 'neg') === 'his' ? 0 : acBase.itens.filter(r => r.atualizadoPor !== eqId() && (r.atualizadoEm || 0) > visto && !eqExpirado('ac', r)).length;
+      const b = $('#mf-hs-badge'); b.textContent = n; b.style.display = n ? '' : 'none';
+    }
+    painel.querySelectorAll('[data-aba="his"]').forEach(b => b.addEventListener('click', () => setTimeout(hsDesenhar)));
+    setInterval(hsBadge, 3000);
+    eqLimpar();
+    hsDesenhar();
+    eqDesenharAvisos();
+    eqCiclo();
+
 
     /* ================= BUSCA DE CLIENTE (central, somente leitura) =================
        Aceita CPF (11 dígitos), nº da proposta (3 a 9 dígitos) ou nome (parte). Fontes, todas do próprio sistema:
@@ -4603,7 +5822,7 @@
     const bsSet = v => { try { if (v) sessionStorage.setItem(BUSCA_SS, JSON.stringify(v)); else sessionStorage.removeItem(BUSCA_SS); } catch (_) {} };
     const bsTipo = t => { const d = t.replace(/\D/g, ''); if (/^[\d.\-\s]+$/.test(t) && d.length === 11) return 'cpf'; if (/^\d{3,9}$/.test(t.trim())) return 'proposta'; return t.trim().length >= 3 ? 'nome' : ''; };
     const bsHojeBR = () => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
-    let bsOcupado = false;
+    let bsOcupado = false, bsNavegando = false;
     const bsStatus = t => { $('#mf-bs-st').textContent = t; };
 
     // lista de propostas (Mesa ou Fila) a partir do HTML devolvido pelo servidor
@@ -4664,7 +5883,7 @@
     (() => {
       try {
         const jq = PAGINA.jQuery;
-        if (!jq || !PAGINA.objFilaPropostas) return;
+        if (!jq) return;   // a Fila pode ser aberta depois (o sistema troca de tela sem recarregar a página)
         jq(PAGINA.document).on('ajaxSend', (_e, _x, st) => {
           const url = String((st && st.url) || '');
           if (!/FilaPropostas\/FilaPropostasLista/i.test(url)) return;
@@ -4709,7 +5928,7 @@
       return out;
     }
 
-    const BS_CAMPOS = [['nome', 'Nome'], ['cpf', 'CPF'], ['proposta', 'Proposta'], ['situacao', 'Situação da proposta'], ['telefone', 'Telefone'], ['email', 'E-mail'],
+    const BS_CAMPOS = [['nome', 'Nome'], ['cpf', 'CPF'], ['proposta', 'Proposta'], ['situacao', 'Situação da proposta'], ['telefone', 'Telefone do cadastro (proposta)'], ['email', 'E-mail'],
       ['valorParcela', 'Valor da parcela'], ['parcelaAtual', 'Parcela atual'], ['totalParcelas', 'Total de parcelas'], ['entrada', 'Entrada'], ['valorCompra', 'Valor da compra'], ['vendedor', 'Vendedor'], ['imei', 'IMEI'], ['loja', 'Loja'],
       ['dataProposta', 'Data da proposta'], ['filial', 'Filial (CAC)'], ['fpd', 'FPD'], ['parcelasAtraso', 'Parcelas em atraso'], ['diasAtraso', 'Dias de atraso'], ['vencMaisAntigo', 'Vencimento mais antigo']];
     function bsMostrar() {
@@ -4751,6 +5970,11 @@
       if (GM_getValue('trocaConta', null)) return msg('Há uma troca de conta em andamento. Aguarde.');
       const termo = limpoTxt(termoBruto).toUpperCase(), tipo = bsTipo(termo);
       if (!tipo) return msg('Digite o CPF, o nº da proposta ou pelo menos 3 letras do nome.');
+      if (!TELAS.mesa.pronta()) {   // a busca usa a Mesa de Crédito: abre a tela pelo menu do sistema, se precisar
+        if (bsNavegando) return;
+        bsNavegando = true;
+        try { if (!(await irParaTela('mesa'))) return; } finally { bsNavegando = false; }
+      }
       const busca = tipo === 'cpf' ? termo.replace(/\D/g, '') : termo;
       bsSet({ termo: busca, tipo, quando: Date.now() });   // nova busca: descarta tudo da anterior
       cacSSSet(null);
@@ -4852,19 +6076,18 @@
       msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + aplicar.length + ' campo(s)).');
     }
     const bsReais = v => { const n = ngCentavos(String(v || '').replace(/\s*\(.*$/, '')); return n == null ? '' : (n / 100).toFixed(2).replace('.', ','); };
-    $('#mf-bs-usar-neg').onclick = () => {
-      const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
-      const f = k => painel.querySelector('#mf-ng-campos [data-campo="' + k + '"]');
-      // parcela atual = referência; "a partir da parcela" só é sugerida se estiver vazia (o funcionário ajusta)
-      const pi = f('parcela_inicial');
-      bsPreencher([[f('nome'), c.campos.nome], [f('proposta'), c.campos.proposta], [f('cpf'), c.campos.cpf], [f('valor_parcela'), bsReais(c.campos.valorParcela)],
-        [f('parcela_atual'), c.campos.parcelaAtual], [pi && !pi.value.trim() ? pi : null, c.campos.parcelaAtual]]);
-      const abr = f('abrangencia_tipo');
-      if (abr && !abr.value && pi && pi.value.trim()) { abr.value = 'apartir'; abr.dispatchEvent(new Event('change', { bubbles: true })); }
-    };
+    // Atendimento: parcela atual = referência; "a partir da parcela" só é sugerida se estiver vazia. Telefone da proposta NUNCA.
+    $('#mf-bs-usar-neg').onclick = atAplicarCliente;
+    // CAC: abre a Consulta CAC (Mais) com o CPF do cliente; mostra o resultado que a busca já trouxe ou consulta agora
     $('#mf-bs-usar-cac').onclick = () => {
       const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
-      bsPreencher([[$('#mf-cac-proposta'), c.campos.proposta], [$('#mf-cac-imei'), c.campos.imei], [$('#mf-cac-atendente'), c.campos.vendedor]]);
+      const cpf = String(c.campos.cpf || '').replace(/\D/g, '');
+      mostrarAba('cac');
+      if (!cpf) return msg('O cliente atual não tem CPF: informe o CPF ou o nome na Consulta CAC.');
+      $('#mf-cac-termo').value = cpf;
+      const cs = cacSS();
+      if (cs && cs.resultado && String(cs.resultado.cliente.cpf || '').replace(/\D/g, '') === cpf) { cacMostrar(cs.resultado); return msg('Consulta CAC do cliente atual (feita em ' + cs.resultado.consultadoEm + ').'); }
+      $('#mf-cac-buscar').click();
     };
     $('#mf-bs-usar-lem').onclick = () => {
       const c = (bsGet() || {}).cliente; if (!c) return bsPreencher([]);
@@ -4889,6 +6112,21 @@
     if (!GM_getValue('buscaAberta', true)) { $('#mf-bs-corpo').style.display = 'none'; $('#mf-bs-tit').classList.remove('aberta'); }
     const bsIni = bsGet();
     if (bsIni) { $('#mf-bs-termo').value = bsIni.termo || ''; bsMostrar(); }
+
+    /* ================= NAVEGAÇÃO AUTOMÁTICA =================
+       Quando a função precisa de uma tela do sistema que não está aberta, o script faz o que o item do menu do PRÓPRIO
+       sistema faz (MostraConsulta('MesaCredito') / ('FilaPropostas'), que troca a tela sem recarregar a página) e espera
+       a tela ficar pronta. Só quando o item existe no menu desta conta. Sem o item no menu (conta sem acesso) ou na tela de login, nada
+       é feito e a mensagem explica. Desligável em Configurações > Painel, navegação e diagnóstico. */
+    ligarOpcao('#mf-nav-auto', 'navAuto');
+    const exigirTela = (sel, t) => {
+      const el = $(sel), orig = el.onclick;
+      el.onclick = async e => { if (TELAS[t].pronta() || await irParaTela(t)) return orig.call(el, e); };
+    };
+    exigirTela('#mf-tela', 'mesa');
+    exigirTela('#mf-ini', 'mesa');
+    exigirTela('#mf-ccb-ler', 'fila');
+    exigirTela('#mf-ccb-baixar', 'fila');
 
     // ao recarregar a página, restaura a fila salva (permite continuar depois de fechar/recarregar)
     if (fila().length) $('#mf-lista').value = fila().join('\n');

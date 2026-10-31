@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      12.1
+// @version      12.2
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -26,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.1');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.2');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -69,6 +69,7 @@
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
     aparencia: 'nova',               // 'nova' (padrão) ou 'antiga'
+    tema: 'claro',                   // 'claro' (padrão) ou 'escuro' (só cores; vale nas duas aparências)
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
     lerAbaCliente: true, 
@@ -1114,9 +1115,72 @@
         }
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+        /* ===== Modo escuro: só vale com data-tema="escuro". O modo claro (padrão) usa as regras acima, sem nenhuma alteração ===== */
+        #mf-p[data-tema=escuro]{color-scheme:dark;background:#0f172a !important;color:#e2e8f0 !important;border-color:#334155 !important;box-shadow:0 8px 28px #000a}
+        #mf-p[data-tema=escuro] #mf-tema{font-size:15px;padding:2px 8px}
+        #mf-p[data-tema=escuro] .mf-top{border-bottom:1px solid #334155}
+        #mf-p[data-tema=escuro] .mf-abas{background:#111c33 !important;border-bottom-color:#334155 !important}
+        #mf-p[data-tema=escuro] .mf-abas button{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] .mf-abas button:hover:not(:disabled){background:#1e293b !important}
+        #mf-p[data-tema=escuro] .mf-abas button.ativa{color:#93c5fd !important;background:#0f172a !important;border-bottom-color:#3b82f6 !important}
+        #mf-p[data-tema=escuro] .mf-sec,#mf-p[data-tema=escuro] .mf-grupo{border-bottom-color:#263349 !important}
+        #mf-p[data-tema=escuro] .mf-tit,#mf-p[data-tema=escuro] .mf-info,#mf-p[data-tema=escuro] .mf-grupo>summary,#mf-p[data-tema=escuro] .mf-ng-bloco>summary,#mf-p[data-tema=escuro] .mf-opc small,#mf-p[data-tema=escuro] .mf-lb-rot,#mf-p[data-tema=escuro] .mf-cac-lin span,#mf-p[data-tema=escuro] .mf-hs-det,#mf-p[data-tema=escuro] .mf-lb-det{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] .mf-opc,#mf-p[data-tema=escuro] .mf-fmt,#mf-p[data-tema=escuro] .mf-conta,#mf-p[data-tema=escuro] .mf-lb-l1{color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-barra{background:#334155}
+        #mf-p[data-tema=escuro] textarea,#mf-p[data-tema=escuro] select,#mf-p[data-tema=escuro] input:not([type]),#mf-p[data-tema=escuro] input[type=text],#mf-p[data-tema=escuro] input[type=date],#mf-p[data-tema=escuro] input[type=time],#mf-p[data-tema=escuro] input[type=password],#mf-p[data-tema=escuro] input[type=number],#mf-p[data-tema=escuro] input[type=search],#mf-p[data-tema=escuro] input[type=email],#mf-p[data-tema=escuro] input[type=tel]{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        #mf-p[data-tema=escuro] textarea:focus,#mf-p[data-tema=escuro] select:focus,#mf-p[data-tema=escuro] input:focus{outline-color:#1d4ed8 !important;border-color:#60a5fa !important}
+        #mf-p[data-tema=escuro] ::placeholder{color:#64748b !important}
+        #mf-p[data-tema=escuro] option{background:#1e293b;color:#e2e8f0}
+        #mf-p[data-tema=escuro] input.mf-erro,#mf-p[data-tema=escuro] textarea.mf-erro,#mf-p[data-tema=escuro] select.mf-erro{background:#450a0a !important;border-color:#ef4444 !important}
+        #mf-p[data-tema=escuro] .mf-ng-saldo{color:#4ade80;background:#052e16;border-color:#166534}
+        #mf-p[data-tema=escuro] .mf-ng-saldo.erro{color:#fca5a5;background:#450a0a;border-color:#7f1d1d}
+        /* botões: antiga (cinza claro vira cinza escuro) e nova (neutros escuros; os principais azul/verde mantêm as cores) */
+        #mf-p[data-tema=escuro][data-ui=antiga] .cinza{background:#334155 !important;color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro][data-ui=nova] button{background:#1e293b;color:#e2e8f0;border-color:#475569}
+        #mf-p[data-tema=escuro][data-ui=nova] button:hover:not(:disabled){background:#273449;filter:none}
+        #mf-p[data-tema=escuro][data-ui=nova] button:disabled{background:#1e293b;color:#64748b;border-color:#334155}
+        #mf-p[data-tema=escuro] .mf-mini{background:transparent !important;border:0 !important;color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-mini:hover{background:#334155 !important}
+        #mf-p[data-tema=escuro] .mf-ui-icone{background:transparent !important;border:0 !important;color:#cbd5e1 !important}
+        #mf-p[data-tema=escuro] .mf-ui-icone:hover{background:#334155 !important;color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-ui-chip{background:#334155 !important;border:0 !important;color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .vermelho{color:#f87171 !important;border-color:#7f1d1d !important}
+        #mf-p[data-tema=escuro][data-ui=antiga] .vermelho{color:#fff !important}
+        #mf-p[data-tema=escuro] .laranja{color:#fb923c !important;border-color:#7c2d12 !important}
+        #mf-p[data-tema=escuro][data-ui=antiga] .laranja{color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-copia{color:#60a5fa !important}
+        #mf-p[data-tema=escuro] .mf-ui-menu{background:#1e293b !important;border-color:#334155 !important;box-shadow:0 10px 24px #000a}
+        #mf-p[data-tema=escuro] .mf-ui-menu button{color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-ui-menu button:hover,#mf-p[data-tema=escuro] .mf-ui-menu button.ativa{background:#334155 !important;color:#93c5fd !important}
+        #mf-p[data-tema=escuro][data-ui=nova] .mf-ui-seg{background:#1e293b !important}
+        #mf-p[data-tema=escuro][data-ui=nova] .mf-ui-seg button{background:transparent !important;color:#94a3b8 !important;border:0 !important}
+        #mf-p[data-tema=escuro][data-ui=antiga] .mf-ui-seg button,#mf-p[data-tema=escuro] .mf-lb-filtros button{background:#334155 !important;color:#cbd5e1 !important;border:0 !important}
+        #mf-p[data-tema=escuro] .mf-ui-seg button.ativa,#mf-p[data-tema=escuro] .mf-lb-filtros button.ativa{background:#2563eb !important;color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-ui-copias.aberto .mf-ui-extra{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        /* blocos, listas e cartões */
+        #mf-p[data-tema=escuro] .mf-bs{background:#111c33 !important;border-bottom-color:#263349 !important}
+        #mf-p[data-tema=escuro] .mf-ui-prev.ativo{background:#422006;color:#fde68a;border-bottom-color:#854d0e}
+        #mf-p[data-tema=escuro] #mf-tm-resumo{background:#422006 !important;color:#fed7aa !important}
+        #mf-p[data-tema=escuro] #mf-msg{background:#1e293b !important;border:1px solid #334155 !important;color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item,#mf-p[data-tema=escuro] .mf-hs-item{border-top-color:#334155 !important;border-right-color:#334155 !important;border-bottom-color:#334155 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item.hoje{background:#3a2a12 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item.atrasado{background:#3b1519 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item div[style*="color"]{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] .mf-tag{background:#312e81;color:#c7d2fe}
+        #mf-p[data-tema=escuro] .mf-pl-lin,#mf-p[data-tema=escuro] .mf-cac-lin,#mf-p[data-tema=escuro] .mf-conta{border-bottom-color:#263349 !important}
+        #mf-p[data-tema=escuro] .mf-corpo::-webkit-scrollbar-thumb{background:#475569}
+        /* avisos fora do painel (lembretes, timer e equipe) */
+        html[data-mf-tema=escuro] #mf-lb-popup,html[data-mf-tema=escuro] #mf-tm-alarme{background:#1e293b !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup .it,html[data-mf-tema=escuro] #mf-tm-alarme .it{border-top-color:#334155 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup [style*="color"]{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] #mf-tm-alarme h4{color:#fca5a5 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup button:not(.pri),html[data-mf-tema=escuro] #mf-tm-alarme button:not(.pri),html[data-mf-tema=escuro] #mf-eq-avisos button:not(.pri){background:#334155 !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup input{background:#0f172a !important;color:#e2e8f0 !important;border:1px solid #475569}
+        html[data-mf-tema=escuro] #mf-eq-avisos .av{background:#1e293b !important;color:#e2e8f0 !important;border-top-color:#1e3a8a !important;border-right-color:#1e3a8a !important;border-bottom-color:#1e3a8a !important}
+        html[data-mf-tema=escuro] #mf-eq-avisos p{color:#cbd5e1 !important}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
-        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
+        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-tema" class="mf-mini" type="button" title="Ativar o modo escuro">🌙</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-rz mf-rz-d" data-rz="x" title="Arraste para mudar a largura"></div><div class="mf-rz mf-rz-b" data-rz="y" title="Arraste para mudar a altura"></div>
       <div class="mf-rz mf-rz-c" data-rz="xy" tabindex="0" role="separator" aria-label="Redimensionar o painel (setas do teclado; duplo clique alterna padrão e ampliado)" title="Arraste para redimensionar · duplo clique: padrão / ampliado"></div>
       <div class="mf-corpo">
@@ -1508,6 +1572,9 @@
           <details class="mf-grupo" data-grupo="aparencia" open><summary>Aparência da interface</summary>
             <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="nova"><span><b>Nova UI</b><small>Visual moderno, botões principais em destaque, ajuda em ⓘ.</small></span></label>
             <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="antiga"><span><b>UI Antiga</b><small>Cores e tamanhos anteriores, com a mesma organização das abas.</small></span></label>
+            <div class="mf-tit" style="margin-top:10px">Tema</div>
+            <label class="mf-opc"><input type="radio" name="mf-ui-tema" value="claro"><span><b>Modo claro</b><small>Padrão.</small></span></label>
+            <label class="mf-opc"><input type="radio" name="mf-ui-tema" value="escuro"><span><b>Modo escuro</b><small>Fundo escuro, mais confortável em ambiente com pouca luz. Só muda as cores; também pelo botão 🌙 do topo.</small></span></label>
             <button id="mf-ui-previsualizar" class="cinza" style="width:100%">Pré-visualizar a outra aparência</button>
           </details>
           <details class="mf-grupo" data-grupo="painel"><summary>Painel, navegação e diagnóstico</summary>
@@ -1528,6 +1595,8 @@
       </div>
 `;
     painel.dataset.ui = cfg('aparencia') === 'antiga' ? 'antiga' : 'nova';   // aparência aplicada antes de mostrar (sem "piscar")
+    painel.dataset.tema = cfg('tema') === 'escuro' ? 'escuro' : 'claro';   // tema aplicado antes de mostrar (sem "piscar")
+    document.documentElement.dataset.mfTema = painel.dataset.tema;          // os avisos fora do painel (pop-ups) seguem o mesmo tema
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
     const msg = t => ($('#mf-msg').textContent = t);
@@ -5269,6 +5338,20 @@
     $('#mf-ui-prev-manter').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); GM_setValue('aparencia', painel.dataset.ui); aplicarUI(painel.dataset.ui); msg('Aparência mantida.'); };
     $('#mf-ui-prev-voltar').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); aplicarUI(cfg('aparencia')); };
     aplicarUI(cfg('aparencia'));
+
+    /* ---- Tema claro / escuro: só troca data-tema (o CSS faz o resto); nenhuma função ou dado é tocado ---- */
+    function aplicarTema(tema) {
+      tema = tema === 'escuro' ? 'escuro' : 'claro';
+      painel.dataset.tema = tema;
+      document.documentElement.dataset.mfTema = tema;
+      const bt = $('#mf-tema');
+      bt.textContent = tema === 'escuro' ? '☀️' : '🌙';
+      bt.title = tema === 'escuro' ? 'Voltar ao modo claro' : 'Ativar o modo escuro';
+      $$ui('input[name="mf-ui-tema"]').forEach(r => { r.checked = r.value === tema; });
+    }
+    $('#mf-tema').onclick = () => { const novo = painel.dataset.tema === 'escuro' ? 'claro' : 'escuro'; GM_setValue('tema', novo); aplicarTema(novo); };
+    $$ui('input[name="mf-ui-tema"]').forEach(r => r.addEventListener('change', () => { if (r.checked) { GM_setValue('tema', r.value); aplicarTema(r.value); } }));
+    aplicarTema(cfg('tema'));
 
     /* ================= EQUIPE: compartilhamento entre os funcionários (Pusher) =================
        O armazenamento do Tampermonkey é de cada navegador. Para a equipe ver os mesmos lembretes e acordos:

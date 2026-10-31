@@ -1192,13 +1192,13 @@
         html[data-mf-tema=escuro] .content-wrapper h1,html[data-mf-tema=escuro] .content-wrapper h2,html[data-mf-tema=escuro] .content-wrapper h3,html[data-mf-tema=escuro] .content-wrapper h4,html[data-mf-tema=escuro] .content-wrapper h5,html[data-mf-tema=escuro] .content-wrapper h6,html[data-mf-tema=escuro] .content-wrapper label,html[data-mf-tema=escuro] .content-wrapper .control-label,html[data-mf-tema=escuro] .content-header>h1,html[data-mf-tema=escuro] .content-header>.breadcrumb>li,html[data-mf-tema=escuro] .content-header>.breadcrumb>li>a{color:#e2e8f0 !important}
         html[data-mf-tema=escuro] .content-wrapper .text-muted,html[data-mf-tema=escuro] .content-wrapper small,html[data-mf-tema=escuro] .content-wrapper .help-block{color:#94a3b8 !important}
         html[data-mf-tema=escuro] .content-wrapper a:not(.btn):not([class*=label]){color:#60a5fa}
-        html[data-mf-tema=escuro] .box,html[data-mf-tema=escuro] .box-header,html[data-mf-tema=escuro] .box-body,html[data-mf-tema=escuro] .box-footer,html[data-mf-tema=escuro] .nav-tabs-custom,html[data-mf-tema=escuro] .nav-tabs-custom>.tab-content,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs,html[data-mf-tema=escuro] .panel,html[data-mf-tema=escuro] .panel-body,html[data-mf-tema=escuro] .panel-heading,html[data-mf-tema=escuro] .panel-footer,html[data-mf-tema=escuro] .well,html[data-mf-tema=escuro] .info-box,html[data-mf-tema=escuro] .modal-content,html[data-mf-tema=escuro] .modal-header,html[data-mf-tema=escuro] .modal-footer,html[data-mf-tema=escuro] .dropdown-menu,html[data-mf-tema=escuro] .popover,html[data-mf-tema=escuro] .list-group-item,html[data-mf-tema=escuro] .callout.callout-default,html[data-mf-tema=escuro] .jumbotron{background:#1e293b !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .box,html[data-mf-tema=escuro] .box-header,html[data-mf-tema=escuro] .box-body,html[data-mf-tema=escuro] .box-footer,html[data-mf-tema=escuro] .nav-tabs-custom,html[data-mf-tema=escuro] .nav-tabs-custom>.tab-content,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs,html[data-mf-tema=escuro] .panel,html[data-mf-tema=escuro] .panel-body,html[data-mf-tema=escuro] .panel-heading,html[data-mf-tema=escuro] .panel-footer,html[data-mf-tema=escuro] .well,html[data-mf-tema=escuro] .info-box,html[data-mf-tema=escuro] .modal-content,html[data-mf-tema=escuro] .modal-header:not([class*=bg-]),html[data-mf-tema=escuro] .modal-footer,html[data-mf-tema=escuro] .modal-body,html[data-mf-tema=escuro] .dropdown-menu,html[data-mf-tema=escuro] .popover,html[data-mf-tema=escuro] .list-group-item,html[data-mf-tema=escuro] .callout.callout-default,html[data-mf-tema=escuro] .jumbotron{background:#1e293b !important;color:#e2e8f0 !important;border-color:#334155 !important}
         html[data-mf-tema=escuro] .nav-tabs>li>a,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs>li>a,html[data-mf-tema=escuro] .nav-pills>li>a{color:#cbd5e1 !important}
         html[data-mf-tema=escuro] .nav-tabs>li.active>a,html[data-mf-tema=escuro] .nav-tabs>li.active>a:hover,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs>li.active>a{background:#1e293b !important;color:#93c5fd !important;border-color:#334155 !important}
         html[data-mf-tema=escuro] .dropdown-menu>li>a{color:#e2e8f0 !important}
         html[data-mf-tema=escuro] .dropdown-menu>li>a:hover,html[data-mf-tema=escuro] .dropdown-menu>.active>a{background:#334155 !important}
         html[data-mf-tema=escuro] .close,html[data-mf-tema=escuro] .modal-header .close{color:#e2e8f0 !important;text-shadow:none !important;opacity:.8}
-        html[data-mf-tema=escuro] .table,html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th,html[data-mf-tema=escuro] .table>tfoot>tr>td,html[data-mf-tema=escuro] .table>tfoot>tr>th,html[data-mf-tema=escuro] .table-bordered,html[data-mf-tema=escuro] .table-bordered>thead>tr>th,html[data-mf-tema=escuro] .table-bordered>tbody>tr>td{color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .table,html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th,html[data-mf-tema=escuro] .table>tfoot>tr>td,html[data-mf-tema=escuro] .table>tfoot>tr>th,html[data-mf-tema=escuro] .table-bordered,html[data-mf-tema=escuro] .table-bordered>thead>tr>th,html[data-mf-tema=escuro] .table-bordered>tbody>tr>td{border-color:#334155 !important}
         html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>thead>tr>td{background:#1e293b !important}
         html[data-mf-tema=escuro] .table>tbody>tr,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th{background-color:#0f172a}
         html[data-mf-tema=escuro] .table-striped>tbody>tr:nth-of-type(odd),html[data-mf-tema=escuro] .table-striped>tbody>tr:nth-of-type(odd)>td{background-color:#162033 !important}
@@ -1212,6 +1212,26 @@
         html[data-mf-tema=escuro] .pagination>.active>a,html[data-mf-tema=escuro] .pagination>.active>span{background:#2563eb !important;color:#fff !important;border-color:#2563eb !important}
         html[data-mf-tema=escuro] .dataTables_wrapper,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_info,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_length,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_filter{color:#cbd5e1 !important}
         html[data-mf-tema=escuro] hr{border-color:#334155}
+
+        /* ajustes a partir do HTML real do ER (Mesa de Crédito e menu lateral) */
+        html[data-mf-tema=escuro] .sidebar-menu>li.header{background:#111c33 !important}
+        html[data-mf-tema=escuro] .user-panel>.info,html[data-mf-tema=escuro] .user-panel>.info>p,html[data-mf-tema=escuro] .user-panel>.info>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .control-sidebar-light,html[data-mf-tema=escuro] .control-sidebar-bg{background:#111c33 !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .progress{background:#334155 !important}
+        html[data-mf-tema=escuro] .btn-white,html[data-mf-tema=escuro] .bootstrap-select>.dropdown-toggle{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li a,html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li a .text{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li a:hover,html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li.selected a,html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li.active a{background:#334155 !important}
+        html[data-mf-tema=escuro] .bootstrap-select .dropdown-header,html[data-mf-tema=escuro] .dropdown-header,html[data-mf-tema=escuro] .text-gray{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .bs-searchbox input,html[data-mf-tema=escuro] .bs-actionsbox .btn{background:#0f172a !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] #divNotificacoesDetalhe{background:#1e293b !important;color:#e2e8f0 !important;border-left-color:#334155 !important}
+        html[data-mf-tema=escuro] .modal-header:not([class*=bg-]) .close{color:#e2e8f0 !important}
+        /* tela de login (login-box) */
+        html[data-mf-tema=escuro] .login-page,html[data-mf-tema=escuro] .register-page{background:#0f172a !important}
+        html[data-mf-tema=escuro] .login-box-body,html[data-mf-tema=escuro] .register-box-body{background:#1e293b !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .login-box-msg,html[data-mf-tema=escuro] .register-box-msg,html[data-mf-tema=escuro] .login-logo a,html[data-mf-tema=escuro] .login-box-body p,html[data-mf-tema=escuro] .login-box-body b{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .login-box a:not(.btn){color:#60a5fa !important}
+        html[data-mf-tema=escuro] .login-box .form-control-feedback,html[data-mf-tema=escuro] .login-box .glyphicon{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .login-logo img{background:#fff;border-radius:12px;padding:10px}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
         <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-tema" class="mf-mini" type="button" title="Ativar o modo escuro">🌙</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
@@ -3229,6 +3249,10 @@
     $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
     // Mesa <-> Master: ao entrar numa das duas, a opção do seletor já vem na outra (só pré-seleciona; quem troca é o botão Trocar)
     let ultimaAtivaSug = null;
+    // a tela Mesa de Crédito troca todos os <select> da página por bootstrap-select (inclusive o do painel): sem 'refresh' o botão mostraria a opção antiga
+    function atualizarSelectPicker(sel) {
+      try { const J = PAGINA.jQuery; if (J && J(sel).data('selectpicker')) J(sel).selectpicker('refresh'); } catch (_) {}
+    }
     const textoConta = c => (c.usuario + ' ' + (c.apelido || '')).toLowerCase();
     function sugerirContaDestino() {
       const lista = contas(), a = contaAtiva();
@@ -3239,7 +3263,7 @@
       if (iMaster < 0 || iMesa < 0) return;
       const ativa = a.usuario.toLowerCase();
       const alvo = ativa === lista[iMesa].usuario.toLowerCase() ? iMaster : ativa === lista[iMaster].usuario.toLowerCase() ? iMesa : -1;
-      if (alvo >= 0) $('#mf-conta-sel').value = String(alvo);
+      if (alvo >= 0) { const s = $('#mf-conta-sel'); s.value = String(alvo); atualizarSelectPicker(s); }
     }
     function verificarContaSugerida() {
       const a = contaAtiva(), k = a ? a.usuario.toLowerCase() : '';
@@ -3255,6 +3279,7 @@
       sel.innerHTML = '';
       lista.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = rotuloConta(c); sel.appendChild(o); });
       if (escolhida !== '' && sel.querySelector('option[value="' + escolhida + '"]')) sel.value = escolhida;
+      atualizarSelectPicker(sel);
       setTimeout(verificarContaSugerida);
       $('#mf-conta-trocar').disabled = !lista.length;
       const caixa = $('#mf-contas');

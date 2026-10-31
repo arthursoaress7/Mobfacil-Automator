@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      12.2
+// @version      12.3
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -26,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.2');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.3');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -69,7 +69,7 @@
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
     aparencia: 'nova',               // 'nova' (padrão) ou 'antiga'
-    tema: 'claro',                   // 'claro' (padrão) ou 'escuro' (só cores; vale nas duas aparências)
+    tema: 'claro',                   // 'claro' (padrão) ou 'escuro' (só cores)
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
     lerAbaCliente: true, 
@@ -1232,9 +1232,53 @@
         html[data-mf-tema=escuro] .login-box a:not(.btn){color:#60a5fa !important}
         html[data-mf-tema=escuro] .login-box .form-control-feedback,html[data-mf-tema=escuro] .login-box .glyphicon{color:#94a3b8 !important}
         html[data-mf-tema=escuro] .login-logo img{background:#fff;border-radius:12px;padding:10px}
+        /* ===== Modo escuro: complemento (textos brancos sobre fundo claro e textos de baixo contraste) ===== */
+        /* 1) Fundos claros fixos do ER: painel "Itens de análise" e painel de detalhe do item (tinham fundo #f9faff e texto claro) */
+        html[data-mf-tema=escuro] #divMesaAnaliseOrientacoes,html[data-mf-tema=escuro] #divMesaAnaliseItem{background-color:#111c33 !important;border-left-color:#334155 !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] #divMesaAnaliseOrientacoes .btn{color:#0f172a !important}
+        html[data-mf-tema=escuro] .btn .text-black,html[data-mf-tema=escuro] button .text-black{color:#0f172a !important}
+        html[data-mf-tema=escuro] .text-black{color:#e2e8f0 !important}
+        /* 2) Cabeçalhos e blocos com classes de fundo claro (modais "Aviso", "Consulta Linha Digitável", "Detalhes do Refinanciamento", "Documentos"...) */
+        html[data-mf-tema=escuro] .bg-gray-light,html[data-mf-tema=escuro] .bg-white{background-color:#1e293b !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .bg-gray{background-color:#334155 !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .bg-warning{background-color:#78350f !important;color:#fef3c7 !important}
+        html[data-mf-tema=escuro] .bg-danger{background-color:#7f1d1d !important;color:#fee2e2 !important}
+        html[data-mf-tema=escuro] .bg-success{background-color:#14532d !important;color:#dcfce7 !important}
+        html[data-mf-tema=escuro] .bg-info{background-color:#0c4a6e !important;color:#e0f2fe !important}
+        html[data-mf-tema=escuro] .bg-warning .modal-title,html[data-mf-tema=escuro] .bg-warning h4{color:#fef3c7 !important}
+        html[data-mf-tema=escuro] .bg-danger .modal-title,html[data-mf-tema=escuro] .bg-danger h4{color:#fee2e2 !important}
+        html[data-mf-tema=escuro] .bg-success .modal-title,html[data-mf-tema=escuro] .bg-success h4{color:#dcfce7 !important}
+        html[data-mf-tema=escuro] .bg-info .modal-title,html[data-mf-tema=escuro] .bg-info h4{color:#e0f2fe !important}
+        html[data-mf-tema=escuro] .modal-header.bg-gray-light .modal-title,html[data-mf-tema=escuro] .modal-header.bg-gray .modal-title,html[data-mf-tema=escuro] .modal-header.bg-gray-light h4{color:#e2e8f0 !important}
+        /* 3) Rede de segurança: qualquer elemento do ER com fundo claro escrito direto no style (fora do painel do script) */
+        html[data-mf-tema=escuro] [style*="background-color:#FFFFFF"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="background-color:#fff"]:not(#mf-p):not(#mf-p *),
+        html[data-mf-tema=escuro] [style*="background-color: rgb(255, 255, 255)"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="background: rgb(255, 255, 255)"]:not(#mf-p):not(#mf-p *),
+        html[data-mf-tema=escuro] [style*="background:#fff"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="background: #fff"]:not(#mf-p):not(#mf-p *),
+        html[data-mf-tema=escuro] [style*="#f4f4f4"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="#f8f8f8"]:not(#mf-p):not(#mf-p *),
+        html[data-mf-tema=escuro] [style*="#f5f5f5"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="#f7f7f7"]:not(#mf-p):not(#mf-p *),
+        html[data-mf-tema=escuro] [style*="#f9faff"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="rgb(249, 250, 255)"]:not(#mf-p):not(#mf-p *),
+        html[data-mf-tema=escuro] [style*="background: #eee"]:not(#mf-p):not(#mf-p *),html[data-mf-tema=escuro] [style*="background:#eee"]:not(#mf-p):not(#mf-p *){background-color:#111c33 !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        /* 4) Cores de texto do AdminLTE/Bootstrap que ficavam escuras demais sobre o fundo escuro */
+        html[data-mf-tema=escuro] .text-primary,html[data-mf-tema=escuro] .text-blue,html[data-mf-tema=escuro] .text-light-blue{color:#7cb7f0 !important}
+        html[data-mf-tema=escuro] .text-red,html[data-mf-tema=escuro] .text-danger,html[data-mf-tema=escuro] .text-maroon{color:#f87171 !important}
+        html[data-mf-tema=escuro] .text-green,html[data-mf-tema=escuro] .text-success,html[data-mf-tema=escuro] .text-olive{color:#4ade80 !important}
+        html[data-mf-tema=escuro] .text-yellow,html[data-mf-tema=escuro] .text-warning,html[data-mf-tema=escuro] .text-orange{color:#fbbf24 !important}
+        html[data-mf-tema=escuro] .text-aqua,html[data-mf-tema=escuro] .text-info,html[data-mf-tema=escuro] .text-teal{color:#38bdf8 !important}
+        html[data-mf-tema=escuro] .text-navy,html[data-mf-tema=escuro] .text-purple{color:#a5b4fc !important}
+        html[data-mf-tema=escuro] .text-muted,html[data-mf-tema=escuro] .text-gray{color:#94a3b8 !important}
+        /* 5) Links, placeholders e campos dentro dos modais que ficam fora do .content-wrapper */
+        html[data-mf-tema=escuro] .modal-body a:not(.btn):not([class*=label]),html[data-mf-tema=escuro] .modal-content a:not(.btn):not([class*=label]):not([class*=navbar]){color:#60a5fa}
+        html[data-mf-tema=escuro] .modal-body label,html[data-mf-tema=escuro] .modal-body .control-label,html[data-mf-tema=escuro] .modal-body .help-block{color:#cbd5e1 !important}
+        html[data-mf-tema=escuro] ::placeholder{color:#8b9bb2 !important;opacity:1}
+        html[data-mf-tema=escuro] .callout,html[data-mf-tema=escuro] .alert{color:#e2e8f0}
+        html[data-mf-tema=escuro] .info-box-text,html[data-mf-tema=escuro] .info-box-number,html[data-mf-tema=escuro] .progress-description{color:#e2e8f0 !important}
+        /* 6) Painel do script: cores de texto escritas direto em style (geradas pelos módulos) */
+        #mf-p[data-tema=escuro] [style*="color:#475569"],#mf-p[data-tema=escuro] [style*="color:#64748b"],#mf-p[data-tema=escuro] [style*="color:#6b7280"],#mf-p[data-tema=escuro] [style*="color: #475569"],#mf-p[data-tema=escuro] [style*="color: #64748b"]{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] [style*="color:#1f2937"],#mf-p[data-tema=escuro] [style*="color:#1e293b"],#mf-p[data-tema=escuro] [style*="color:#0f172a"],#mf-p[data-tema=escuro] [style*="color:#334155"],#mf-p[data-tema=escuro] [style*="color:#111"],#mf-p[data-tema=escuro] [style*="color:#000"]{color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-bs-cab,#mf-p[data-tema=escuro] .mf-cac-lin b,#mf-p[data-tema=escuro] .mf-hs-item,#mf-p[data-tema=escuro] .mf-lb-item{color:#e2e8f0}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
-        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-tema" class="mf-mini" type="button" title="Ativar o modo escuro">🌙</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
+        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-tema" class="mf-mini" type="button" title="Modo escuro">🌙</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-rz mf-rz-d" data-rz="x" title="Arraste para mudar a largura"></div><div class="mf-rz mf-rz-b" data-rz="y" title="Arraste para mudar a altura"></div>
       <div class="mf-rz mf-rz-c" data-rz="xy" tabindex="0" role="separator" aria-label="Redimensionar o painel (setas do teclado; duplo clique alterna padrão e ampliado)" title="Arraste para redimensionar · duplo clique: padrão / ampliado"></div>
       <div class="mf-corpo">
@@ -1649,8 +1693,6 @@
       </div>
 `;
     painel.dataset.ui = cfg('aparencia') === 'antiga' ? 'antiga' : 'nova';   // aparência aplicada antes de mostrar (sem "piscar")
-    painel.dataset.tema = cfg('tema') === 'escuro' ? 'escuro' : 'claro';   // tema aplicado antes de mostrar (sem "piscar")
-    document.documentElement.dataset.mfTema = painel.dataset.tema;          // os avisos fora do painel (pop-ups) seguem o mesmo tema
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
     const msg = t => ($('#mf-msg').textContent = t);
@@ -3247,40 +3289,11 @@
       if (Object.keys(sx).length) GM_setValue('senhasContas', sx); else GM_deleteValue('senhasContas');
     };
     $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
-    // Mesa <-> Master: ao entrar numa das duas, a opção do seletor já vem na outra (só pré-seleciona; quem troca é o botão Trocar)
-    let ultimaAtivaSug = null;
-    // a tela Mesa de Crédito troca todos os <select> da página por bootstrap-select (inclusive o do painel): sem 'refresh' o botão mostraria a opção antiga
-    function atualizarSelectPicker(sel) {
-      try { const J = PAGINA.jQuery; if (J && J(sel).data('selectpicker')) J(sel).selectpicker('refresh'); } catch (_) {}
-    }
-    const textoConta = c => (c.usuario + ' ' + (c.apelido || '')).toLowerCase();
-    function sugerirContaDestino() {
-      const lista = contas(), a = contaAtiva();
-      if (!a || a.naoCadastrada || lista.length < 2) return;
-      const mst = String(GM_getValue('cacContaMaster', '') || '').toLowerCase();
-      const iMaster = lista.findIndex(c => mst ? c.usuario.toLowerCase() === mst : /master/.test(textoConta(c)));
-      const iMesa = lista.findIndex((c, i) => i !== iMaster && /mesa/.test(textoConta(c)));
-      if (iMaster < 0 || iMesa < 0) return;
-      const ativa = a.usuario.toLowerCase();
-      const alvo = ativa === lista[iMesa].usuario.toLowerCase() ? iMaster : ativa === lista[iMaster].usuario.toLowerCase() ? iMesa : -1;
-      if (alvo >= 0) { const s = $('#mf-conta-sel'); s.value = String(alvo); atualizarSelectPicker(s); }
-    }
-    function verificarContaSugerida() {
-      const a = contaAtiva(), k = a ? a.usuario.toLowerCase() : '';
-      if (k === ultimaAtivaSug) return;
-      ultimaAtivaSug = k;
-      sugerirContaDestino();
-    }
-    setInterval(verificarContaSugerida, 1500);
     function desenharContas() {
       const lista = contas();
       const sel = $('#mf-conta-sel');
-      const escolhida = sel.value;   // mantém a escolha manual enquanto a conta ativa não mudar
       sel.innerHTML = '';
       lista.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = rotuloConta(c); sel.appendChild(o); });
-      if (escolhida !== '' && sel.querySelector('option[value="' + escolhida + '"]')) sel.value = escolhida;
-      atualizarSelectPicker(sel);
-      setTimeout(verificarContaSugerida);
       $('#mf-conta-trocar').disabled = !lista.length;
       const caixa = $('#mf-contas');
       caixa.innerHTML = lista.length ? '' : '<div class="mf-info">Nenhuma conta cadastrada.</div>';
@@ -5422,18 +5435,18 @@
     $('#mf-ui-prev-voltar').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); aplicarUI(cfg('aparencia')); };
     aplicarUI(cfg('aparencia'));
 
-    /* ---- Tema claro / escuro: só troca data-tema (o CSS faz o resto); nenhuma função ou dado é tocado ---- */
-    function aplicarTema(tema) {
-      tema = tema === 'escuro' ? 'escuro' : 'claro';
-      painel.dataset.tema = tema;
-      document.documentElement.dataset.mfTema = tema;
-      const bt = $('#mf-tema');
-      bt.textContent = tema === 'escuro' ? '☀️' : '🌙';
-      bt.title = tema === 'escuro' ? 'Voltar ao modo claro' : 'Ativar o modo escuro';
-      $$ui('input[name="mf-ui-tema"]').forEach(r => { r.checked = r.value === tema; });
+    /* ---- Tema claro / escuro: só cores (nenhum dado, função ou configuração muda) ---- */
+    function aplicarTema(t) {
+      t = t === 'escuro' ? 'escuro' : 'claro';
+      painel.dataset.tema = t;
+      document.documentElement.setAttribute('data-mf-tema', t);   // ER e avisos fora do painel
+      const b = $('#mf-tema');
+      if (b) { b.textContent = t === 'escuro' ? '☀️' : '🌙'; b.title = t === 'escuro' ? 'Voltar ao modo claro' : 'Modo escuro'; }
+      $$ui('input[name="mf-ui-tema"]').forEach(r => { r.checked = r.value === t; });
     }
-    $('#mf-tema').onclick = () => { const novo = painel.dataset.tema === 'escuro' ? 'claro' : 'escuro'; GM_setValue('tema', novo); aplicarTema(novo); };
-    $$ui('input[name="mf-ui-tema"]').forEach(r => r.addEventListener('change', () => { if (r.checked) { GM_setValue('tema', r.value); aplicarTema(r.value); } }));
+    function trocarTema(t) { GM_setValue('tema', t); aplicarTema(t); }
+    $('#mf-tema').onclick = () => trocarTema(painel.dataset.tema === 'escuro' ? 'claro' : 'escuro');
+    $$ui('input[name="mf-ui-tema"]').forEach(r => r.addEventListener('change', () => { if (r.checked) trocarTema(r.value); }));
     aplicarTema(cfg('tema'));
 
     /* ================= EQUIPE: compartilhamento entre os funcionários (Pusher) =================

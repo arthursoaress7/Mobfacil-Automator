@@ -2,6 +2,24 @@
 
 v11.39
 
+## Documentação técnica do script
+
+A pasta [`docs/script/`](./docs/script/) contém a documentação detalhada de cada módulo do script `automacaomobfacil.user.js`:
+
+| Arquivo | Conteúdo |
+|---|---|
+| [01 - Visão Geral](./docs/script/01-visao-geral.md) | Estrutura do script, módulos, dependências e armazenamento |
+| [02 - Motor de Coleta](./docs/script/02-motor-coleta.md) | Leitura da árvore do MobFacil (React/DOM), caminhos e extração de dados |
+| [03 - Painel e Interface](./docs/script/03-painel-interface.md) | Painel flutuante, abas, coleta de auditoria e configurações |
+| [04 - Atendimento](./docs/script/04-atendimento.md) | Negociação, Renegociação, plano de parcelas, cópia para planilha |
+| [05 - Histórico de Acordos](./docs/script/05-historico.md) | Registro, busca, filtros, revisões e anulação de acordos |
+| [06 - Lembretes e Timers](./docs/script/06-lembretes-timers.md) | Lembretes v2, migração, timers e agendamentos de expediente |
+| [07 - Consulta CAC](./docs/script/07-cac.md) | Consulta à Central de Atendimento, troca automática de conta |
+| [08 - CCBs e Contas](./docs/script/08-ccbs-contas.md) | Download de CCBs em lote e troca rápida de conta |
+| [09 - Equipe e Compartilhamento](./docs/script/09-equipe.md) | Pusher, criptografia AES-GCM, sincronização e conflitos |
+| [10 - Navegação e Busca](./docs/script/10-navegacao-busca.md) | Navegação automática entre telas e busca de cliente |
+
+---
 
 Configuração Inicial:
 

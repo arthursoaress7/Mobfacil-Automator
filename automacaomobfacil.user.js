@@ -1178,6 +1178,40 @@
         html[data-mf-tema=escuro] #mf-lb-popup input{background:#0f172a !important;color:#e2e8f0 !important;border:1px solid #475569}
         html[data-mf-tema=escuro] #mf-eq-avisos .av{background:#1e293b !important;color:#e2e8f0 !important;border-top-color:#1e3a8a !important;border-right-color:#1e3a8a !important;border-bottom-color:#1e3a8a !important}
         html[data-mf-tema=escuro] #mf-eq-avisos p{color:#cbd5e1 !important}
+
+        /* ===== Modo escuro também no ER (segue o mesmo botão 🌙 e a mesma escolha; só cores, nenhum dado ou função) ===== */
+        html[data-mf-tema=escuro]{color-scheme:dark}
+        html[data-mf-tema=escuro] .main-header .navbar,html[data-mf-tema=escuro] .main-header .logo,html[data-mf-tema=escuro] .main-header .navbar-static-top{background:#1b3a2d !important;border-color:#1b3a2d !important}
+        html[data-mf-tema=escuro] .main-sidebar,html[data-mf-tema=escuro] .left-side,html[data-mf-tema=escuro] .sidebar,html[data-mf-tema=escuro] .main-sidebar .sidebar{background:#111c33 !important}
+        html[data-mf-tema=escuro] .sidebar a,html[data-mf-tema=escuro] .sidebar-menu>li>a,html[data-mf-tema=escuro] .sidebar .user-panel .info,html[data-mf-tema=escuro] .sidebar .user-panel .info a,html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li>a{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .sidebar-menu>li:hover>a,html[data-mf-tema=escuro] .sidebar-menu>li.active>a,html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li>a:hover,html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li.active>a{background:#1e293b !important;color:#fff !important}
+        html[data-mf-tema=escuro] .sidebar-menu .treeview-menu,html[data-mf-tema=escuro] .sidebar-menu>li.active>.treeview-menu{background:#0b1220 !important}
+        html[data-mf-tema=escuro] .sidebar .user-panel{background:#1e293b !important}
+        html[data-mf-tema=escuro] body,html[data-mf-tema=escuro] .wrapper,html[data-mf-tema=escuro] .content-wrapper,html[data-mf-tema=escuro] .right-side,html[data-mf-tema=escuro] .main-footer,html[data-mf-tema=escuro] .content,html[data-mf-tema=escuro] .content-header{background:#0f172a !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .content-wrapper h1,html[data-mf-tema=escuro] .content-wrapper h2,html[data-mf-tema=escuro] .content-wrapper h3,html[data-mf-tema=escuro] .content-wrapper h4,html[data-mf-tema=escuro] .content-wrapper h5,html[data-mf-tema=escuro] .content-wrapper h6,html[data-mf-tema=escuro] .content-wrapper label,html[data-mf-tema=escuro] .content-wrapper .control-label,html[data-mf-tema=escuro] .content-header>h1,html[data-mf-tema=escuro] .content-header>.breadcrumb>li,html[data-mf-tema=escuro] .content-header>.breadcrumb>li>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .content-wrapper .text-muted,html[data-mf-tema=escuro] .content-wrapper small,html[data-mf-tema=escuro] .content-wrapper .help-block{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .content-wrapper a:not(.btn):not([class*=label]){color:#60a5fa}
+        html[data-mf-tema=escuro] .box,html[data-mf-tema=escuro] .box-header,html[data-mf-tema=escuro] .box-body,html[data-mf-tema=escuro] .box-footer,html[data-mf-tema=escuro] .nav-tabs-custom,html[data-mf-tema=escuro] .nav-tabs-custom>.tab-content,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs,html[data-mf-tema=escuro] .panel,html[data-mf-tema=escuro] .panel-body,html[data-mf-tema=escuro] .panel-heading,html[data-mf-tema=escuro] .panel-footer,html[data-mf-tema=escuro] .well,html[data-mf-tema=escuro] .info-box,html[data-mf-tema=escuro] .modal-content,html[data-mf-tema=escuro] .modal-header,html[data-mf-tema=escuro] .modal-footer,html[data-mf-tema=escuro] .dropdown-menu,html[data-mf-tema=escuro] .popover,html[data-mf-tema=escuro] .list-group-item,html[data-mf-tema=escuro] .callout.callout-default,html[data-mf-tema=escuro] .jumbotron{background:#1e293b !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .nav-tabs>li>a,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs>li>a,html[data-mf-tema=escuro] .nav-pills>li>a{color:#cbd5e1 !important}
+        html[data-mf-tema=escuro] .nav-tabs>li.active>a,html[data-mf-tema=escuro] .nav-tabs>li.active>a:hover,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs>li.active>a{background:#1e293b !important;color:#93c5fd !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .dropdown-menu>li>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .dropdown-menu>li>a:hover,html[data-mf-tema=escuro] .dropdown-menu>.active>a{background:#334155 !important}
+        html[data-mf-tema=escuro] .close,html[data-mf-tema=escuro] .modal-header .close{color:#e2e8f0 !important;text-shadow:none !important;opacity:.8}
+        html[data-mf-tema=escuro] .table,html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th,html[data-mf-tema=escuro] .table>tfoot>tr>td,html[data-mf-tema=escuro] .table>tfoot>tr>th,html[data-mf-tema=escuro] .table-bordered,html[data-mf-tema=escuro] .table-bordered>thead>tr>th,html[data-mf-tema=escuro] .table-bordered>tbody>tr>td{color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>thead>tr>td{background:#1e293b !important}
+        html[data-mf-tema=escuro] .table>tbody>tr,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th{background-color:#0f172a}
+        html[data-mf-tema=escuro] .table-striped>tbody>tr:nth-of-type(odd),html[data-mf-tema=escuro] .table-striped>tbody>tr:nth-of-type(odd)>td{background-color:#162033 !important}
+        html[data-mf-tema=escuro] .table-hover>tbody>tr:hover,html[data-mf-tema=escuro] .table-hover>tbody>tr:hover>td{background-color:#273449 !important}
+        html[data-mf-tema=escuro] .form-control,html[data-mf-tema=escuro] .input-group-addon,html[data-mf-tema=escuro] .content-wrapper input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),html[data-mf-tema=escuro] .content-wrapper select,html[data-mf-tema=escuro] .content-wrapper textarea,html[data-mf-tema=escuro] .select2-container--default .select2-selection--single,html[data-mf-tema=escuro] .select2-container--default .select2-selection--multiple,html[data-mf-tema=escuro] .select2-dropdown{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] .select2-container--default .select2-selection--single .select2-selection__rendered,html[data-mf-tema=escuro] .select2-results__option{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .select2-container--default .select2-results__option--highlighted[aria-selected]{background:#2563eb !important;color:#fff !important}
+        html[data-mf-tema=escuro] .form-control[disabled],html[data-mf-tema=escuro] .form-control[readonly],html[data-mf-tema=escuro] .content-wrapper input[disabled],html[data-mf-tema=escuro] .content-wrapper input[readonly]{background:#162033 !important;color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .btn-default{background:#334155 !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] .pagination>li>a,html[data-mf-tema=escuro] .pagination>li>span,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_paginate .paginate_button{background:#1e293b !important;color:#cbd5e1 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .pagination>.active>a,html[data-mf-tema=escuro] .pagination>.active>span{background:#2563eb !important;color:#fff !important;border-color:#2563eb !important}
+        html[data-mf-tema=escuro] .dataTables_wrapper,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_info,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_length,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_filter{color:#cbd5e1 !important}
+        html[data-mf-tema=escuro] hr{border-color:#334155}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
         <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-tema" class="mf-mini" type="button" title="Ativar o modo escuro">🌙</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
@@ -3193,11 +3227,35 @@
       if (Object.keys(sx).length) GM_setValue('senhasContas', sx); else GM_deleteValue('senhasContas');
     };
     $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
+    // Mesa <-> Master: ao entrar numa das duas, a opção do seletor já vem na outra (só pré-seleciona; quem troca é o botão Trocar)
+    let ultimaAtivaSug = null;
+    const textoConta = c => (c.usuario + ' ' + (c.apelido || '')).toLowerCase();
+    function sugerirContaDestino() {
+      const lista = contas(), a = contaAtiva();
+      if (!a || a.naoCadastrada || lista.length < 2) return;
+      const mst = String(GM_getValue('cacContaMaster', '') || '').toLowerCase();
+      const iMaster = lista.findIndex(c => mst ? c.usuario.toLowerCase() === mst : /master/.test(textoConta(c)));
+      const iMesa = lista.findIndex((c, i) => i !== iMaster && /mesa/.test(textoConta(c)));
+      if (iMaster < 0 || iMesa < 0) return;
+      const ativa = a.usuario.toLowerCase();
+      const alvo = ativa === lista[iMesa].usuario.toLowerCase() ? iMaster : ativa === lista[iMaster].usuario.toLowerCase() ? iMesa : -1;
+      if (alvo >= 0) $('#mf-conta-sel').value = String(alvo);
+    }
+    function verificarContaSugerida() {
+      const a = contaAtiva(), k = a ? a.usuario.toLowerCase() : '';
+      if (k === ultimaAtivaSug) return;
+      ultimaAtivaSug = k;
+      sugerirContaDestino();
+    }
+    setInterval(verificarContaSugerida, 1500);
     function desenharContas() {
       const lista = contas();
       const sel = $('#mf-conta-sel');
+      const escolhida = sel.value;   // mantém a escolha manual enquanto a conta ativa não mudar
       sel.innerHTML = '';
       lista.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = rotuloConta(c); sel.appendChild(o); });
+      if (escolhida !== '' && sel.querySelector('option[value="' + escolhida + '"]')) sel.value = escolhida;
+      setTimeout(verificarContaSugerida);
       $('#mf-conta-trocar').disabled = !lista.length;
       const caixa = $('#mf-contas');
       caixa.innerHTML = lista.length ? '' : '<div class="mf-info">Nenhuma conta cadastrada.</div>';

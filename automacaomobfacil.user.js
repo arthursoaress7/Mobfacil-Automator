@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      12.1
+// @version      12.2
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -26,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.1');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.2');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -69,6 +69,7 @@
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
     aparencia: 'nova',               // 'nova' (padrão) ou 'antiga'
+    tema: 'claro',                   // 'claro' (padrão) ou 'escuro' (só cores; vale nas duas aparências)
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
     lerAbaCliente: true, 
@@ -1114,9 +1115,126 @@
         }
         #mf-p .mf-corpo::-webkit-scrollbar{width:8px}
         #mf-p .mf-corpo::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+        /* ===== Modo escuro: só vale com data-tema="escuro". O modo claro (padrão) usa as regras acima, sem nenhuma alteração ===== */
+        #mf-p[data-tema=escuro]{color-scheme:dark;background:#0f172a !important;color:#e2e8f0 !important;border-color:#334155 !important;box-shadow:0 8px 28px #000a}
+        #mf-p[data-tema=escuro] #mf-tema{font-size:15px;padding:2px 8px}
+        #mf-p[data-tema=escuro] .mf-top{border-bottom:1px solid #334155}
+        #mf-p[data-tema=escuro] .mf-abas{background:#111c33 !important;border-bottom-color:#334155 !important}
+        #mf-p[data-tema=escuro] .mf-abas button{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] .mf-abas button:hover:not(:disabled){background:#1e293b !important}
+        #mf-p[data-tema=escuro] .mf-abas button.ativa{color:#93c5fd !important;background:#0f172a !important;border-bottom-color:#3b82f6 !important}
+        #mf-p[data-tema=escuro] .mf-sec,#mf-p[data-tema=escuro] .mf-grupo{border-bottom-color:#263349 !important}
+        #mf-p[data-tema=escuro] .mf-tit,#mf-p[data-tema=escuro] .mf-info,#mf-p[data-tema=escuro] .mf-grupo>summary,#mf-p[data-tema=escuro] .mf-ng-bloco>summary,#mf-p[data-tema=escuro] .mf-opc small,#mf-p[data-tema=escuro] .mf-lb-rot,#mf-p[data-tema=escuro] .mf-cac-lin span,#mf-p[data-tema=escuro] .mf-hs-det,#mf-p[data-tema=escuro] .mf-lb-det{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] .mf-opc,#mf-p[data-tema=escuro] .mf-fmt,#mf-p[data-tema=escuro] .mf-conta,#mf-p[data-tema=escuro] .mf-lb-l1{color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-barra{background:#334155}
+        #mf-p[data-tema=escuro] textarea,#mf-p[data-tema=escuro] select,#mf-p[data-tema=escuro] input:not([type]),#mf-p[data-tema=escuro] input[type=text],#mf-p[data-tema=escuro] input[type=date],#mf-p[data-tema=escuro] input[type=time],#mf-p[data-tema=escuro] input[type=password],#mf-p[data-tema=escuro] input[type=number],#mf-p[data-tema=escuro] input[type=search],#mf-p[data-tema=escuro] input[type=email],#mf-p[data-tema=escuro] input[type=tel]{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        #mf-p[data-tema=escuro] textarea:focus,#mf-p[data-tema=escuro] select:focus,#mf-p[data-tema=escuro] input:focus{outline-color:#1d4ed8 !important;border-color:#60a5fa !important}
+        #mf-p[data-tema=escuro] ::placeholder{color:#64748b !important}
+        #mf-p[data-tema=escuro] option{background:#1e293b;color:#e2e8f0}
+        #mf-p[data-tema=escuro] input.mf-erro,#mf-p[data-tema=escuro] textarea.mf-erro,#mf-p[data-tema=escuro] select.mf-erro{background:#450a0a !important;border-color:#ef4444 !important}
+        #mf-p[data-tema=escuro] .mf-ng-saldo{color:#4ade80;background:#052e16;border-color:#166534}
+        #mf-p[data-tema=escuro] .mf-ng-saldo.erro{color:#fca5a5;background:#450a0a;border-color:#7f1d1d}
+        /* botões: antiga (cinza claro vira cinza escuro) e nova (neutros escuros; os principais azul/verde mantêm as cores) */
+        #mf-p[data-tema=escuro][data-ui=antiga] .cinza{background:#334155 !important;color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro][data-ui=nova] button{background:#1e293b;color:#e2e8f0;border-color:#475569}
+        #mf-p[data-tema=escuro][data-ui=nova] button:hover:not(:disabled){background:#273449;filter:none}
+        #mf-p[data-tema=escuro][data-ui=nova] button:disabled{background:#1e293b;color:#64748b;border-color:#334155}
+        #mf-p[data-tema=escuro] .mf-mini{background:transparent !important;border:0 !important;color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-mini:hover{background:#334155 !important}
+        #mf-p[data-tema=escuro] .mf-ui-icone{background:transparent !important;border:0 !important;color:#cbd5e1 !important}
+        #mf-p[data-tema=escuro] .mf-ui-icone:hover{background:#334155 !important;color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-ui-chip{background:#334155 !important;border:0 !important;color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .vermelho{color:#f87171 !important;border-color:#7f1d1d !important}
+        #mf-p[data-tema=escuro][data-ui=antiga] .vermelho{color:#fff !important}
+        #mf-p[data-tema=escuro] .laranja{color:#fb923c !important;border-color:#7c2d12 !important}
+        #mf-p[data-tema=escuro][data-ui=antiga] .laranja{color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-copia{color:#60a5fa !important}
+        #mf-p[data-tema=escuro] .mf-ui-menu{background:#1e293b !important;border-color:#334155 !important;box-shadow:0 10px 24px #000a}
+        #mf-p[data-tema=escuro] .mf-ui-menu button{color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-ui-menu button:hover,#mf-p[data-tema=escuro] .mf-ui-menu button.ativa{background:#334155 !important;color:#93c5fd !important}
+        #mf-p[data-tema=escuro][data-ui=nova] .mf-ui-seg{background:#1e293b !important}
+        #mf-p[data-tema=escuro][data-ui=nova] .mf-ui-seg button{background:transparent !important;color:#94a3b8 !important;border:0 !important}
+        #mf-p[data-tema=escuro][data-ui=antiga] .mf-ui-seg button,#mf-p[data-tema=escuro] .mf-lb-filtros button{background:#334155 !important;color:#cbd5e1 !important;border:0 !important}
+        #mf-p[data-tema=escuro] .mf-ui-seg button.ativa,#mf-p[data-tema=escuro] .mf-lb-filtros button.ativa{background:#2563eb !important;color:#fff !important}
+        #mf-p[data-tema=escuro] .mf-ui-copias.aberto .mf-ui-extra{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        /* blocos, listas e cartões */
+        #mf-p[data-tema=escuro] .mf-bs{background:#111c33 !important;border-bottom-color:#263349 !important}
+        #mf-p[data-tema=escuro] .mf-ui-prev.ativo{background:#422006;color:#fde68a;border-bottom-color:#854d0e}
+        #mf-p[data-tema=escuro] #mf-tm-resumo{background:#422006 !important;color:#fed7aa !important}
+        #mf-p[data-tema=escuro] #mf-msg{background:#1e293b !important;border:1px solid #334155 !important;color:#e2e8f0 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item,#mf-p[data-tema=escuro] .mf-hs-item{border-top-color:#334155 !important;border-right-color:#334155 !important;border-bottom-color:#334155 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item.hoje{background:#3a2a12 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item.atrasado{background:#3b1519 !important}
+        #mf-p[data-tema=escuro] .mf-lb-item div[style*="color"]{color:#94a3b8 !important}
+        #mf-p[data-tema=escuro] .mf-tag{background:#312e81;color:#c7d2fe}
+        #mf-p[data-tema=escuro] .mf-pl-lin,#mf-p[data-tema=escuro] .mf-cac-lin,#mf-p[data-tema=escuro] .mf-conta{border-bottom-color:#263349 !important}
+        #mf-p[data-tema=escuro] .mf-corpo::-webkit-scrollbar-thumb{background:#475569}
+        /* avisos fora do painel (lembretes, timer e equipe) */
+        html[data-mf-tema=escuro] #mf-lb-popup,html[data-mf-tema=escuro] #mf-tm-alarme{background:#1e293b !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup .it,html[data-mf-tema=escuro] #mf-tm-alarme .it{border-top-color:#334155 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup [style*="color"]{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] #mf-tm-alarme h4{color:#fca5a5 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup button:not(.pri),html[data-mf-tema=escuro] #mf-tm-alarme button:not(.pri),html[data-mf-tema=escuro] #mf-eq-avisos button:not(.pri){background:#334155 !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] #mf-lb-popup input{background:#0f172a !important;color:#e2e8f0 !important;border:1px solid #475569}
+        html[data-mf-tema=escuro] #mf-eq-avisos .av{background:#1e293b !important;color:#e2e8f0 !important;border-top-color:#1e3a8a !important;border-right-color:#1e3a8a !important;border-bottom-color:#1e3a8a !important}
+        html[data-mf-tema=escuro] #mf-eq-avisos p{color:#cbd5e1 !important}
+
+        /* ===== Modo escuro também no ER (segue o mesmo botão 🌙 e a mesma escolha; só cores, nenhum dado ou função) ===== */
+        html[data-mf-tema=escuro]{color-scheme:dark}
+        html[data-mf-tema=escuro] .main-header .navbar,html[data-mf-tema=escuro] .main-header .logo,html[data-mf-tema=escuro] .main-header .navbar-static-top{background:#1b3a2d !important;border-color:#1b3a2d !important}
+        html[data-mf-tema=escuro] .main-sidebar,html[data-mf-tema=escuro] .left-side,html[data-mf-tema=escuro] .sidebar,html[data-mf-tema=escuro] .main-sidebar .sidebar{background:#111c33 !important}
+        html[data-mf-tema=escuro] .sidebar a,html[data-mf-tema=escuro] .sidebar-menu>li>a,html[data-mf-tema=escuro] .sidebar .user-panel .info,html[data-mf-tema=escuro] .sidebar .user-panel .info a,html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li>a{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .sidebar-menu>li:hover>a,html[data-mf-tema=escuro] .sidebar-menu>li.active>a,html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li>a:hover,html[data-mf-tema=escuro] .sidebar-menu .treeview-menu>li.active>a{background:#1e293b !important;color:#fff !important}
+        html[data-mf-tema=escuro] .sidebar-menu .treeview-menu,html[data-mf-tema=escuro] .sidebar-menu>li.active>.treeview-menu{background:#0b1220 !important}
+        html[data-mf-tema=escuro] .sidebar .user-panel{background:#1e293b !important}
+        html[data-mf-tema=escuro] body,html[data-mf-tema=escuro] .wrapper,html[data-mf-tema=escuro] .content-wrapper,html[data-mf-tema=escuro] .right-side,html[data-mf-tema=escuro] .main-footer,html[data-mf-tema=escuro] .content,html[data-mf-tema=escuro] .content-header{background:#0f172a !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .content-wrapper h1,html[data-mf-tema=escuro] .content-wrapper h2,html[data-mf-tema=escuro] .content-wrapper h3,html[data-mf-tema=escuro] .content-wrapper h4,html[data-mf-tema=escuro] .content-wrapper h5,html[data-mf-tema=escuro] .content-wrapper h6,html[data-mf-tema=escuro] .content-wrapper label,html[data-mf-tema=escuro] .content-wrapper .control-label,html[data-mf-tema=escuro] .content-header>h1,html[data-mf-tema=escuro] .content-header>.breadcrumb>li,html[data-mf-tema=escuro] .content-header>.breadcrumb>li>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .content-wrapper .text-muted,html[data-mf-tema=escuro] .content-wrapper small,html[data-mf-tema=escuro] .content-wrapper .help-block{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .content-wrapper a:not(.btn):not([class*=label]){color:#60a5fa}
+        html[data-mf-tema=escuro] .box,html[data-mf-tema=escuro] .box-header,html[data-mf-tema=escuro] .box-body,html[data-mf-tema=escuro] .box-footer,html[data-mf-tema=escuro] .nav-tabs-custom,html[data-mf-tema=escuro] .nav-tabs-custom>.tab-content,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs,html[data-mf-tema=escuro] .panel,html[data-mf-tema=escuro] .panel-body,html[data-mf-tema=escuro] .panel-heading,html[data-mf-tema=escuro] .panel-footer,html[data-mf-tema=escuro] .well,html[data-mf-tema=escuro] .info-box,html[data-mf-tema=escuro] .modal-content,html[data-mf-tema=escuro] .modal-header:not([class*=bg-]),html[data-mf-tema=escuro] .modal-footer,html[data-mf-tema=escuro] .modal-body,html[data-mf-tema=escuro] .dropdown-menu,html[data-mf-tema=escuro] .popover,html[data-mf-tema=escuro] .list-group-item,html[data-mf-tema=escuro] .callout.callout-default,html[data-mf-tema=escuro] .jumbotron{background:#1e293b !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .nav-tabs>li>a,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs>li>a,html[data-mf-tema=escuro] .nav-pills>li>a{color:#cbd5e1 !important}
+        html[data-mf-tema=escuro] .nav-tabs>li.active>a,html[data-mf-tema=escuro] .nav-tabs>li.active>a:hover,html[data-mf-tema=escuro] .nav-tabs-custom>.nav-tabs>li.active>a{background:#1e293b !important;color:#93c5fd !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .dropdown-menu>li>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .dropdown-menu>li>a:hover,html[data-mf-tema=escuro] .dropdown-menu>.active>a{background:#334155 !important}
+        html[data-mf-tema=escuro] .close,html[data-mf-tema=escuro] .modal-header .close{color:#e2e8f0 !important;text-shadow:none !important;opacity:.8}
+        html[data-mf-tema=escuro] .table,html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th,html[data-mf-tema=escuro] .table>tfoot>tr>td,html[data-mf-tema=escuro] .table>tfoot>tr>th,html[data-mf-tema=escuro] .table-bordered,html[data-mf-tema=escuro] .table-bordered>thead>tr>th,html[data-mf-tema=escuro] .table-bordered>tbody>tr>td{border-color:#334155 !important}
+        html[data-mf-tema=escuro] .table>thead>tr>th,html[data-mf-tema=escuro] .table>thead>tr>td{background:#1e293b !important}
+        html[data-mf-tema=escuro] .table>tbody>tr,html[data-mf-tema=escuro] .table>tbody>tr>td,html[data-mf-tema=escuro] .table>tbody>tr>th{background-color:#0f172a}
+        html[data-mf-tema=escuro] .table-striped>tbody>tr:nth-of-type(odd),html[data-mf-tema=escuro] .table-striped>tbody>tr:nth-of-type(odd)>td{background-color:#162033 !important}
+        html[data-mf-tema=escuro] .table-hover>tbody>tr:hover,html[data-mf-tema=escuro] .table-hover>tbody>tr:hover>td{background-color:#273449 !important}
+        html[data-mf-tema=escuro] .form-control,html[data-mf-tema=escuro] .input-group-addon,html[data-mf-tema=escuro] .content-wrapper input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=file]),html[data-mf-tema=escuro] .content-wrapper select,html[data-mf-tema=escuro] .content-wrapper textarea,html[data-mf-tema=escuro] .select2-container--default .select2-selection--single,html[data-mf-tema=escuro] .select2-container--default .select2-selection--multiple,html[data-mf-tema=escuro] .select2-dropdown{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] .select2-container--default .select2-selection--single .select2-selection__rendered,html[data-mf-tema=escuro] .select2-results__option{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .select2-container--default .select2-results__option--highlighted[aria-selected]{background:#2563eb !important;color:#fff !important}
+        html[data-mf-tema=escuro] .form-control[disabled],html[data-mf-tema=escuro] .form-control[readonly],html[data-mf-tema=escuro] .content-wrapper input[disabled],html[data-mf-tema=escuro] .content-wrapper input[readonly]{background:#162033 !important;color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .btn-default{background:#334155 !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] .pagination>li>a,html[data-mf-tema=escuro] .pagination>li>span,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_paginate .paginate_button{background:#1e293b !important;color:#cbd5e1 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .pagination>.active>a,html[data-mf-tema=escuro] .pagination>.active>span{background:#2563eb !important;color:#fff !important;border-color:#2563eb !important}
+        html[data-mf-tema=escuro] .dataTables_wrapper,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_info,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_length,html[data-mf-tema=escuro] .dataTables_wrapper .dataTables_filter{color:#cbd5e1 !important}
+        html[data-mf-tema=escuro] hr{border-color:#334155}
+
+        /* ajustes a partir do HTML real do ER (Mesa de Crédito e menu lateral) */
+        html[data-mf-tema=escuro] .sidebar-menu>li.header{background:#111c33 !important}
+        html[data-mf-tema=escuro] .user-panel>.info,html[data-mf-tema=escuro] .user-panel>.info>p,html[data-mf-tema=escuro] .user-panel>.info>a{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .control-sidebar-light,html[data-mf-tema=escuro] .control-sidebar-bg{background:#111c33 !important;color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .progress{background:#334155 !important}
+        html[data-mf-tema=escuro] .btn-white,html[data-mf-tema=escuro] .bootstrap-select>.dropdown-toggle{background:#1e293b !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li a,html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li a .text{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li a:hover,html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li.selected a,html[data-mf-tema=escuro] .bootstrap-select .dropdown-menu li.active a{background:#334155 !important}
+        html[data-mf-tema=escuro] .bootstrap-select .dropdown-header,html[data-mf-tema=escuro] .dropdown-header,html[data-mf-tema=escuro] .text-gray{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .bs-searchbox input,html[data-mf-tema=escuro] .bs-actionsbox .btn{background:#0f172a !important;color:#e2e8f0 !important;border-color:#475569 !important}
+        html[data-mf-tema=escuro] #divNotificacoesDetalhe{background:#1e293b !important;color:#e2e8f0 !important;border-left-color:#334155 !important}
+        html[data-mf-tema=escuro] .modal-header:not([class*=bg-]) .close{color:#e2e8f0 !important}
+        /* tela de login (login-box) */
+        html[data-mf-tema=escuro] .login-page,html[data-mf-tema=escuro] .register-page{background:#0f172a !important}
+        html[data-mf-tema=escuro] .login-box-body,html[data-mf-tema=escuro] .register-box-body{background:#1e293b !important;color:#e2e8f0 !important;border-color:#334155 !important}
+        html[data-mf-tema=escuro] .login-box-msg,html[data-mf-tema=escuro] .register-box-msg,html[data-mf-tema=escuro] .login-logo a,html[data-mf-tema=escuro] .login-box-body p,html[data-mf-tema=escuro] .login-box-body b{color:#e2e8f0 !important}
+        html[data-mf-tema=escuro] .login-box a:not(.btn){color:#60a5fa !important}
+        html[data-mf-tema=escuro] .login-box .form-control-feedback,html[data-mf-tema=escuro] .login-box .glyphicon{color:#94a3b8 !important}
+        html[data-mf-tema=escuro] .login-logo img{background:#fff;border-radius:12px;padding:10px}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
-        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
+        <button id="mf-tam" class="mf-mini" type="button" title="Ampliar o painel">⤢</button><button id="mf-tema" class="mf-mini" type="button" title="Ativar o modo escuro">🌙</button><button id="mf-min" class="mf-mini" title="Minimizar / expandir">—</button></div>
       <div class="mf-rz mf-rz-d" data-rz="x" title="Arraste para mudar a largura"></div><div class="mf-rz mf-rz-b" data-rz="y" title="Arraste para mudar a altura"></div>
       <div class="mf-rz mf-rz-c" data-rz="xy" tabindex="0" role="separator" aria-label="Redimensionar o painel (setas do teclado; duplo clique alterna padrão e ampliado)" title="Arraste para redimensionar · duplo clique: padrão / ampliado"></div>
       <div class="mf-corpo">
@@ -1508,6 +1626,9 @@
           <details class="mf-grupo" data-grupo="aparencia" open><summary>Aparência da interface</summary>
             <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="nova"><span><b>Nova UI</b><small>Visual moderno, botões principais em destaque, ajuda em ⓘ.</small></span></label>
             <label class="mf-opc"><input type="radio" name="mf-ui-aparencia" value="antiga"><span><b>UI Antiga</b><small>Cores e tamanhos anteriores, com a mesma organização das abas.</small></span></label>
+            <div class="mf-tit" style="margin-top:10px">Tema</div>
+            <label class="mf-opc"><input type="radio" name="mf-ui-tema" value="claro"><span><b>Modo claro</b><small>Padrão.</small></span></label>
+            <label class="mf-opc"><input type="radio" name="mf-ui-tema" value="escuro"><span><b>Modo escuro</b><small>Fundo escuro, mais confortável em ambiente com pouca luz. Só muda as cores; também pelo botão 🌙 do topo.</small></span></label>
             <button id="mf-ui-previsualizar" class="cinza" style="width:100%">Pré-visualizar a outra aparência</button>
           </details>
           <details class="mf-grupo" data-grupo="painel"><summary>Painel, navegação e diagnóstico</summary>
@@ -1528,6 +1649,8 @@
       </div>
 `;
     painel.dataset.ui = cfg('aparencia') === 'antiga' ? 'antiga' : 'nova';   // aparência aplicada antes de mostrar (sem "piscar")
+    painel.dataset.tema = cfg('tema') === 'escuro' ? 'escuro' : 'claro';   // tema aplicado antes de mostrar (sem "piscar")
+    document.documentElement.dataset.mfTema = painel.dataset.tema;          // os avisos fora do painel (pop-ups) seguem o mesmo tema
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
     const msg = t => ($('#mf-msg').textContent = t);
@@ -3124,11 +3247,40 @@
       if (Object.keys(sx).length) GM_setValue('senhasContas', sx); else GM_deleteValue('senhasContas');
     };
     $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
+    // Mesa <-> Master: ao entrar numa das duas, a opção do seletor já vem na outra (só pré-seleciona; quem troca é o botão Trocar)
+    let ultimaAtivaSug = null;
+    // a tela Mesa de Crédito troca todos os <select> da página por bootstrap-select (inclusive o do painel): sem 'refresh' o botão mostraria a opção antiga
+    function atualizarSelectPicker(sel) {
+      try { const J = PAGINA.jQuery; if (J && J(sel).data('selectpicker')) J(sel).selectpicker('refresh'); } catch (_) {}
+    }
+    const textoConta = c => (c.usuario + ' ' + (c.apelido || '')).toLowerCase();
+    function sugerirContaDestino() {
+      const lista = contas(), a = contaAtiva();
+      if (!a || a.naoCadastrada || lista.length < 2) return;
+      const mst = String(GM_getValue('cacContaMaster', '') || '').toLowerCase();
+      const iMaster = lista.findIndex(c => mst ? c.usuario.toLowerCase() === mst : /master/.test(textoConta(c)));
+      const iMesa = lista.findIndex((c, i) => i !== iMaster && /mesa/.test(textoConta(c)));
+      if (iMaster < 0 || iMesa < 0) return;
+      const ativa = a.usuario.toLowerCase();
+      const alvo = ativa === lista[iMesa].usuario.toLowerCase() ? iMaster : ativa === lista[iMaster].usuario.toLowerCase() ? iMesa : -1;
+      if (alvo >= 0) { const s = $('#mf-conta-sel'); s.value = String(alvo); atualizarSelectPicker(s); }
+    }
+    function verificarContaSugerida() {
+      const a = contaAtiva(), k = a ? a.usuario.toLowerCase() : '';
+      if (k === ultimaAtivaSug) return;
+      ultimaAtivaSug = k;
+      sugerirContaDestino();
+    }
+    setInterval(verificarContaSugerida, 1500);
     function desenharContas() {
       const lista = contas();
       const sel = $('#mf-conta-sel');
+      const escolhida = sel.value;   // mantém a escolha manual enquanto a conta ativa não mudar
       sel.innerHTML = '';
       lista.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = rotuloConta(c); sel.appendChild(o); });
+      if (escolhida !== '' && sel.querySelector('option[value="' + escolhida + '"]')) sel.value = escolhida;
+      atualizarSelectPicker(sel);
+      setTimeout(verificarContaSugerida);
       $('#mf-conta-trocar').disabled = !lista.length;
       const caixa = $('#mf-contas');
       caixa.innerHTML = lista.length ? '' : '<div class="mf-info">Nenhuma conta cadastrada.</div>';
@@ -5269,6 +5421,20 @@
     $('#mf-ui-prev-manter').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); GM_setValue('aparencia', painel.dataset.ui); aplicarUI(painel.dataset.ui); msg('Aparência mantida.'); };
     $('#mf-ui-prev-voltar').onclick = () => { clearTimeout(uiPrevTimer); faixa.classList.remove('ativo'); aplicarUI(cfg('aparencia')); };
     aplicarUI(cfg('aparencia'));
+
+    /* ---- Tema claro / escuro: só troca data-tema (o CSS faz o resto); nenhuma função ou dado é tocado ---- */
+    function aplicarTema(tema) {
+      tema = tema === 'escuro' ? 'escuro' : 'claro';
+      painel.dataset.tema = tema;
+      document.documentElement.dataset.mfTema = tema;
+      const bt = $('#mf-tema');
+      bt.textContent = tema === 'escuro' ? '☀️' : '🌙';
+      bt.title = tema === 'escuro' ? 'Voltar ao modo claro' : 'Ativar o modo escuro';
+      $$ui('input[name="mf-ui-tema"]').forEach(r => { r.checked = r.value === tema; });
+    }
+    $('#mf-tema').onclick = () => { const novo = painel.dataset.tema === 'escuro' ? 'claro' : 'escuro'; GM_setValue('tema', novo); aplicarTema(novo); };
+    $$ui('input[name="mf-ui-tema"]').forEach(r => r.addEventListener('change', () => { if (r.checked) { GM_setValue('tema', r.value); aplicarTema(r.value); } }));
+    aplicarTema(cfg('tema'));
 
     /* ================= EQUIPE: compartilhamento entre os funcionários (Pusher) =================
        O armazenamento do Tampermonkey é de cada navegador. Para a equipe ver os mesmos lembretes e acordos:

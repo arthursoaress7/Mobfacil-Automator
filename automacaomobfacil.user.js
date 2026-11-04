@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      12.3
+// @version      12.4
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -26,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.3');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.4');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -66,6 +66,7 @@
   const PADRAO = {
     auditoriaCompleta: true,         // CPF, motivo e dados da proposta (modelo Auditoria 2 Completo)
     ignorarCanceladasTestes: true,   // canceladas e testes nunca são processadas
+    rendasReprovadas: false,         // relatório de Rendas: false = só aprovadas/efetivadas; true = inclui as reprovadas
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
     aparencia: 'nova',               // 'nova' (padrão) ou 'antiga'
@@ -100,12 +101,13 @@
       setTimeout(() => { if (pend[i]) { delete pend[i]; r(); } }, ms + 1500);
     });
   })();
-  const NOMES = { qtd: 'qtd restritivos', val: 'valor restritivos', score: 'score', consultas: 'consultas', cpf: 'cpf', reprov: 'motivo da reprovação' };
+  const NOMES = { qtd: 'qtd restritivos', val: 'valor restritivos', score: 'score', consultas: 'consultas', cpf: 'cpf', reprov: 'motivo da reprovação', rendaInf: 'renda informada', rendaBiro: 'renda do birô' };
   // Auditoria completa inclui CPF e motivo; os dados de crédito são SEMPRE coletados.
   const campos = () => {
     const m = GM_getValue('modo', 'coleta');
     if (m === 'aprovadas') return ['cpf'];
     if (m === 'reprovadas') return ['reprov'];
+    if (m === 'rendas') return ['rendaInf', 'rendaBiro', 'cpf'];   // '' em rendaBiro = a proposta não tem RendaCalculo (conta como lido)
     const credito = ['qtd', 'val', 'score', 'consultas'];
     return cfg('auditoriaCompleta') ? [...credito, 'cpf', 'reprov'] : credito;
   };
@@ -329,6 +331,34 @@
     return { qtd, val, score, consultas, cpf };
   }
 
+  // Relatório de Rendas: o nó "RendaCalculo: 1724.27" da árvore é a renda do birô. Pega o primeiro com número válido.
+  // O valor vem do JSON (o ponto é DECIMAL): num() leria "900.125" como milhar, por isso este tratamento à parte.
+  function rendaDeLista(lista) {
+    for (const n of lista) {
+      const m = n.t.match(/^RendaCalculo\s*:\s*(.*)$/i);
+      if (!m) continue;
+      const v = m[1].trim();
+      const x = /^-?\d+(\.\d+)?$/.test(v) ? v.replace('.', ',') : num(v);
+      if (x != null) return x;
+    }
+    return null;
+  }
+
+  // campo do cartão do resultado ("Renda informada: 3000"): rótulo e valor são <span> vizinhos dentro de .ant-card-body
+  function cartao(rotulo, texto) {
+    const rx = new RegExp('^\\s*' + rotulo + '\\s*:\\s*$', 'i');
+    try {
+      for (const sp of document.querySelectorAll('.ant-card-body span')) {
+        if (!rx.test(sp.textContent)) continue;
+        const v = sp.nextElementSibling;
+        if (v && v.textContent.trim()) return v.textContent.trim();
+      }
+    } catch (_) {}
+    // reserva: texto da página (os <span> vêm colados, então o valor termina no próximo rótulo do cartão)
+    const m = String(texto || '').match(new RegExp(rotulo + '\\s*:\\s*([^:]*?)(?=\\s*(?:Fluxo processado|CPF|Data de nascimento|Renda informada|ID da proposta|Pol[ií]tica|Nome do cliente)\\s*:|$)', 'i'));
+    return m && m[1].trim() ? m[1].trim() : null;
+  }
+
   function extrair() {
     const texto = document.body.textContent.replace(/\s+/g, ' ');
     const id = (texto.match(/ID da proposta:\s*(\d+)/i) || [])[1];
@@ -340,6 +370,16 @@
     if (lr) {
       const x = extrairDeLista(soP1(lr));
       ['qtd', 'val', 'score', 'consultas', 'cpf'].forEach(k => { if (r[k] == null && x[k] != null) r[k] = x[k]; });
+    }
+    // modo "rendas": Renda informada, nome e CPF vêm do cartão do resultado; RendaCalculo (renda do birô) vem da árvore
+    // (tela e, se faltar, memória: primeiro o bloco "Fluxos P1", depois a árvore inteira)
+    if (GM_getValue('modo', 'coleta') === 'rendas') {
+      let rb = rendaDeLista(nos());
+      if (rb == null && lr) { rb = rendaDeLista(soP1(lr)); if (rb == null) rb = rendaDeLista(lr); }
+      r.rendaBiro = rb;
+      r.rendaInf = num(cartao('Renda informada', texto));
+      r.nome = cartao('Nome do cliente', texto);
+      if (r.cpf == null) { const c = String(cartao('CPF', texto) || '').replace(/\D/g, ''); if (c.length === 11) r.cpf = c; }
     }
     // Mensagem de reprovação do MobFacil: "(P1) Reprovar: renda inferior a mínima permitida (1621 reais) (atual=R$1300)"
     // null = cartão de resultado ainda não carregou; '' = carregou e não tem mensagem de reprovação
@@ -364,7 +404,7 @@
     const todos = GM_getValue('dados', {});
     const atual = todos[r.id] || {};
     let mudou = false;
-    ['qtd', 'val', 'score', 'consultas', 'cpf', 'reprov'].forEach(k => {
+    ['qtd', 'val', 'score', 'consultas', 'cpf', 'reprov', 'rendaInf', 'rendaBiro', 'nome'].forEach(k => {
       if (r[k] != null && (atual[k] == null || (k === 'reprov' && atual[k] === '' && r[k] !== ''))) { atual[k] = r[k]; mudou = true; }
     });
     if (!mudou) return;
@@ -727,6 +767,35 @@
         return 'tempo';
       };
 
+      // modo "rendas", plano B: pesquisa "RendaCalculo" (a pesquisa abre os ancestrais sozinha) e lê o nó que aparecer
+      const buscarRenda = async maxSeg => {
+        const limite = Math.min(Date.now() + maxSeg * 1000, prazo);
+        await aguardarMovimento();
+        const achouCampo = pesquisar('RendaCalculo');
+        await sleep(CONFIG.PAUSA_BUSCA);
+        const ini = Date.now();
+        const h0 = areaRolavel();
+        if (h0) h0.scrollTop = 0;
+        let varre = 0;
+        while (Date.now() < limite) {
+          lerEGravar();
+          if (dadosAtuais().rendaBiro != null) return 'lido';
+          const fim = () => (achouCampo ? 'ausente' : 'sem campo de pesquisa');
+          const h = areaRolavel();
+          if (h) {
+            if (h.scrollTop + h.clientHeight >= h.scrollHeight - 5) {
+              if (++varre >= 2 && Date.now() - ini > CONFIG.ESPERA_NO * 1000) return fim();
+              h.scrollTop = 0;
+            } else h.scrollTop += Math.max(Math.floor(h.clientHeight * CONFIG.PASSO_ROLAGEM), 100);
+            await sleep(CONFIG.PASSO_MS);
+          } else {
+            if (Date.now() - ini > CONFIG.ESPERA_NO * 1000) return fim();
+            await sleep(CONFIG.ESPERA_CLIQUE);
+          }
+        }
+        return 'tempo';
+      };
+
       const log = [];
       const rodar = async (nome, maxSeg) => {
         let rr = await rodarCaminho(CAMINHOS[nome], maxSeg);
@@ -749,6 +818,37 @@
       lerEGravar();
 
       const modoAtual = GM_getValue('modo', 'coleta');
+      // modo "rendas": Renda informada (cartão do resultado) + RendaCalculo (nó da árvore = renda do birô).
+      // Não usa os caminhos do SPC: lê o cartão, depois a memória da árvore (sem cliques) e, se ela não servir, pesquisa o nó.
+      if (modoAtual === 'rendas') {
+        // 1) cartão do resultado (Renda informada e CPF): dá um tempo para carregar
+        for (let i = 0; i < 10 && (dadosAtuais().rendaInf == null || dadosAtuais().cpf == null) && Date.now() < prazo; i++) {
+          await sleep(300);
+          lerEGravar();
+        }
+        // 2) RendaCalculo pela memória da árvore. Memória confiável, completa e estável SEM o nó = a proposta não tem renda do birô
+        //    (grava '' para a coleta terminar sem falha; o relatório deixa a coluna vazia)
+        const memCompleta = () => !!(react.ok && react.lista && react.lista.some(n => /^(cpf\b|fluxos)/i.test(n.t)));
+        const tMem = Date.now();
+        let ultimoN = -1, estavel = 0;
+        while (dadosAtuais().rendaBiro == null && Date.now() < prazo) {
+          lerEGravar();
+          if (dadosAtuais().rendaBiro != null) break;
+          if (memCompleta()) {
+            estavel = react.nos === ultimoN ? estavel + 1 : 0;
+            ultimoN = react.nos;
+            if (estavel >= 3) { salvar({ id: r.id, rendaBiro: '' }); log.push('rendaBiro: sem o nó (memória)'); break; }
+          } else if (Date.now() - tMem > 4000) break;   // sem memória confiável: segue para a pesquisa
+          await sleep(300);
+        }
+        // 3) plano B: pesquisa o nó na árvore
+        if (dadosAtuais().rendaBiro == null && Date.now() < prazo) log.push('rendaBiro: pesquisa ' + await buscarRenda(CONFIG.BUSCA_SEG));
+        // 4) CPF pela árvore, se o cartão não trouxe
+        if (dadosAtuais().cpf == null && Date.now() < prazo) await rodar('fluxo', CONFIG.CAMINHO_SEG);
+        snapshot(r.id, 'fim (' + (log.join(' | ') || 'lido da memória') + ')', null);
+        GM_setValue('fim', r.id);
+        return;
+      }
       // modo "reprovadas": se o motivo não depende da árvore (renda, idade...), a mensagem do MobFacil basta
       if (modoAtual === 'reprovadas') {
         let rp = dadosAtuais().reprov;
@@ -1329,6 +1429,7 @@
               <option value="efetivadas">Relatório - Efetivadas (Boleto+)</option>
               <option value="aprovadas">Relatório - Aprovadas não efetivadas</option>
               <option value="valortransacao">Relatório - Diário</option>
+              <option value="rendas">Relatório - Rendas (informada x birô)</option>
             </select>
             <div id="mf-diario" style="display:none;margin-bottom:8px">
               <select id="mf-diario-saida" title="Só muda a saída do Relatório Diário">
@@ -1615,6 +1716,7 @@
             <label class="mf-opc" title="Coleta também CPF, motivo (coluna R) e os dados da proposta (nome, loja, vendedor, contato...) no modelo Auditoria 2 Completo. Desligada: só os dados de crédito."><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b><small>CPF, motivo e dados da proposta (A–R)</small></span></label>
             <label class="mf-opc" title="Abre a aba Cliente da Análise de Proposta (oculta) para ler telefone e e-mail. Desligue se ela deixar a coleta lenta ou falhar: o resto da auditoria continua."><input type="checkbox" id="mf-aba-cliente"><span><b>Telefone e e-mail (aba Cliente)</b></span></label>
             <label class="mf-opc" title="Proposta cancelada ou de teste (cliente ou digitador TESTE) nunca é processada, qualquer que seja a situação."><input type="checkbox" id="mf-canc"><span><b>Ignorar canceladas e testes</b></span></label>
+            <label class="mf-opc" title="Relatório de Rendas: por padrão só entram propostas aprovadas e efetivadas (pendentes, canceladas e testes ficam de fora). Ligado: as reprovadas também entram; as que não tiverem a renda do birô (RendaCalculo) no motor saem com a coluna F vazia."><input type="checkbox" id="mf-rendas-repr"><span><b>Rendas: incluir reprovadas</b></span></label>
             <label class="mf-opc" title="Copia o resultado sozinho quando a fila termina."><input type="checkbox" id="mf-auto-copia"><span><b>Copiar ao concluir</b></span></label>
           </details>
           <details class="mf-grupo" data-grupo="formato"><summary>Formato de cópia</summary>
@@ -2043,10 +2145,10 @@
       canva2col: { rot: 'Valor e quantidade em 2 colunas', est: 'p2col', antigo: true, so: 'reprovadas' },
       sheets:    { rot: 'Google Sheets (texto com tabulação)', est: 'tsv', antigo: true },
     };
-    const MODOS = ['coleta', 'reprovadas', 'efetivadas', 'aprovadas', 'valortransacao'];
+    const MODOS = ['coleta', 'reprovadas', 'efetivadas', 'aprovadas', 'valortransacao', 'rendas'];
     // formato automático: cada modo usa o mais adequado ao destino
-    const FORMATO_AUTO = { coleta: 'excel', reprovadas: 'canva', efetivadas: 'canva', aprovadas: 'canva', valortransacao: 'excel' };
-    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Diário' };
+    const FORMATO_AUTO = { coleta: 'excel', reprovadas: 'canva', efetivadas: 'canva', aprovadas: 'canva', valortransacao: 'excel', rendas: 'excel' };
+    const NOME_MODO = { coleta: 'Auditoria', reprovadas: 'Reprovadas', efetivadas: 'Efetivadas', aprovadas: 'Aprovadas', valortransacao: 'Diário', rendas: 'Rendas' };
     const formatoValido = (m, k) => {
       const f = FORMATOS[k];
       return !!f && (!f.antigo || cfg('formatosAntigos')) && (!f.so || f.so === m);
@@ -2106,7 +2208,8 @@
       $('#mf-diario-saida').value = GM_getValue('diarioSaida', 'completo');
       $('#mf-dlin').style.display = diario && $('#mf-diario-saida').value === 'completo' ? '' : 'none';
       $('#mf-dval').style.display = diario ? '' : 'none';
-      $('#mf-cop').style.display = $('#mf-cid').style.display = diario ? 'none' : '';
+      $('#mf-cop').style.display = diario ? 'none' : '';
+      $('#mf-cid').style.display = diario || m === 'rendas' ? 'none' : '';
       $('#mf-cfull').style.display = coleta && cfg('auditoriaCompleta') ? '' : 'none';
       $('#mf-filtro').textContent = cfg('ignorarCanceladasTestes') ? 'Ignorando canceladas e testes' : 'Incluindo canceladas e testes';
     }
@@ -2117,6 +2220,7 @@
     };
     ligarOpcao('#mf-audit-full', 'auditoriaCompleta');
     ligarOpcao('#mf-canc', 'ignorarCanceladasTestes');
+    ligarOpcao('#mf-rendas-repr', 'rendasReprovadas');
     ligarOpcao('#mf-auto-copia', 'copiarAoConcluir');
     ligarOpcao('#mf-formato-auto', 'formatoAuto');
     ligarOpcao('#mf-formatos-antigos', 'formatosAntigos');
@@ -2137,6 +2241,9 @@
       efetivadas: sit => /efetivad/i.test(sit) && !/n[ãa]o\s+efetivad/i.test(sit),
       aprovadas: sit => /\bapr\b|aprovad/i.test(sit) && !/efetivad/i.test(sit),
       valortransacao: () => true,   // todas as propostas da lista
+      // Rendas: aprovadas e efetivadas (têm o cálculo de renda do birô no motor); reprovadas só se ligado em Configurações.
+      // Pendentes e canceladas nunca entram.
+      rendas: sit => !/cancelad/i.test(sit) && (/efetivad|\bapr\b|aprovad/i.test(sit) || (cfg('rendasReprovadas') && ehReprovada(sit))),
     };
 
     // lê as linhas da Mesa de Crédito achando as colunas pelo NOME do cabeçalho
@@ -2320,6 +2427,11 @@
       } else if (m === 'valortransacao') {
         const nv = e.valor ? num(e.valor) : null;                         // "R$1.864,00" -> "1864,00" (Excel pt-BR)
         cols = [na(nv ? nv.split(',')[0] + ',' + (((nv.split(',')[1] || '') + '00').slice(0, 2)) : '')];
+      } else if (m === 'rendas') {
+        // planilha "Rendas informadas": A Data da proposta · B Proposta · C Nome · D CPF · E Renda informada · F Renda birô.
+        // A G (% proximidade) é fórmula da planilha e não entra na cópia. Renda ausente = vazio (nunca "N/A": quebraria a fórmula).
+        const dd = d || {};
+        cols = [dataDe(x.dh), id, na(x.cli || dd.nome), na(dd.cpf), dd.rendaInf || '', dd.rendaBiro || ''];
       } else if (m === 'efetivadas') {
         cols = [id, na(x.cli), na(e.vendedor), '', na(hh), na(loja.toUpperCase())];   // Acesso ao APP: à mão (fica vazio)
       } else {
@@ -2627,6 +2739,8 @@
       ? (estilo() === 'tsv'
         ? 'Cole na coluna N (Valor de transação), na mesma ordem da lista.'
         : 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem da lista.')
+      : modo() === 'rendas'
+      ? 'Cole na coluna A (Data da proposta), na primeira linha livre. Vão as colunas A–F; a G (% proximidade) é fórmula da planilha e não é alterada.'
       : modo() !== 'coleta'
       ? 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem do relatório.'
       : estilo() !== 'tsv'
@@ -2649,6 +2763,17 @@
           const mt = GM_getValue('meta', {})[id];
           if (!mt || !mt.dh || !mt.loja) return id + ' (falta: horário/loja da tabela da tela)';
           return null;
+        }).filter(Boolean);
+      }
+      if (m === 'rendas') {
+        const meta = GM_getValue('meta', {});
+        return ativos.map(id => {
+          const d = dados[id] || {}, f = [];
+          if (d.rendaInf == null) f.push('renda informada');
+          if (d.rendaBiro == null) f.push('renda do birô');   // '' = o motor não tem RendaCalculo nesta proposta (não é falta)
+          if (d.cpf == null) f.push('cpf');
+          if (!meta[id] || !meta[id].dh) f.push('data da proposta (fora da tabela da tela)');
+          return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
         }).filter(Boolean);
       }
       if (m === 'valortransacao') return ativos.filter(id => !(ex[id] && ex[id].valor)).map(id => id + ' (sem valor de transação)');
@@ -2817,7 +2942,10 @@
       const igLista = fila().filter(id => ig[id]);
       const ex = GM_getValue('extra', {}), ver = new Set(verificadas());
       const semVerif = cfg('ignorarCanceladasTestes') ? fila().filter(id => !ig[id] && !ver.has(id) && !(ex[id] && ex[id].cliente)) : [];
+      const dRend = GM_getValue('dados', {});
+      const semBiro = modo() === 'rendas' ? fila().filter(id => !ig[id] && dRend[id] && dRend[id].rendaBiro === '') : [];
       msg(aviso +
+        (semBiro.length ? '\nSem renda do birô no motor (coluna F vazia): ' + semBiro.join(', ') : '') +
         (igLista.length ? '\nIgnoradas (teste/cancelada): ' + igLista.map(id => id + ' (' + ig[id] + ')').join(', ') : '') +
         (semVerif.length ? '\nNão conferidas como teste (fora da tabela da tela e sem nome no detalhe): ' + semVerif.join(', ') : '') +
         (f.length ? '\nIncompletas: ' + f.join('; ') : '') +

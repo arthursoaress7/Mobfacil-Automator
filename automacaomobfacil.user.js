@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      12.4
+// @version      12.5
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -26,7 +26,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.4');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '12.5');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -2428,10 +2428,13 @@
         const nv = e.valor ? num(e.valor) : null;                         // "R$1.864,00" -> "1864,00" (Excel pt-BR)
         cols = [na(nv ? nv.split(',')[0] + ',' + (((nv.split(',')[1] || '') + '00').slice(0, 2)) : '')];
       } else if (m === 'rendas') {
-        // planilha "Rendas informadas": A Data da proposta · B Proposta · C Nome · D CPF · E Renda informada · F Renda birô.
-        // A G (% proximidade) é fórmula da planilha e não entra na cópia. Renda ausente = vazio (nunca "N/A": quebraria a fórmula).
+        // planilha "Rendas informadas": A Data da proposta · B Proposta · C Nome · D CPF · E Renda informada · F Renda birô · G % proximidade.
+        // G % proximidade (menor ÷ maior), a mesma conta da fórmula da planilha: vazia se faltar renda ou for 0.
+        // Renda ausente = vazio (nunca "N/A").
         const dd = d || {};
-        cols = [dataDe(x.dh), id, na(x.cli || dd.nome), na(dd.cpf), dd.rendaInf || '', dd.rendaBiro || ''];
+        const ri = dd.rendaInf ? aNum(dd.rendaInf) : NaN, rb = dd.rendaBiro ? aNum(dd.rendaBiro) : NaN;
+        const prox = ri > 0 && rb > 0 ? (Math.min(ri, rb) / Math.max(ri, rb) * 100).toFixed(2).replace('.', ',') + '%' : '';
+        cols = [dataDe(x.dh), id, na(x.cli || dd.nome), na(dd.cpf), dd.rendaInf || '', dd.rendaBiro || '', prox];
       } else if (m === 'efetivadas') {
         cols = [id, na(x.cli), na(e.vendedor), '', na(hh), na(loja.toUpperCase())];   // Acesso ao APP: à mão (fica vazio)
       } else {
@@ -2740,7 +2743,7 @@
         ? 'Cole na coluna N (Valor de transação), na mesma ordem da lista.'
         : 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem da lista.')
       : modo() === 'rendas'
-      ? 'Cole na coluna A (Data da proposta), na primeira linha livre. Vão as colunas A–F; a G (% proximidade) é fórmula da planilha e não é alterada.'
+      ? 'Cole na coluna A (Data da proposta), na primeira linha livre. Vão as colunas A–G (a G, % proximidade, vai como valor, não como fórmula).'
       : modo() !== 'coleta'
       ? 'Copiado como ' + FORMATOS[formatoDoModo(modo())].rot + ', na ordem do relatório.'
       : estilo() !== 'tsv'

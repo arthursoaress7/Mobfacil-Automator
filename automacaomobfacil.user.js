@@ -57,7 +57,6 @@
     CORTE_QTD: 10,          // reprova se quantidade de restrições > 10
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
-    GARANTIA_SIMBOLICA: 10, // R$: "Valor" da garantia abaixo disto é simbólico (aprovação automática: R$ 0,01, R$ 1,00...) e vale o Valor da Compra
   };
 
   // janela da página (fora da sandbox do Tampermonkey): dá acesso aos objetos do próprio site
@@ -2498,13 +2497,11 @@
       const [i, dec] = String(v).split(',');
       return 'R$' + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + ((dec || '0') + '00').slice(0, 2);
     };
-    // valor de transação: o "Valor" da garantia. Nas aprovações automáticas o sistema mostra um valor simbólico nesse
-    // campo (R$ 0,01, R$ 1,00...); abaixo de CONFIG.GARANTIA_SIMBOLICA vale o "Valor da Compra" do mesmo detalhe
-    // (sem ele, fica o que o sistema mostrou)
+    // valor de transação: o "Valor da Compra" da Operação de Crédito (extra.compra). O "Valor" do bloco Garantias
+    // (extra.valor) é o valor cadastrado do aparelho, e nas aprovações automáticas vem simbólico (R$ 0,01, R$ 1,00...):
+    // só é usado quando a página não tem Valor da Compra
     const valorTransacao = e => {
       if (!e) return null;
-      const g = e.valor ? num(e.valor) : null;
-      if (!g || aNum(g) >= CONFIG.GARANTIA_SIMBOLICA) return e.valor || null;   // sem valor na garantia continua N/A (não inventa)
       return e.compra ? String(e.compra).replace(/^R\$\s*/, 'R$') : e.valor || null;
     };
 
@@ -3012,14 +3009,14 @@
           return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
         }).filter(Boolean);
       }
-      if (m === 'valortransacao') return ativos.filter(id => !(ex[id] && ex[id].valor)).map(id => id + ' (sem valor de transação)');
+      if (m === 'valortransacao') return ativos.filter(id => !valorTransacao(ex[id])).map(id => id + ' (sem valor de transação)');
       if (m === 'efetivadas') return ativos.filter(id => !(ex[id] && ex[id].vendedor)).map(id => id + ' (falta: vendedor)');
       if (m === 'aprovadas') {
         return ativos.map(id => {
           const f = [];
           if (!(dados[id] && dados[id].cpf)) f.push('cpf');
           if (!(ex[id] && ex[id].vendedor)) f.push('vendedor');
-          if (!(ex[id] && ex[id].valor)) f.push('valor');
+          if (!valorTransacao(ex[id])) f.push('valor');
           return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
         }).filter(Boolean);
       }
@@ -3086,9 +3083,9 @@
       if (m === 'efetivadas' || m === 'aprovadas' || m === 'valortransacao') {
         const extra = GM_getValue('extra', {})[id] || {};
         // Diário: página lida e sem valor = N/A (não é falha); página que não carregou = falha (Continuar tenta de novo)
-        if (m === 'valortransacao' && !extra.valor && ((GM_getValue('extraDbg', {})[id] || {}).paginas || []).some(x => /erro/.test(x))) return 'página da proposta não carregou';
+        if (m === 'valortransacao' && !valorTransacao(extra) &&((GM_getValue('extraDbg', {})[id] || {}).paginas || []).some(x => /erro/.test(x))) return 'página da proposta não carregou';
         if (m === 'efetivadas' && !extra.vendedor) return 'vendedor não localizado';
-        if (m === 'aprovadas' && (!extra.vendedor || !extra.valor)) return 'vendedor ou valor não localizado';
+        if (m === 'aprovadas' && (!extra.vendedor || !valorTransacao(extra))) return 'vendedor ou valor não localizado';
         if (m !== 'aprovadas') return null;
       }
       if (!GM_getValue('rodando', false)) return 'pausado';

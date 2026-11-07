@@ -30,6 +30,16 @@ O painel suporta duas aparências selecionáveis em Configurações:
 
 Ambas usam a mesma estrutura HTML e compartilham o mesmo CSS base. A nova UI adiciona regras com o seletor `[data-ui=nova]`.
 
+### Camada visual da Nova UI (bloco "Nova UI v13")
+
+No fim do `<style>` do painel há um bloco só de CSS, todo escopado em `#mf-p[data-ui=nova]`. Ele não altera HTML, IDs, textos nem JavaScript; a UI Antiga não é afetada.
+
+- **Tokens de cor** (`--mf-bg`, `--mf-sup`, `--mf-borda`, `--mf-txt*`, `--mf-pri*`, `--mf-ok*`, `--mf-perigo*`, `--mf-alerta*`) definidos em `#mf-p[data-ui=nova]` e redefinidos em `[data-tema=escuro]`. Novas regras visuais devem usar esses tokens.
+- **Cartões:** `.mf-sec` e `.mf-grupo` aparecem como cartões sobre o fundo `--mf-bg` do `.mf-corpo`.
+- **Ícones:** desenhados com `mask` + `--mf-ico` (SVG inline) nas abas (`data-aba` / `data-ui-aba`), no menu "Mais" (`data-vai`), nos botões do título (`#mf-tam`, `#mf-tema`, `#mf-min`, `.mf-ui-icone`), no ⓘ e nos grupos recolhíveis. O estado dos ícones vem de atributos que o código já mantém (`.mf-min`, `data-tema`, `title` do `#mf-tam`).
+- **Abas fixas:** `.mf-abas` usa `position: sticky` dentro do `.mf-corpo` e continua visível ao rolar.
+- **Botões:** os botões principais (azul) e de cópia (verde) continuam definidos pela mesma lista de IDs; `.vermelho` e `.laranja` ficam só no contorno e no texto.
+
 ### Estrutura do painel
 
 ```

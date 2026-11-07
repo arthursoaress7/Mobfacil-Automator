@@ -2461,11 +2461,11 @@
     const FILTROS = {
       reprovadas: sit => /\brep\b|reprov/i.test(sit),
       efetivadas: sit => /efetivad/i.test(sit) && !/n[ãa]o\s+efetivad/i.test(sit),
-      aprovadas: sit => /\bapr\b|aprovad/i.test(sit) && !/efetivad/i.test(sit),
+      aprovadas: sit => /\bapr\b|aprov/i.test(sit) && !/efetivad/i.test(sit),   // "APR", "06 - APROV MAN", "APROVADA"
       valortransacao: () => true,   // todas as propostas da lista
       // Rendas: aprovadas e efetivadas (têm o cálculo de renda do birô no motor); reprovadas só se ligado em Configurações.
       // Pendentes e canceladas nunca entram.
-      rendas: sit => !/cancelad/i.test(sit) && (/efetivad|\bapr\b|aprovad/i.test(sit) || (cfg('rendasReprovadas') && ehReprovada(sit))),
+      rendas: sit => !/cancelad/i.test(sit) && (/efetivad|\bapr\b|aprov/i.test(sit) || (cfg('rendasReprovadas') && ehReprovada(sit))),
     };
 
     // lê as linhas da Mesa de Crédito achando as colunas pelo NOME do cabeçalho
@@ -2594,7 +2594,7 @@
       if (!mt || !mt.sit) return '';
       const manual = !!mt.ana && !/master/i.test(mt.ana);
       if (ehReprovada(mt.sit)) return manual || /\bman\b/i.test(mt.sit) ? 'Reprovado manual' : 'Reprovação Automática';
-      if ((/efetivad|\bapr\b|aprovad/i.test(mt.sit)) && manual) return 'Aprovado manual';
+      if ((/efetivad|\bapr\b|aprov/i.test(mt.sit)) && (manual || /\bman\b/i.test(mt.sit))) return 'Aprovado manual';
       return '';
     };
     // N/A: o campo foi procurado (proposta já processada) e não existe. Vazio: ainda não processada, ou a busca
@@ -2909,7 +2909,7 @@
       if (/cancelad/i.test(mt.sit)) return 'Cancelada';
       if (ehConfCad(mt.sit)) return 'Em digitação';
       if (ehReprovada(mt.sit)) return manual ? 'Reprovada Manual' : 'Reprovada Automática';
-      if (/efetivad|\bapr\b|aprovad/i.test(mt.sit)) return manual ? 'Aprovada Manual' : 'Aprovada Automática';
+      if (/efetivad|\bapr\b|aprov/i.test(mt.sit)) return manual ? 'Aprovada Manual' : 'Aprovada Automática';   // inclui "06 - APROV MAN"
       return 'Pendente';
     };
     const linhaDiario = (id, mt, processada) => {

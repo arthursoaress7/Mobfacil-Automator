@@ -57,6 +57,7 @@
     CORTE_QTD: 10,          // reprova se quantidade de restrições > 10
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
+    GARANTIA_SIMBOLICA: 10, // R$: "Valor" da garantia abaixo disto é simbólico (aprovação automática: R$ 0,01, R$ 1,00...) e vale o Valor da Compra
   };
 
   // janela da página (fora da sandbox do Tampermonkey): dá acesso aos objetos do próprio site
@@ -2497,12 +2498,13 @@
       const [i, dec] = String(v).split(',');
       return 'R$' + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + ((dec || '0') + '00').slice(0, 2);
     };
-    // valor de transação: o "Valor" da garantia. Nas aprovações automáticas o sistema mostra R$ 0,01 nesse campo;
-    // abaixo de R$ 1,00 vale o "Valor da Compra" do mesmo detalhe (sem ele, fica o que o sistema mostrou)
+    // valor de transação: o "Valor" da garantia. Nas aprovações automáticas o sistema mostra um valor simbólico nesse
+    // campo (R$ 0,01, R$ 1,00...); abaixo de CONFIG.GARANTIA_SIMBOLICA vale o "Valor da Compra" do mesmo detalhe
+    // (sem ele, fica o que o sistema mostrou)
     const valorTransacao = e => {
       if (!e) return null;
       const g = e.valor ? num(e.valor) : null;
-      if (!g || aNum(g) >= 1) return e.valor || null;   // sem valor na garantia continua N/A (não inventa)
+      if (!g || aNum(g) >= CONFIG.GARANTIA_SIMBOLICA) return e.valor || null;   // sem valor na garantia continua N/A (não inventa)
       return e.compra ? String(e.compra).replace(/^R\$\s*/, 'R$') : e.valor || null;
     };
 

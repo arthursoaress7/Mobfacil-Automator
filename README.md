@@ -1,6 +1,6 @@
 # Mobfacil-Automator
 
-v12.5
+v13.0
 
 ## Documentação técnica do script
 

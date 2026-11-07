@@ -113,7 +113,7 @@ A função `relatorioCols(m, id, d, processada)` monta as colunas de resultado p
 | Efetivadas | Apenas propostas aprovadas e efetivadas |
 | Aprovadas | Propostas aprovadas (com CPF) |
 
-**Valor de transação (Diário e Aprovadas):** vem do "Valor" do bloco Garantias (`extra.valor`). Nas aprovações automáticas o sistema mostra um valor simbólico nesse campo (R$ 0,01, R$ 1,00...); quando o valor da garantia é menor que `CONFIG.GARANTIA_SIMBOLICA` (R$ 10,00), `valorTransacao()` usa o "Valor da Compra" (`extra.compra`) do mesmo detalhe. Sem valor na garantia continua N/A. A troca é feita na hora de montar o relatório, então vale também para propostas já coletadas.
+**Valor de transação (Diário e Aprovadas):** `valorTransacao()` usa o "Valor da Compra" da Operação de Crédito (`extra.compra`). O "Valor" do bloco Garantias (`extra.valor`) é o valor cadastrado do aparelho e, nas aprovações automáticas, vem simbólico (R$ 0,01, R$ 1,00...); ele só entra quando a página não tem Valor da Compra. Sem nenhum dos dois, N/A. A escolha é feita na hora de montar o relatório, então vale também para propostas já coletadas.
 
 ---
 

@@ -3651,11 +3651,21 @@
       if (Object.keys(sx).length) GM_setValue('senhasContas', sx); else GM_deleteValue('senhasContas');
     };
     $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
+    // conta já escolhida no "Trocar de conta": a conta de onde se saiu na última troca (ex.: entrou na master,
+    // o menu já mostra a conta da mesa para voltar num clique); sem ela, a primeira conta que não é a ativa
+    function contaPadraoIndice(lista) {
+      const a = contaAtiva(), ativa = a ? a.usuario.toLowerCase() : '';
+      const anterior = String(GM_getValue('contaAnterior', '') || '').toLowerCase();
+      let i = anterior && anterior !== ativa ? lista.findIndex(c => c.usuario.toLowerCase() === anterior) : -1;
+      if (i < 0) i = lista.findIndex(c => c.usuario.toLowerCase() !== ativa);
+      return Math.max(0, i);
+    }
     function desenharContas() {
       const lista = contas();
       const sel = $('#mf-conta-sel');
       sel.innerHTML = '';
       lista.forEach((c, i) => { const o = document.createElement('option'); o.value = i; o.textContent = rotuloConta(c); sel.appendChild(o); });
+      if (lista.length) sel.value = String(contaPadraoIndice(lista));
       $('#mf-conta-trocar').disabled = !lista.length;
       const caixa = $('#mf-contas');
       caixa.innerHTML = lista.length ? '' : '<div class="mf-info">Nenhuma conta cadastrada.</div>';
@@ -3721,6 +3731,8 @@
       if (!c) return msg('Cadastre uma conta primeiro.');
       if (!cfg('trocaSemConfirmacao') &&
           !confirm('Trocar para ' + rotuloConta(c) + '?\nA sessão atual será encerrada pelo "Sair" do sistema, em todas as abas deste navegador.')) return;
+      const atual = contaAtiva();   // lembrada para o menu já oferecer a volta (ver contaPadraoIndice)
+      if (atual && atual.usuario.toLowerCase() !== c.usuario.toLowerCase()) GM_setValue('contaAnterior', atual.usuario);
       GM_setValue('trocaConta', { usuario: c.usuario, quando: Date.now(), etapa: 'saindo' });
       const senha = campoSenha();
       if (senha) return processarTroca();   // já está na tela de login

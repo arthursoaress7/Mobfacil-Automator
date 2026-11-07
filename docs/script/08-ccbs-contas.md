@@ -45,6 +45,7 @@ Permite trocar rapidamente entre as contas cadastradas no ER sem precisar fazer 
 - Ao selecionar uma conta, executa a troca diretamente via objetos do site (`PAGINA`)
 - Se `trocaSemConfirmacao = true` (padrão), a troca é feita sem janela de confirmação do script
 - A conta anterior é memorizada para que módulos como a CAC possam retornar a ela
+- **Volta rápida:** ao trocar, `trocarPara()` grava em `contaAnterior` o usuário da conta de onde se saiu. Na página seguinte, `contaPadraoIndice()` já deixa essa conta escolhida em "Trocar de conta" (ex.: entrou na master → o menu mostra a conta da mesa, basta clicar em "Trocar para esta conta"). Sem conta anterior, escolhe a primeira conta que não é a ativa
 
 ### Integração com a CAC
 

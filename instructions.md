@@ -159,6 +159,7 @@ Todas as chaves usadas no script. Modificar uma chave sem migração quebra dado
 | `equipeNome/Secret/Chave/Ativa/Id` | Config da equipe | Equipe |
 | `equipeOnline/Versao/Avisos/AvisosVistos` | Estado da equipe | Equipe |
 | `senhasContas` | Senhas das contas (criptografadas localmente) | Contas |
+| `contaAnterior` | Usuário da conta de onde se saiu na última troca (pré-seleção em "Trocar de conta") | Contas |
 | `negModelos` | Modelos de texto personalizados | Negociação |
 | `negModalidade/negModeloAtual/negPagamento` | Últimas escolhas | Negociação |
 | `atModelo` | Modelo ativo no Atendimento | Atendimento |

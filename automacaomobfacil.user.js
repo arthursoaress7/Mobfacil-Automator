@@ -2497,6 +2497,14 @@
       const [i, dec] = String(v).split(',');
       return 'R$' + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + ((dec || '0') + '00').slice(0, 2);
     };
+    // valor de transação: o "Valor" da garantia. Nas aprovações automáticas o sistema mostra R$ 0,01 nesse campo;
+    // abaixo de R$ 1,00 vale o "Valor da Compra" do mesmo detalhe (sem ele, fica o que o sistema mostrou)
+    const valorTransacao = e => {
+      if (!e) return null;
+      const g = e.valor ? num(e.valor) : null;
+      if (!g || aNum(g) >= 1) return e.valor || null;   // sem valor na garantia continua N/A (não inventa)
+      return e.compra ? String(e.compra).replace(/^R\$\s*/, 'R$') : e.valor || null;
+    };
 
     // lê a mensagem do MobFacil, ex.:
     //  "(P1) Reprovar: renda inferior a mínima permitida (1621 reais) (atual=R$1300)"   -> Renda, R$1300
@@ -2646,7 +2654,8 @@
         if (estilo() === 'p2col') cols = [id, hh, titulo(loja), tipo, motivo, partes[0] || 'N/A', partes.slice(1).join(' ')];
         else cols = [id, hh, titulo(loja), tipo, motivo, det];
       } else if (m === 'valortransacao') {
-        const nv = e.valor ? num(e.valor) : null;                         // "R$1.864,00" -> "1864,00" (Excel pt-BR)
+        const vt = valorTransacao(e);
+        const nv = vt ? num(vt) : null;                                   // "R$1.864,00" -> "1864,00" (Excel pt-BR)
         cols = [na(nv ? nv.split(',')[0] + ',' + (((nv.split(',')[1] || '') + '00').slice(0, 2)) : '')];
       } else if (m === 'rendas') {
         // planilha "Rendas informadas": A Data da proposta · B Proposta · C Nome · D CPF · E Renda informada · F Renda birô · G % proximidade.
@@ -2660,7 +2669,7 @@
         cols = [id, na(x.cli), na(e.vendedor), '', na(hh), na(loja.toUpperCase())];   // Acesso ao APP: à mão (fica vazio)
       } else {
         const c = d && d.cpf ? d.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '';
-        cols = [id, na(x.cli), na(c), 'XPANSE - ' + loja.toUpperCase(), na(e.vendedor), na(e.valor), 'Aprovada, não efetivada'];
+        cols = [id, na(x.cli), na(c), 'XPANSE - ' + loja.toUpperCase(), na(e.vendedor), na(valorTransacao(e)), 'Aprovada, não efetivada'];
       }
       return cols;
     }
@@ -2908,7 +2917,8 @@
     };
     // "R$1.864,00" -> "R$ 1.864,00" (o Excel em português reconhece como moeda)
     const valorDiario = (e, processada) => {
-      const n = e && e.valor ? num(e.valor) : null;
+      const vt = valorTransacao(e);
+      const n = vt ? num(vt) : null;
       return n ? moeda(n).replace(/^R\$/, 'R$ ') : processada ? NA : '';
     };
     function copiarDiario(qual) {

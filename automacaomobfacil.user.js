@@ -7275,6 +7275,7 @@
     // modelo: sempre automático (escolhido nesta página). Modelo salvo por versões anteriores (13.4–13.10) é descartado.
     let modeloAuto = '';
     GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual');
+    GM_deleteValue('rdEscurecerPagina');   // opção de escurecer a página do RD (13.23–13.24), que saiu: limpa o que ficou salvo
     // A chave é salva ao colar/digitar (ao sair do campo ou com Enter), sem depender do botão Salvar.
     // Só esta parte mexe na configuração: limpar a lista ou recontar os atendimentos nunca apaga nem esconde a chave.
     const chipCss = (cor, fundo, borda) => 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:650;white-space:nowrap;color:' + cor + ';background:' + fundo + ';border:1px solid ' + borda;
@@ -7331,7 +7332,7 @@
     const btLimpar = botao('miniPerigo', 'Limpar lista', 'margin-left:auto');
     btLimpar.title = 'Apaga a lista de conversas analisadas hoje e as linhas da planilha (pede confirmação)';
     linhaAux.append(btCopiar, btParar, btLimpar);
-    acoes.append(linhaPrincipal, opParadas, linhaAux);   // (a opção da página escura entra depois do opParadas, mais abaixo)
+    acoes.append(linhaPrincipal, opParadas, linhaAux);
     // lista: título com os contadores do dia e os cartões das conversas
     const cabLista = el('div', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:2px 2px 0');
     const tabela = el('div', 'display:flex;flex-direction:column;gap:8px');
@@ -7339,34 +7340,9 @@
     // troca de tema (só o painel): reaplica as cores de todos os elementos e redesenha a lista
     const repintar = () => {
       fixos.forEach(([e, f]) => { const d = e.style.display; e.style.cssText = f(C()); if (d) e.style.display = d; });
-      pintarBotaoTema(); pintarChave(); desenhar(); aplicarPaginaEscura();
+      pintarBotaoTema(); pintarChave(); desenhar();
     };
-    // Modo escuro também na página do RD (GM 'rdEscurecerPagina', padrão ligado; só com o painel no modo escuro).
-    // O RD não tem modo escuro próprio: a página inteira tem as cores invertidas, e imagens, vídeos, o nosso painel e o
-    // botão "Analisar (IA)" são invertidos de volta (ficam com as cores originais). Folha de estilo construída pelo
-    // script (CSSOM, adoptedStyleSheets), tirada ao voltar ao modo claro ou desligar a opção.
-    const RD_PAGINA_ESCURA = 'html{filter:invert(1) hue-rotate(180deg) !important;background:#fff !important}' +
-      'img,video,picture,canvas,iframe,embed,object,[style*="background-image"],#mf-rd,#mf-rd-ia{filter:invert(1) hue-rotate(180deg) !important}' +
-      'picture img,picture video,#mf-rd img,#mf-rd-ia img{filter:none !important}';
-    let folhaEscura = null;
-    const paginaEscura = () => rdTema === 'escuro' && GM_getValue('rdEscurecerPagina', true);
-    const aplicarPaginaEscura = () => {
-      try {
-        const quer = paginaEscura();
-        if (quer && !folhaEscura) { folhaEscura = new CSSStyleSheet(); folhaEscura.replaceSync(RD_PAGINA_ESCURA); }
-        const tem = !!folhaEscura && document.adoptedStyleSheets.includes(folhaEscura);
-        if (quer && !tem) document.adoptedStyleSheets = [...document.adoptedStyleSheets, folhaEscura];
-        if (!quer && tem) document.adoptedStyleSheets = document.adoptedStyleSheets.filter(x => x !== folhaEscura);
-      } catch (_) {}
-    };
-    const opPaginaEscura = estilo(el('label'), c => 'display:flex;align-items:center;gap:7px;font-size:12px;color:' + c.txt2 + ';cursor:pointer');
-    const chkPaginaEscura = el('input'); chkPaginaEscura.type = 'checkbox'; chkPaginaEscura.checked = GM_getValue('rdEscurecerPagina', true);
-    chkPaginaEscura.onchange = () => { GM_setValue('rdEscurecerPagina', chkPaginaEscura.checked); aplicarPaginaEscura(); };
-    opPaginaEscura.append(chkPaginaEscura, el('span', '', 'No modo escuro (🌙), escurecer também a página do RD'));
-    opPaginaEscura.title = 'Inverte as cores da página do RD enquanto o painel está no modo escuro (fotos e imagens ficam com as cores normais)';
     btTema.onclick = () => { rdTema = rdTema === 'escuro' ? 'claro' : 'escuro'; GM_setValue('rdTema', rdTema); repintar(); };
-    opParadas.after(opPaginaEscura);
-    aplicarPaginaEscura();
     pintarBotaoTema();
 
     /* ---- dados guardados (sobrevivem a recarregar a página; ficam só os de hoje) ---- */
@@ -8142,7 +8118,7 @@
        Não abre o painel: o texto do botão mostra a situação da conversa aberta e o botão do canto, o resultado. */
     const btIA = el('button', 'position:fixed;z-index:2147483645;display:none;align-items:center;gap:6px;border:0;border-radius:8px;padding:0 16px;background:#bdf2ff;color:#0b4a6b;font:700 15px/1 system-ui,Segoe UI,Arial;cursor:pointer;white-space:nowrap', '✨ Analisar (IA)');
     const BT_IA_DICA = 'PaymobiFin: analisa esta conversa com a IA e coloca na lista para encerrar (mesmo antes das 24 h). A análise continua em segundo plano: pode abrir a próxima conversa assim que o botão sair de "Lendo a conversa".';
-    btIA.title = BT_IA_DICA; btIA.id = 'mf-rd-ia';
+    btIA.title = BT_IA_DICA;
     document.body.appendChild(btIA);
     // situação da conversa aberta: lendo (espere) · em análise · já na lista / encerrada · com erro · livre
     const pintarBotaoIA = () => {
@@ -8172,7 +8148,6 @@
       btIA.style.left = Math.max(0, esq - btIA.offsetWidth - 12) + 'px';
     };
     setInterval(posicionarBotaoIA, CONFIG.RD_BOTAO_MS);
-    setInterval(aplicarPaginaEscura, CONFIG.RD_BOTAO_MS);   // o RD troca de tela sem recarregar: confere se a folha escura continua lá
     window.addEventListener('resize', posicionarBotaoIA);
     btIA.onclick = async () => {
       // confere a situação na hora do clique (o texto do botão pode estar atrasado alguns instantes depois de trocar de conversa)

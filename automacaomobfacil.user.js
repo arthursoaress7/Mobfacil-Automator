@@ -6974,6 +6974,14 @@
 
     /* ---- dados guardados (sobrevivem a recarregar a página; ficam só os de hoje) ---- */
     const analises = () => { const a = GM_getValue('rdAnalises', null); return a && a.dia === rdHoje() ? a.itens : []; };
+    // a 13.8 gravava a falha ao encerrar como erro da análise ("Não encerrado: ..."): volta a ser analisada e marcada
+    try {
+      const a = GM_getValue('rdAnalises', null);
+      if (a && a.itens && a.itens.some(x => /^Não encerrado: /.test(x.erro || '') && x.tabulacao)) {
+        a.itens.forEach(x => { if (/^Não encerrado: /.test(x.erro || '') && x.tabulacao) { x.erroEncerrar = x.erro.replace(/^Não encerrado: /, ''); delete x.erro; x.marcado = true; } });
+        GM_setValue('rdAnalises', a);
+      }
+    } catch (_) {}
     const guardarAnalises = itens => GM_setValue('rdAnalises', { dia: rdHoje(), itens });
     const linhasHoje = () => { const l = GM_getValue('rdLinhas', null); return l && l.dia === rdHoje() ? l.linhas : []; };
     const guardarLinha = cols => GM_setValue('rdLinhas', { dia: rdHoje(), linhas: [...linhasHoje(), cols] });
@@ -6987,7 +6995,7 @@
         const cab = el('div', 'display:flex;align-items:center;gap:8px');
         const marca = el('input'); marca.type = 'checkbox'; marca.checked = !!it.marcado && !it.encerrado && !it.erro; marca.disabled = !!it.encerrado || !!it.erro;
         marca.onchange = () => { const x = analises(); x[i].marcado = marca.checked; guardarAnalises(x); };
-        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', it.encerrado ? 'encerrado' : it.erro ? 'erro' : 'analisado'));
+        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', it.encerrado ? 'encerrado' : it.erro ? 'erro' : it.erroEncerrar ? 'não encerrado' : 'analisado'));
         lin.append(cab);
         if (it.erro) { lin.append(el('div', 'color:#b91c1c;margin-top:4px', it.erro)); tabela.append(lin); return; }
         const sel = el('select', 'width:100%;margin-top:6px;padding:6px;border:1px solid #d3dbe6;border-radius:8px');
@@ -6999,6 +7007,7 @@
           (it.vendedor || it.filial ? ' · ER: ' + [it.vendedor, it.filial].filter(Boolean).join(' · ') : '') +
           (it.erAchadoPor ? ' · achado pelo ' + it.erAchadoPor + (it.erConfirmado ? ' ✓' : ' (não confirmado)') : '')));
         if (it.aviso) lin.append(el('div', 'margin-top:4px;color:#b45309;font-weight:600', '⚠ ' + it.aviso));
+        if (it.erroEncerrar && !it.encerrado) lin.append(el('div', 'margin-top:4px;color:#b91c1c;font-weight:600', 'Não encerrado: ' + it.erroEncerrar + ' (continua marcado: clique em "2. Encerrar marcados" para tentar de novo)'));
         tabela.append(lin);
       });
     }
@@ -7430,9 +7439,19 @@
     };
 
     /* ---- etapa 2: encerrar (fluxo da própria tela) ---- */
-    const clicar = e => { ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => e.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))); };
+    // sem "view": no Tampermonkey o "window" do script não é a janela da página e o navegador recusa o evento
+    const clicar = e => { ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => e.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }))); };
     const janela = () => [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find(d => /Encerrar atendimento/.test(d.textContent));
+    // qualquer falha no meio do caminho fecha a janela "Encerrar atendimento" (nada fica aberto por cima da próxima conversa)
     async function encerrarAberto(categoria) {
+      try { await encerrarPassos(categoria); }
+      catch (e) {
+        const d = janela(), x = d && (d.querySelector('button[aria-label=close]') || [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Cancelar'));
+        if (x) { x.click(); await esperar(() => !janela(), 3); }
+        throw e;
+      }
+    }
+    async function encerrarPassos(categoria) {
       const bt = document.querySelector('button[aria-label=Encerrar]');
       if (!bt) throw new Error('botão Encerrar não encontrado');
       bt.click();
@@ -7472,8 +7491,8 @@
             if (a.telefone && telefoneAberto() !== a.telefone) throw new Error('a conversa aberta não é a analisada (telefone diferente)');
             await encerrarAberto(a.tabulacao);
             guardarLinha(linhaPlanilha(a));
-            x[i].encerrado = true; ok++;
-          } catch (e) { x[i].erro = 'Não encerrado: ' + e.message; falhas++; }
+            x[i].encerrado = true; delete x[i].erroEncerrar; ok++;
+          } catch (e) { x[i].erroEncerrar = e.message; falhas++; }   // continua analisada e marcada: dá para tentar encerrar de novo
           guardarAnalises(x); desenhar();
           await sleep(CONFIG.PAUSA * 10);
         }

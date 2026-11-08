@@ -7234,9 +7234,16 @@
       if (termo === propostaConversa) cands = cands.filter(c => c.proposta === propostaConversa);
       if (!cands.length) return { avisos: ['ER: nenhuma proposta encontrada para ' + (termo === cpfDig ? 'o CPF' : 'a proposta ' + termo)] };
       const unicas = [...new Map(cands.map(c => [c.proposta, c])).values()].sort((a, b) => erData(b.data) - erData(a.data));
-      // várias propostas no CPF: a citada na conversa; senão a mais recente que não está cancelada
-      let p = (propostaConversa && unicas.find(c => c.proposta === propostaConversa)) || unicas.find(c => !/cancelad/i.test(c.situacao)) || unicas[0];
-      if (unicas.length > 1) avisos.push('ER: ' + unicas.length + ' propostas neste CPF (' + unicas.map(c => c.proposta).join(', ') + '); usei a ' + p.proposta);
+      // várias propostas no CPF: a EFETIVADA (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa;
+      // senão a mais recente que não está cancelada
+      const efetivadas = unicas.filter(c => /efetivad/i.test(c.situacao) && !/n[ãa]o\s+efetivad/i.test(c.situacao));
+      const citada = propostaConversa && unicas.find(c => c.proposta === propostaConversa);
+      let p = efetivadas[0] || citada || unicas.find(c => !/cancelad/i.test(c.situacao)) || unicas[0];
+      const sit = c => c.proposta + (c.situacao ? ' (' + c.situacao.replace(/^\d+\s*-\s*/, '') + ')' : '');
+      if (unicas.length > 1) avisos.push('ER: ' + unicas.length + ' propostas neste CPF: ' + unicas.map(sit).join(', ') + '; usei a ' + p.proposta + (efetivadas[0] === p ? ' (efetivada)' : ''));
+      if (efetivadas.length > 1) avisos.push('ER: ' + efetivadas.length + ' propostas efetivadas neste CPF; usei a mais recente');
+      if (!efetivadas.length && unicas.length) avisos.push('ER: nenhuma proposta efetivada neste CPF');
+      if (citada && citada !== p) avisos.push('a conversa cita a proposta ' + citada.proposta + ', mas a efetivada é a ' + p.proposta);
       const vendedor = await erVendedor(p.proposta);
       if (!vendedor) avisos.push('ER: vendedor não encontrado no detalhe da proposta ' + p.proposta);
       return { proposta: p.proposta, nome: p.nome, filial: p.filial, situacao: p.situacao, vendedor, avisos };
@@ -7282,7 +7289,7 @@
             if (er.proposta) {
               const nomeER = er.nome || '';
               if (nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
-              if (reg.proposta && reg.proposta !== er.proposta) avisos.push('a conversa cita a proposta ' + reg.proposta + ', o ER achou a ' + er.proposta);
+              if (reg.proposta && reg.proposta !== er.proposta && !(er.avisos || []).some(a => /a conversa cita/.test(a))) avisos.push('a conversa cita a proposta ' + reg.proposta + ', que não está entre as do CPF no ER (usei a ' + er.proposta + ')');
               Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, filial: er.filial || '', vendedor: er.vendedor || '', situacaoER: er.situacao || '' });
             }
             avisos.push(...(er.avisos || []));

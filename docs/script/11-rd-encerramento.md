@@ -29,7 +29,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 | B Data Contato | data da última mensagem |
 | C Etiqueta | etiqueta de loja do item (`xpanse ...` / `mundo amarelo ...`) ou N/A |
 | D Solicitação | Gemini |
-| E Proposta | ER (Mesa de Crédito pelo CPF); senão a citada na conversa ("proposta 1234") |
+| E Proposta | ER: a proposta efetivada do CPF (Mesa de Crédito); senão a citada na conversa ("proposta 1234") |
 | F Nome do Cliente | ER; senão Perfil (nome com 2+ palavras) ou Gemini |
 | G CPF | Perfil; senão o CPF que o cliente escreveu |
 | H Vendedor | ER: Digitador do detalhe da proposta |
@@ -64,7 +64,7 @@ Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): a
 Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
 
 1. `MesaCreditoLista` pelo CPF (Perfil do RD; senão o da conversa). Sem CPF, pelo nº da proposta citado na conversa.
-2. Várias propostas no CPF: a citada na conversa; senão a mais recente que não está cancelada (com aviso listando todas).
+2. Várias propostas no CPF: a **efetivada** (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa; senão a mais recente que não está cancelada. O aviso lista todas com a situação.
 3. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
 
 Avisos na revisão: nome do ER diferente do RD, proposta da conversa diferente da do ER, várias propostas no CPF, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.

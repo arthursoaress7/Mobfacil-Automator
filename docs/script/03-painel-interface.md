@@ -39,6 +39,9 @@ No fim do `<style>` do painel há um bloco só de CSS, todo escopado em `#mf-p[d
 - **Ícones:** desenhados com `mask` + `--mf-ico` (SVG inline) nas abas (`data-aba` / `data-ui-aba`), no menu "Mais" (`data-vai`), nos botões do título (`#mf-tam`, `#mf-tema`, `#mf-min`, `.mf-ui-icone`), no ⓘ e nos grupos recolhíveis. O estado dos ícones vem de atributos que o código já mantém (`.mf-min`, `data-tema`, `title` do `#mf-tam`).
 - **Abas fixas:** `.mf-abas` usa `position: sticky` dentro do `.mf-corpo` e continua visível ao rolar.
 - **Botões:** os botões principais (azul) e de cópia (verde) continuam definidos pela mesma lista de IDs; `.vermelho` e `.laranja` ficam só no contorno e no texto.
+- **Aba ativa:** `mostrarAba()` grava a aba em `#mf-p[data-aba-ativa]`, só para o CSS (ex.: regras que valem só no Atendimento). Não use `data-aba` no painel: esse atributo é dos botões das abas.
+- **Aviso (`#mf-msg`) na aba Atendimento:** fica preso no rodapé da rolagem (`position: sticky`), porque a aba é longa e o aviso fica no fim do painel. O × no canto (clique nos 30 px do canto superior direito) põe a classe `mf-msg-fechada`; `msg()` tira a classe no próximo aviso. Nas outras abas e na UI Antiga o aviso continua como era.
+- **Grupos recolhíveis:** o aberto/fechado de cada `.mf-grupo` é guardado em `gruposCfg` pela chave `data-grupo`. Todo grupo novo precisa de `data-grupo` próprio. Sem ele, todos os grupos sem chave dividem a chave `undefined`: recolher um recolhe os outros no próximo carregamento. Ainda estão sem chave os 4 grupos de Lembretes e Timers.
 
 ### Estrutura do painel
 

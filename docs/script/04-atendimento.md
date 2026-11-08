@@ -144,6 +144,20 @@ Formatos: valores `R$ 0,00`, datas `dd/mm/aaaa`, telefone `(11) 912345678`.
 
 ---
 
+## Interface (Nova UI)
+
+Só aparência e retorno visual: os campos, ids, botões, textos gerados e linhas copiadas são os mesmos da UI Antiga.
+
+- **Aviso sempre à vista:** o aviso dos botões fica preso no rodapé da aba (ver `03-painel-interface.md`), com × para esconder até o próximo.
+- **Resultado e Modalidade:** um embaixo do outro no painel estreito, para o texto das opções não ser cortado. Lado a lado a partir de 560 px.
+- **Textos da planilha:** os botões "Copiar" do Pedido e do Acordo são compactos, à direita, logo abaixo de cada texto.
+- **Plano de parcelas:** cada parcela num cartão; a 1ª (entrada) com borda verde.
+- **Botões que apagam o que foi digitado** ("Novo atendimento", "Limpar campos", "Novo texto"): texto vermelho. A confirmação continua a mesma.
+- **Validação (`atValidar`):** ao copiar ou registrar com campo faltando, o grupo recolhido que tem o campo em vermelho é aberto. O Número de contato inválido também fica em vermelho. A lista de pendências e a regra não mudaram.
+- **Grupos:** cada grupo da aba (`at-cliente`, `at-cobranca`, `at-acordo`, `at-reneg`, `at-textos`, `at-acomp`, `ng-dados`, `ng-saida`) guarda o próprio aberto/fechado.
+
+---
+
 ## Mensagens para grupo
 
 - **"Mensagem p/ grupo"** (botão no Atendimento): gera a mensagem da modalidade atual

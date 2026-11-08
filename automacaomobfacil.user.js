@@ -1612,6 +1612,25 @@
         #mf-p[data-ui=nova][data-tema=escuro] .mf-abas>button.ativa{background:transparent !important;color:#93c5fd !important}
         #mf-p[data-ui=nova][data-tema=escuro] .mf-abas>button:hover:not(.ativa){background:var(--mf-sup2) !important;color:var(--mf-txt) !important}
         #mf-p[data-ui=nova][data-tema=escuro] #mf-msg{background:#13213d !important;border-color:#1e3a8a !important}
+        /* ===== Aba Atendimento (Nova UI): só aparência; campos, ids e botões são os mesmos ===== */
+        /* aviso sempre à vista nesta aba (ela é longa e o aviso fica no fim): preso no rodapé da rolagem; o × esconde até o próximo */
+        #mf-p[data-ui=nova][data-aba-ativa=neg] #mf-msg:not(:empty){position:sticky;bottom:8px;z-index:4;padding-right:36px;box-shadow:0 8px 22px -6px rgba(15,23,42,.28)}
+        #mf-p[data-ui=nova][data-aba-ativa=neg] #mf-msg:not(:empty)::after{content:'×';position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;font-size:17px;line-height:21px;text-align:center;color:var(--mf-txt3);cursor:pointer}
+        #mf-p[data-ui=nova][data-aba-ativa=neg] #mf-msg:not(:empty):hover::after{background:var(--mf-seg);color:var(--mf-txt)}
+        #mf-p[data-ui=nova][data-aba-ativa=neg] #mf-msg.mf-msg-fechada{display:none}
+        #mf-p[data-ui=nova][data-tema=escuro][data-aba-ativa=neg] #mf-msg:not(:empty){box-shadow:0 8px 22px -6px rgba(0,0,0,.65)}
+        /* Resultado e Modalidade um embaixo do outro no painel estreito (lado a lado, o texto das opções ficava cortado) */
+        #mf-p[data-ui=nova] #mf-at-g-acordo > .mf-grade{grid-template-columns:minmax(0,1fr)}
+        @container (min-width: 560px){#mf-p[data-ui=nova] #mf-at-g-acordo > .mf-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        /* "Copiar" de cada texto da planilha: botão compacto à direita, logo abaixo do texto */
+        #mf-p[data-ui=nova] #mf-ng-copiar-pedido,#mf-p[data-ui=nova] #mf-ng-copiar-acordo{display:block;width:auto !important;margin:5px 0 10px auto !important;padding:5px 14px !important;font-size:12px !important}
+        /* plano de parcelas: cada parcela num cartão; a 1ª (entrada) com a borda verde */
+        #mf-p[data-ui=nova] #mf-at-plano .mf-pl-lin{background:var(--mf-sup2);border:1px solid var(--mf-borda);border-radius:10px;padding:8px;margin-top:6px}
+        #mf-p[data-ui=nova] #mf-at-plano .mf-info + .mf-pl-lin{border-left:3px solid var(--mf-ok)}
+        /* botões que apagam o que foi digitado (pedem confirmação): texto vermelho, para não confundir com os outros */
+        #mf-p[data-ui=nova] #mf-at-novo,#mf-p[data-ui=nova] #mf-ng-novo,#mf-p[data-ui=nova] #mf-ng-limpar{color:var(--mf-perigo);border-color:var(--mf-perigo-borda)}
+        #mf-p[data-ui=nova] #mf-at-novo:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-novo:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-limpar:hover:not(:disabled){background:var(--mf-perigo-suave);border-color:var(--mf-perigo)}
+        #mf-p[data-ui=nova][data-tema=escuro] #mf-at-novo,#mf-p[data-ui=nova][data-tema=escuro] #mf-ng-novo,#mf-p[data-ui=nova][data-tema=escuro] #mf-ng-limpar{color:#f87171}
         @media (prefers-reduced-motion: reduce){#mf-p[data-ui=nova] *{transition:none !important}}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
@@ -1772,16 +1791,16 @@
             <button data-at="negociacao">Negociação</button><button data-at="renegociacao">Renegociação</button><button data-at="mensagens">Mensagens</button>
           </div>
           <div id="mf-at-form">
-            <details class="mf-grupo" id="mf-at-g-cliente" open><summary>Cliente</summary>
+            <details class="mf-grupo" id="mf-at-g-cliente" data-grupo="at-cliente" open><summary>Cliente</summary>
               <div class="mf-linha" style="flex-wrap:wrap;gap:6px;margin:2px 0 6px">
                 <button id="mf-at-aplicar" class="cinza mf-bs-mini" title="Preenche com o cliente da busca do topo. O número de contato nunca é preenchido pelo telefone da proposta.">Aplicar cliente atual</button>
               </div>
               <div id="mf-at-cliente" class="mf-grade"></div>
             </details>
-            <details class="mf-grupo" id="mf-at-g-cobranca"><summary>Cobrança</summary>
+            <details class="mf-grupo" id="mf-at-g-cobranca" data-grupo="at-cobranca"><summary>Cobrança</summary>
               <div id="mf-at-cobranca" class="mf-grade"></div>
             </details>
-            <details class="mf-grupo" id="mf-at-g-acordo" open><summary>Acordo</summary>
+            <details class="mf-grupo" id="mf-at-g-acordo" data-grupo="at-acordo" open><summary>Acordo</summary>
               <div class="mf-grade">
                 <label class="mf-lb-rot" id="mf-at-resultado-rot">Resultado *<select id="mf-ng-frase-tipo">
                   <option value="fechou">Cliente fechou (acordo realizado)</option>
@@ -1792,14 +1811,14 @@
               </div>
               <div id="mf-at-modal" style="margin-top:6px"></div>
             </details>
-            <details class="mf-grupo" id="mf-at-g-reneg" open><summary>Renegociação</summary>
+            <details class="mf-grupo" id="mf-at-g-reneg" data-grupo="at-reneg" open><summary>Renegociação</summary>
               <div id="mf-at-reneg" class="mf-grade"></div>
               <div class="mf-tit" style="margin-top:10px">Plano de parcelas</div>
               <div id="mf-at-plano-cfg" class="mf-grade"></div>
               <button id="mf-at-plano-gerar" class="azul" style="width:100%;margin-top:6px">Montar parcelas</button>
               <div id="mf-at-plano" style="margin-top:6px"></div>
             </details>
-            <details class="mf-grupo" id="mf-at-g-textos" open><summary>Textos da planilha</summary>
+            <details class="mf-grupo" id="mf-at-g-textos" data-grupo="at-textos" open><summary>Textos da planilha</summary>
               <button id="mf-ng-frases" class="azul" style="width:100%;margin-bottom:8px">Gerar textos</button>
               <label class="mf-lb-rot"><span id="mf-at-rot-pedido">Pedido do cliente</span><textarea id="mf-ng-f-pedido" style="height:54px"></textarea></label>
               <button id="mf-ng-copiar-pedido" class="cinza" style="width:100%;margin:4px 0 8px">Copiar</button>
@@ -1807,7 +1826,7 @@
               <button id="mf-ng-copiar-acordo" class="cinza" style="width:100%;margin-top:4px">Copiar</button>
               <div class="mf-linha" id="mf-at-linha-parcela" style="margin-top:8px"><input id="mf-ng-f-parcela" type="text" placeholder="A partir de qual parcela" style="flex:1"><button id="mf-ng-copiar-parcela" class="cinza" style="padding:7px 9px">Copiar</button></div>
             </details>
-            <details class="mf-grupo" id="mf-at-g-acomp"><summary>Acompanhamento (opcional)</summary>
+            <details class="mf-grupo" id="mf-at-g-acomp" data-grupo="at-acomp"><summary>Acompanhamento (opcional)</summary>
               <button id="mf-at-sugerir" class="cinza mf-bs-mini" style="margin-bottom:6px" title="Preenche Data 1° pagamento e Quantidade de parcelas com o que foi digitado no acordo">Trazer do acordo</button>
               <div id="mf-at-acomp" class="mf-grade"></div>
             </details>
@@ -1832,10 +1851,10 @@
               <select id="mf-ng-modalidade" style="margin-top:6px;display:none" title="Tipo de acordo realizado"></select>
               <div id="mf-ng-desc" class="mf-info" style="margin-top:6px"></div>
             </div>
-            <details class="mf-grupo" id="mf-ng-dados" open><summary>Dados</summary>
+            <details class="mf-grupo" id="mf-ng-dados" data-grupo="ng-dados" open><summary>Dados</summary>
               <div id="mf-ng-slot"><div id="mf-ng-campos"></div></div>
             </details>
-            <details class="mf-grupo" id="mf-ng-saida" open><summary>Texto</summary>
+            <details class="mf-grupo" id="mf-ng-saida" data-grupo="ng-saida" open><summary>Texto</summary>
               <div class="mf-grade" style="margin-bottom:8px">
                 <button id="mf-ng-gerar" class="azul">Gerar texto</button>
                 <button id="mf-ng-copiar" class="verde">Copiar texto</button>
@@ -2034,7 +2053,12 @@
     painel.dataset.ui = cfg('aparencia') === 'antiga' ? 'antiga' : 'nova';   // aparência aplicada antes de mostrar (sem "piscar")
     document.body.appendChild(painel);
     const $ = s => painel.querySelector(s);
-    const msg = t => ($('#mf-msg').textContent = t);
+    // aviso do painel. Na aba Atendimento (Nova UI) ele fica preso no rodapé e o × o esconde até o próximo aviso
+    const msg = t => { const m = $('#mf-msg'); m.classList.remove('mf-msg-fechada'); return (m.textContent = t); };
+    $('#mf-msg').addEventListener('click', e => {
+      const m = e.currentTarget, r = m.getBoundingClientRect();
+      if (painel.dataset.ui === 'nova' && painel.dataset.abaAtiva === 'neg' && e.clientX >= r.right - 30 && e.clientY <= r.top + 30) m.classList.add('mf-msg-fechada');
+    });
     const idsDaCaixa = () => $('#mf-lista').value.split(/\s+/).filter(Boolean);
 
     /* ---------- abas ---------- */
@@ -2042,6 +2066,7 @@
       if (!['rel', 'ccb', 'cac', 'cta', 'neg', 'his', 'lem', 'tim', 'cfg'].includes(a)) a = 'neg';
       painel.querySelectorAll('[data-pag]').forEach(p => { p.style.display = p.dataset.pag === a ? 'block' : 'none'; });
       painel.querySelectorAll('.mf-abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === a));
+      painel.dataset.abaAtiva = a;   // só para o visual (CSS) saber qual aba está aberta
       GM_setValue('abaPainel', a);
     };
     painel.querySelectorAll('.mf-abas button').forEach(b => b.addEventListener('click', () => mostrarAba(b.dataset.aba)));
@@ -5326,7 +5351,13 @@
       const obrig = ngCtx === 'renegociacao' ? ['proposta', 'nome', 'responsavel'] : ['proposta', 'nome'];
       const falta = obrig.filter(k => !ngValor(k)).map(k => NG_CAMPOS[k].rot);
       painel.querySelectorAll('#mf-at-form [data-campo]').forEach(i => i.classList.toggle('mf-erro', falta.includes(NG_CAMPOS[i.dataset.campo].rot)));
-      if (ngValores.contato && !telFormatar(ngValores.contato)) falta.push('Número de contato válido (DDD + número) ou deixe em branco');
+      const contatoRuim = ngValores.contato && !telFormatar(ngValores.contato);
+      if (contatoRuim) falta.push('Número de contato válido (DDD + número) ou deixe em branco');
+      // Nova UI, só visual: marca o contato inválido e abre o grupo recolhido que tem campo marcado (o campo em vermelho aparece)
+      if (painel.dataset.ui === 'nova') {
+        if (contatoRuim) painel.querySelectorAll('#mf-at-form [data-campo="contato"]').forEach(i => i.classList.add('mf-erro'));
+        painel.querySelectorAll('#mf-at-form .mf-erro').forEach(i => { const d = i.closest('details'); if (d && !d.open) d.open = true; });
+      }
       return falta;
     }
     function atLinhas() {

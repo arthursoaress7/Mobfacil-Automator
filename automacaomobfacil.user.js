@@ -6907,19 +6907,35 @@
     const BT_PERIGO = 'border:1px solid #dc2626;background:#dc2626;color:#fff;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
     const raiz = el('div', 'position:fixed;left:84px;bottom:16px;z-index:2147483646;font:13px/1.45 system-ui,Segoe UI,Arial;color:#0f172a');
     raiz.id = 'mf-rd';
-    const abrir = el('button', BT_PRI + ';box-shadow:0 6px 18px rgba(15,23,42,.25)', '🔒 Encerrar com IA');
-    abrir.title = 'PaymobiFin: encerrar os atendimentos com cadeado (janela de 24 h fechada)';
+    const abrir = el('button', BT_PRI + ';box-shadow:0 6px 18px rgba(15,23,42,.25);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', '🔒 Encerrar com IA');
+    const ROTULO_ABRIR = '🔒 Encerrar com IA', TITULO_ABRIR = 'PaymobiFin: encerrar os atendimentos vencidos (clique para abrir o painel)';
+    abrir.title = TITULO_ABRIR;
     const card = el('div', 'display:none;width:560px;max-width:calc(100vw - 100px);max-height:calc(100vh - 40px);overflow:auto;background:#fff;border:1px solid #d9e0ea;border-radius:14px;box-shadow:0 24px 48px -16px rgba(15,23,42,.35)');
     const topo = el('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:linear-gradient(180deg,#1e293b,#0f172a);color:#f8fafc;border-radius:13px 13px 0 0;position:sticky;top:0');
     topo.append(el('b', 'flex:1', 'PaymobiFin · Encerramento com IA'));
-    const fechar = el('button', 'border:0;background:transparent;color:#cbd5e1;font-size:16px;cursor:pointer', '✕'); fechar.title = 'Fechar';
-    topo.append(fechar);
+    // minimizar e fechar só escondem o painel: a análise e o encerramento continuam (só o botão Parar interrompe)
+    const minimizar = el('button', 'border:0;background:transparent;color:#cbd5e1;font-size:16px;cursor:pointer;padding:0 6px', '—'); minimizar.title = 'Minimizar (a automação continua; o andamento aparece no botão do canto)';
+    const fechar = el('button', 'border:0;background:transparent;color:#cbd5e1;font-size:16px;cursor:pointer', '✕'); fechar.title = 'Fechar (a automação continua; o andamento aparece no botão do canto)';
+    topo.append(minimizar, fechar);
     const corpo = el('div', 'padding:12px;display:flex;flex-direction:column;gap:10px');
     card.append(topo, corpo);
     raiz.append(card, abrir);
     document.body.appendChild(raiz);
-    abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); pintarCopiar(); rdContar(); };
-    fechar.onclick = () => { card.style.display = 'none'; abrir.style.display = ''; };
+    // reabrir no meio da automação não troca o andamento pela contagem da lista
+    abrir.onclick = () => {
+      card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); pintarCopiar();
+      // em andamento ou com resultado ainda não visto: mantém o texto; senão mostra a contagem da lista
+      if (rdRodando || /^(Análise|Encerrados|Parei)/.test(st.textContent)) desenhar(); else rdContar();
+      abrir.textContent = ROTULO_ABRIR; abrir.title = TITULO_ABRIR;
+    };
+    const recolher = () => {
+      card.style.display = 'none'; abrir.style.display = '';
+      const t = (st && st.textContent) || '';
+      abrir.textContent = rdRodando && t ? '🔒 ' + t.split('\n')[0] : ROTULO_ABRIR;
+      abrir.title = rdRodando && t ? t + '\n\n(clique para abrir o painel; a automação continua)' : TITULO_ABRIR;
+    };
+    minimizar.onclick = recolher;
+    fechar.onclick = recolher;
 
     // configuração: só a chave do Gemini (o modelo é sempre escolhido sozinho, ver modeloGemini)
     const cfgBox = el('details', 'border:1px solid #e4e9f0;border-radius:10px;padding:8px 10px');
@@ -6953,7 +6969,14 @@
     };
 
     const st = el('div', 'padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;white-space:pre-wrap');
-    const status = t => { st.textContent = t; };
+    // com o painel recolhido, o andamento aparece no botão do canto (e o texto completo ao passar o mouse)
+    const status = t => {
+      st.textContent = t;
+      if (card.style.display === 'none' && (rdRodando || /^(Análise|Encerrados|Parei)/.test(t))) {
+        abrir.textContent = '🔒 ' + String(t).split('\n')[0];
+        abrir.title = t + '\n\n(clique para abrir o painel' + (rdRodando ? '; a automação continua)' : ')');
+      }
+    };
     const acoes = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
     const btAnalisar = el('button', BT_PRI, '1. Analisar conversas vencidas');
     const btAberta = el('button', BT, '+ Analisar a conversa aberta');

@@ -101,3 +101,7 @@ No **lojista**, o Perfil e o telefone do contato são da loja: o cruzamento com 
 ## Encerrar antes das 24 h (conversa escolhida)
 
 Botão **"+ Analisar a conversa aberta"**: o funcionário abre no RD um atendimento já resolvido (mesmo sem cadeado e dentro da janela) e clica; a conversa é analisada como as outras (`analisarItem`), entra na lista **marcada** com o motivo "✋ escolhida antes das 24 h" e é encerrada pelo "2. Encerrar marcados". Clicar de novo na mesma conversa não duplica; se ela tinha dado erro, é analisada de novo.
+
+## Minimizar e continuar
+
+O topo do painel tem **— (minimizar)** e **✕ (fechar)**: os dois só recolhem o painel no botão do canto; a análise e o encerramento continuam (só **Parar** interrompe). Recolhido, o botão do canto mostra o andamento ao vivo ("🔒 Analisando 3 de 20: …", depois o resultado) e o texto completo ao passar o mouse. Ao reabrir, o painel mantém o andamento/resultado em vez de trocar pela contagem da lista. Fechar ou recarregar a **aba** do RD para o script; o que já foi analisado/encerrado fica salvo e "Analisar"/"Encerrar marcados" continuam de onde pararam.

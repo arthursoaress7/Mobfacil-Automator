@@ -7211,7 +7211,7 @@
       desenho.forEach(([t, a]) => { const n = document.createElementNS(SVG, t); Object.entries(a).forEach(([k, v]) => n.setAttribute(k, v)); s.appendChild(n); }); return s; };
     const ICONE_SOL = [['circle', { cx: 12, cy: 12, r: 4 }], ['path', { d: 'M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41' }]];
     const ICONE_LUA = [['path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' }]];
-    const ICONE_MENOS = [['path', { d: 'M5 12h14' }]], ICONE_X = [['path', { d: 'M18 6 6 18M6 6l12 12' }]];
+    const ICONE_X = [['path', { d: 'M18 6 6 18M6 6l12 12' }]];
     const btTopo = (desenho, dica) => {
       const b = el('button'); b.title = dica; b.setAttribute('aria-label', dica); b.appendChild(icone(desenho));
       b._mfCss = c => 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:' + c.topoIcone + ';cursor:pointer;flex:none;' + TRANS;
@@ -7224,10 +7224,10 @@
       btTema.title = rdTema === 'escuro' ? 'Modo escuro (clique para o modo claro)' : 'Modo claro (clique para o modo escuro)';
       btTema.setAttribute('aria-label', btTema.title);
     };
-    // minimizar e fechar só escondem o painel: a análise e o encerramento continuam (só o botão Parar interrompe)
-    const minimizar = btTopo(ICONE_MENOS, 'Minimizar (a automação continua; o andamento aparece no botão do canto)');
+    // fechar só esconde o painel no botão do canto: a análise e o encerramento continuam (só o botão Parar interrompe).
+    // (havia também um "minimizar", que fazia exatamente o mesmo; ficou só o fechar)
     const fechar = btTopo(ICONE_X, 'Fechar (a automação continua; o andamento aparece no botão do canto)');
-    topo.append(btTema, minimizar, fechar);
+    topo.append(btTema, fechar);
     const corpo = estilo(el('div'), c => 'padding:12px;display:flex;flex-direction:column;gap:10px;background:' + c.fundo + ';' + TRANS);
     card.append(topo, corpo);
     raiz.append(card, abrir);
@@ -7246,7 +7246,6 @@
       abrir.textContent = (rdRodando || rdAbertas) && t ? '🔒 ' + t.split('\n')[0] : ROTULO_ABRIR;
       abrir.title = (rdRodando || rdAbertas) && t ? t + '\n\n(clique para abrir o painel; a automação continua)' : TITULO_ABRIR;
     };
-    minimizar.onclick = recolher;
     fechar.onclick = recolher;
     // superfície (cartão) do painel: blocos de configuração, ações e cada conversa
     const supCss = (extra) => c => 'background:' + c.sup + ';border:1px solid ' + c.borda + ';border-radius:12px;' + TRANS + (extra ? ';' + extra : '');

@@ -116,7 +116,7 @@ Botão **"+ Analisar a conversa aberta"**: o funcionário abre no RD um atendime
 
 Os estilos são aplicados pelo CSSOM (`el.style.cssText`), sem `<style>` na página do RD. Cada elemento fixo guarda a função que monta o estilo a partir das cores do tema (`estilo(e, c => …)`).
 
-- **Tema claro/escuro:** botão no topo, ao lado de — e ✕. O ícone mostra o modo atual: sol = claro, lua = escuro; o clique troca. A preferência fica em GM `rdTema` (padrão claro). Trocar reaplica as cores de todos os elementos (`repintar`), preservando o mostrar/esconder do painel, e redesenha a lista. As cores ficam em `RD_TEMAS` (claro e escuro desenhados separadamente). **O RD não muda.**
+- **Tema claro/escuro:** botão no topo, ao lado do ✕. O ícone mostra o modo atual: sol = claro, lua = escuro; o clique troca. A preferência fica em GM `rdTema` (padrão claro). Trocar reaplica as cores de todos os elementos (`repintar`), preservando o mostrar/esconder do painel, e redesenha a lista. As cores ficam em `RD_TEMAS` (claro e escuro desenhados separadamente). A página do RD só escurece com a opção do item abaixo.
 - **Página do RD no modo escuro** (`rdEscurecerPagina`, padrão ligado; caixa "No modo escuro (🌙), escurecer também a página do RD"): o RD não tem modo escuro próprio. Com o painel no escuro, uma folha de estilo construída pelo script (`adoptedStyleSheets`, aceita pelo RD) inverte as cores da página inteira (`html{filter:invert(1) hue-rotate(180deg)}`). Imagens, vídeos, iframes, fundos com imagem, o painel (`#mf-rd`) e o botão "Analisar (IA)" (`#mf-rd-ia`) são invertidos de volta e ficam com as cores originais. A folha sai no modo claro ou com a caixa desmarcada, e é conferida a cada `RD_BOTAO_MS`, porque o RD troca de tela sem recarregar. Não mexe em nada da página, só nas cores.
 - **Configuração do Gemini:** recolhível. O título mostra o estado da chave ("● Chave salva · …1234" ou "● Sem chave"). Campo mascarado e botão Salvar na mesma linha; o mecanismo de salvar não mudou.
 - **Ações:** "1. Analisar conversas vencidas" e "+ Analisar a conversa aberta" lado a lado; "2. Encerrar marcados" embaixo, na largura toda, em vermelho. A opção das paradas sem cadeado fica logo abaixo. As auxiliares ficam numa faixa menor: Copiar linhas da planilha, Parar e Limpar lista (texto vermelho).
@@ -131,9 +131,9 @@ Os estilos são aplicados pelo CSSOM (`el.style.cssText`), sem `<style>` na pág
     3. informação, em neutro.
 - **As regras não mudaram:** conversas com erro continuam desmarcadas e sem poder marcar, e as analisadas continuam marcadas por padrão.
 
-## Minimizar e continuar
+## Fechar e continuar
 
-O topo do painel tem **— (minimizar)** e **✕ (fechar)**: os dois só recolhem o painel no botão do canto; a análise e o encerramento continuam (só **Parar** interrompe). Recolhido, o botão do canto mostra o andamento ao vivo ("🔒 Analisando 3 de 20: …", depois o resultado) e o texto completo ao passar o mouse. Ao reabrir, o painel mantém o andamento/resultado em vez de trocar pela contagem da lista. Fechar ou recarregar a **aba** do RD para o script; o que já foi analisado/encerrado fica salvo e "Analisar"/"Encerrar marcados" continuam de onde pararam.
+O topo do painel tem **✕ (fechar)**, que só recolhe o painel no botão do canto (até a 13.23 havia também um "—" de minimizar, que fazia exatamente o mesmo); a análise e o encerramento continuam (só **Parar** interrompe). Recolhido, o botão do canto mostra o andamento ao vivo ("🔒 Analisando 3 de 20: …", depois o resultado) e o texto completo ao passar o mouse. Ao reabrir, o painel mantém o andamento/resultado em vez de trocar pela contagem da lista. Fechar ou recarregar a **aba** do RD para o script; o que já foi analisado/encerrado fica salvo e "Analisar"/"Encerrar marcados" continuam de onde pararam.
 
 ## Botão "Analisar (IA)" no topo do atendimento
 

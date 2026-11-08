@@ -155,6 +155,12 @@ Só aparência e retorno visual: os campos, ids, botões, textos gerados e linha
 - **Botões que apagam o que foi digitado** ("Novo atendimento", "Limpar campos", "Novo texto"): texto vermelho. A confirmação continua a mesma.
 - **Validação (`atValidar`):** ao copiar ou registrar com campo faltando, o grupo recolhido que tem o campo em vermelho é aberto. O Número de contato inválido também fica em vermelho. A lista de pendências e a regra não mudaram.
 - **Grupos:** cada grupo da aba (`at-cliente`, `at-cobranca`, `at-acordo`, `at-reneg`, `at-textos`, `at-acomp`, `ng-dados`, `ng-saida`) guarda o próprio aberto/fechado.
+- **Grades:** `repeat(auto-fit, minmax(130px, 1fr))`. São 2 colunas no painel padrão e até 5 no ampliado, e um grupo com poucos campos ocupa a largura toda. Campo comum até 420 px. Os botões de ação ficam sempre 2 por linha.
+- **Rótulo em cima, caixa embaixo** (`justify-content: space-between`): as caixas de uma linha ficam alinhadas mesmo quando um rótulo quebra.
+- **Obrigatório:** o ` *` fica num `<span class="mf-obrig">`, com espaço que não quebra, em azul na Nova UI. O texto do rótulo é o mesmo.
+- **Campo automático** (`input[readonly]`, ex.: Saldo restante calculado): fundo neutro e borda tracejada. Números e datas usam algarismos de largura fixa.
+- **Seções de "Dados" (Mensagens, `.mf-ng-bloco`):** título pequeno em maiúsculas com divisória fina e a mesma seta dos grupos (fechado ▸, aberto ▾). Não viram cartões.
+- **Negociação | Renegociação | Mensagens (`.mf-at-seg`):** opção ativa em azul (claro: fundo branco e texto azul; escuro: fundo azul suave), inativas mais apagadas e foco visível.
 
 ---
 

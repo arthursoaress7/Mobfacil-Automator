@@ -1631,6 +1631,67 @@
         #mf-p[data-ui=nova] #mf-at-novo,#mf-p[data-ui=nova] #mf-ng-novo,#mf-p[data-ui=nova] #mf-ng-limpar{color:var(--mf-perigo);border-color:var(--mf-perigo-borda)}
         #mf-p[data-ui=nova] #mf-at-novo:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-novo:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-limpar:hover:not(:disabled){background:var(--mf-perigo-suave);border-color:var(--mf-perigo)}
         #mf-p[data-ui=nova][data-tema=escuro] #mf-at-novo,#mf-p[data-ui=nova][data-tema=escuro] #mf-ng-novo,#mf-p[data-ui=nova][data-tema=escuro] #mf-ng-limpar{color:#f87171}
+
+        /* ===== Refinamento da aba Atendimento (Nova UI): grades, campos, seções e seletor. Só aparência ===== */
+        /* grades: colunas conforme a largura (2 no painel padrão, até 5 no ampliado); grupo com poucos campos usa a largura toda */
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-grade{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-grade > .mf-lb-rot:not(.mf-cheia){max-width:420px}
+        /* rótulo em cima e caixa embaixo: as caixas da mesma linha ficam alinhadas mesmo quando um rótulo quebra em 2 linhas */
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-grade > .mf-lb-rot:not(.mf-cheia){justify-content:space-between}
+        /* botões de ação: sempre 2 por linha (os de largura toda continuam inteiros) */
+        #mf-p[data-ui=nova] #mf-at-form > .mf-sec > .mf-grade{grid-template-columns:repeat(2,minmax(0,1fr))}
+        /* rótulos e campos */
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-lb-rot{gap:5px;font-size:12px;font-weight:500;line-height:1.35}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-obrig{color:var(--mf-pri);font-weight:700}
+        #mf-p[data-ui=nova] [data-pag="neg"] input[inputmode=decimal],#mf-p[data-ui=nova] [data-pag="neg"] input[inputmode=numeric],#mf-p[data-ui=nova] [data-pag="neg"] input[inputmode=tel],
+        #mf-p[data-ui=nova] [data-pag="neg"] input[type=date]{font-variant-numeric:tabular-nums}
+        #mf-p[data-ui=nova] [data-pag="neg"] textarea{resize:vertical;min-height:54px}
+        /* campo preenchido sozinho (somente leitura, ex.: saldo restante calculado): fundo neutro, sem cara de campo para digitar */
+        #mf-p[data-ui=nova] [data-pag="neg"] input[readonly]{background-color:var(--mf-seg) !important;color:var(--mf-txt2) !important;border-style:dashed !important;cursor:default}
+        #mf-p[data-ui=nova] [data-pag="neg"] input[readonly]:focus{box-shadow:none;border-color:var(--mf-borda2) !important}
+        #mf-p[data-ui=nova][data-tema=escuro] [data-pag="neg"] .mf-lb-rot{color:#a9b6c9 !important}
+        #mf-p[data-ui=nova][data-tema=escuro] [data-pag="neg"] ::placeholder{color:#71809a}
+        /* seções de dentro de "Dados" (Mensagens): título discreto com divisória fina e a mesma seta dos grupos, sem cartões */
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco{margin:0;padding:10px 0 2px;border-top:1px solid var(--mf-borda)}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco:first-child{border-top:0;padding-top:0}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco[open]{padding-bottom:12px}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco>summary{display:flex;align-items:center;gap:6px;list-style:none;padding:4px 0;margin:0;border-radius:6px;
+          font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mf-txt3);
+          --mf-ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco>summary::-webkit-details-marker{display:none}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco>summary::before{content:none}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco>summary::after{content:'';flex:none;margin-left:auto;width:14px;height:14px;background:currentColor;color:var(--mf-apagado);
+          -webkit-mask:var(--mf-ico) center/contain no-repeat;mask:var(--mf-ico) center/contain no-repeat;transform:rotate(-90deg);transition:transform .18s}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco[open]>summary{margin-bottom:8px;color:var(--mf-txt2)}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco[open]>summary::after{transform:none}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco>summary:hover{color:var(--mf-txt)}
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-ng-bloco>summary:focus-visible{outline:2px solid var(--mf-pri);outline-offset:2px}
+        #mf-p[data-ui=nova][data-tema=escuro] [data-pag="neg"] .mf-ng-bloco>summary{color:#8a9ab0 !important}
+        #mf-p[data-ui=nova][data-tema=escuro] [data-pag="neg"] .mf-ng-bloco[open]>summary,#mf-p[data-ui=nova][data-tema=escuro] [data-pag="neg"] .mf-ng-bloco>summary:hover{color:#cbd5e1 !important}
+        /* grupos da aba: título do grupo fechado um tom mais apagado (aberto x fechado fica claro) */
+        #mf-p[data-ui=nova] [data-pag="neg"] .mf-grupo:not([open])>summary{color:var(--mf-txt2)}
+        /* Negociação | Renegociação | Mensagens: opção ativa em destaque azul; inativas com contraste menor; foco visível */
+        #mf-p[data-ui=nova] .mf-at-seg{gap:4px;padding:4px;border-radius:11px}
+        #mf-p[data-ui=nova] .mf-at-seg button{padding:7px 6px;border-radius:8px;font-size:12.5px;line-height:1.2;text-align:center;color:var(--mf-txt3)}
+        #mf-p[data-ui=nova] .mf-at-seg button:hover:not(.ativa){color:var(--mf-txt);background:rgba(15,23,42,.045)}
+        #mf-p[data-ui=nova] .mf-at-seg button.ativa{background:var(--mf-sup);color:var(--mf-pri);box-shadow:0 1px 2px rgba(15,23,42,.12),0 0 0 1px var(--mf-pri-borda)}
+        #mf-p[data-ui=nova] .mf-at-seg button:focus-visible{outline:2px solid var(--mf-pri);outline-offset:-2px}
+        #mf-p[data-ui=nova][data-tema=escuro] .mf-at-seg button:hover:not(.ativa){color:#e2e8f0 !important;background:rgba(255,255,255,.05) !important}
+        #mf-p[data-ui=nova][data-tema=escuro] .mf-at-seg button.ativa{background:rgba(59,130,246,.18) !important;color:#dbeafe !important;box-shadow:inset 0 0 0 1px rgba(96,165,250,.5) !important}
+        /* topo, abas e busca um pouco mais compactos (mais espaço para o conteúdo); nenhum controle sai */
+        #mf-p[data-ui=nova] .mf-top{min-height:44px;padding:6px 8px 6px 12px}
+        #mf-p[data-ui=nova] .mf-top>div:first-child{min-height:30px;row-gap:1px}
+        #mf-p[data-ui=nova] .mf-top small#mf-versao{line-height:14px;padding:0 6px}
+        /* conta ativa na 2ª linha do título, do mesmo tamanho da versão */
+        #mf-p[data-ui=nova] .mf-top>div:first-child>.mf-ui-chip{margin:0 0 0 5px;padding:0 7px 0 6px;gap:5px;font-size:10.5px;line-height:16px;max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+        #mf-p[data-ui=nova] .mf-top>div:first-child>.mf-ui-chip::before{display:inline-block;vertical-align:1px;margin-right:5px}
+        #mf-p[data-ui=nova] .mf-top>div:first-child>.mf-ui-chip:empty,#mf-p[data-ui=nova].mf-min .mf-top>div:first-child>.mf-ui-chip{display:none}
+        /* botões de ícone do topo sempre quadrados (no painel estreito eles eram espremidos para 25 px) */
+        #mf-p[data-ui=nova] .mf-top .mf-mini,#mf-p[data-ui=nova] .mf-top .mf-ui-icone{flex:none;width:28px !important;height:28px}
+        #mf-p[data-ui=nova] .mf-abas>button{padding:5px 2px 6px;gap:2px}
+        #mf-p[data-ui=nova] .mf-abas>button::before{width:16px;height:16px}
+        #mf-p[data-ui=nova] .mf-bs{padding:8px 12px}
+        #mf-p[data-ui=nova] .mf-bs .mf-tit{margin-bottom:6px}
         @media (prefers-reduced-motion: reduce){#mf-p[data-ui=nova] *{transition:none !important}}
       </style>
       <div class="mf-top" title="Arraste para mover o painel"><div><b>${TITULO}</b><small id="mf-versao" title="Clique 7 vezes para a mensagem secreta">${VERSAO}</small><span id="mf-lb-badge-topo" class="mf-badge" style="display:none;cursor:pointer;margin-left:6px"></span><span id="mf-tm-topo" style="display:none;cursor:pointer;margin-left:6px;font-size:12px;background:#334155;border-radius:9px;padding:1px 7px"></span></div>
@@ -1802,12 +1863,12 @@
             </details>
             <details class="mf-grupo" id="mf-at-g-acordo" data-grupo="at-acordo" open><summary>Acordo</summary>
               <div class="mf-grade">
-                <label class="mf-lb-rot" id="mf-at-resultado-rot">Resultado *<select id="mf-ng-frase-tipo">
+                <label class="mf-lb-rot" id="mf-at-resultado-rot"><span>Resultado<span class="mf-obrig">&nbsp;*</span></span><select id="mf-ng-frase-tipo">
                   <option value="fechou">Cliente fechou (acordo realizado)</option>
                   <option value="solicitou">Cliente solicitou (simulação / pendente)</option>
                   <option value="nao">Negociação não concluída</option>
                 </select></label>
-                <label class="mf-lb-rot">Modalidade *<select id="mf-at-modalidade"></select></label>
+                <label class="mf-lb-rot"><span>Modalidade<span class="mf-obrig">&nbsp;*</span></span><select id="mf-at-modalidade"></select></label>
               </div>
               <div id="mf-at-modal" style="margin-top:6px"></div>
             </details>
@@ -4198,7 +4259,12 @@
         if (c === 'abrangencia_tipo' || c === 'tipo_antecipacao') ngMostrarDependentes();
       });
       if (def.tipo === 'check') { lab.style.flexDirection = 'row'; lab.style.alignItems = 'center'; lab.append(inp, document.createTextNode(' ' + rot)); }
-      else lab.append(document.createTextNode(rot + (obrig ? ' *' : '')), inp);
+      else {   // rótulo + " *" (num span, só para a cor do obrigatório na Nova UI; o texto do rótulo é o mesmo)
+        const t = document.createElement('span'); t.textContent = rot;
+        // espaço que não quebra antes do *: o * não fica sozinho na linha de baixo
+        if (obrig) { const s = document.createElement('span'); s.className = 'mf-obrig'; s.textContent = String.fromCharCode(160) + '*'; t.appendChild(s); }
+        lab.append(t, inp);
+      }
       if (def.dica) lab.title = def.dica;
       return lab;
     }
@@ -5840,6 +5906,9 @@
       const c = contaAtiva(); chip.textContent = c ? (c.apelido && !c.naoCadastrada ? c.apelido : c.usuario) : '';
     }
     painel.querySelectorAll('.mf-abas button, .mf-ui-menu button, .mf-ui-seg button, .mf-ui-acoes button').forEach(b => b.addEventListener('click', () => setTimeout(uiSincronizar)));
+    // a conta ativa vai para a 2ª linha do título, ao lado da versão (com os eventos já ligados): no painel estreito o
+    // nome "PaymobiFin - Assistente" deixa de ser cortado. Continua só na Nova UI e abrindo Contas ao clicar.
+    chip.classList.add('mf-ui-nova'); $('#mf-versao').after(chip);
     setInterval(uiSincronizar, 1000);
     // aplica a aparência (o Gerador redesenha os campos: na Nova UI em blocos recolhíveis)
     function aplicarUI(modoUi) {

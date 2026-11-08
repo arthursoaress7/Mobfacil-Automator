@@ -117,6 +117,11 @@ A função `relatorioCols(m, id, d, processada)` monta as colunas de resultado p
 | Efetivadas | Apenas propostas aprovadas e efetivadas |
 | Aprovadas | Propostas aprovadas (com CPF) |
 
+**Diário: visão geral do dia** (`diarioTudo`, padrão ligado; Configurações, ao lado de "Ignorar canceladas e testes"):
+- **O que entra:** canceladas e em digitação (CONF CAD), além de aprovadas, reprovadas e pendentes (as pendentes já entravam). A Situação Relatório sai como "Cancelada", "Em digitação" ou "Pendente" (`statusDiario`). Só as propostas de teste continuam fora.
+- **Onde vale:** em "Ler da tela", no Iniciar e no detalhe da proposta (`motivoFora`, `verificarRemoto` e `motivoDetalhe` não contam "cancelada" com a opção ligada). Em digitação sem valor de compra não aparece como incompleta; o valor sai N/A.
+- **Os outros relatórios e a Auditoria não mudam.**
+
 **Valor de transação (Diário e Aprovadas):** `valorTransacao()` usa o "Valor da Compra" da Operação de Crédito (`extra.compra`). O "Valor" do bloco Garantias (`extra.valor`) é o valor cadastrado do aparelho e, nas aprovações automáticas, vem simbólico (R$ 0,01, R$ 1,00...); ele só entra quando a página não tem Valor da Compra. Sem nenhum dos dois, N/A. A escolha é feita na hora de montar o relatório, então vale também para propostas já coletadas.
 
 ---

@@ -89,6 +89,7 @@
   const PADRAO = {
     auditoriaCompleta: true,         // CPF, motivo e dados da proposta (modelo Auditoria 2 Completo)
     ignorarCanceladasTestes: true,   // canceladas e testes nunca são processadas
+    diarioTudo: true,                // Relatório Diário: visão geral do dia (entram canceladas e em digitação; testes continuam fora)
     rendasReprovadas: false,         // relatório de Rendas: false = só aprovadas/efetivadas; true = inclui as reprovadas
     formatoAuto: true,               // formato de cópia escolhido pelo modo
     formatosAntigos: false,          // mostra os formatos antigos na escolha manual
@@ -2044,6 +2045,7 @@
             <label class="mf-opc" title="Coleta também CPF, motivo (coluna R) e os dados da proposta (nome, loja, vendedor, contato...) no modelo Auditoria 2 Completo. Desligada: só os dados de crédito."><input type="checkbox" id="mf-audit-full"><span><b>Auditoria completa</b><small>CPF, motivo e dados da proposta (A–R)</small></span></label>
             <label class="mf-opc" title="Abre a aba Cliente da Análise de Proposta (oculta) para ler telefone e e-mail. Desligue se ela deixar a coleta lenta ou falhar: o resto da auditoria continua."><input type="checkbox" id="mf-aba-cliente"><span><b>Telefone e e-mail (aba Cliente)</b></span></label>
             <label class="mf-opc" title="Proposta cancelada ou de teste (cliente ou digitador TESTE) nunca é processada, qualquer que seja a situação."><input type="checkbox" id="mf-canc"><span><b>Ignorar canceladas e testes</b></span></label>
+            <label class="mf-opc" title="Só no Relatório Diário. Testes continuam fora."><input type="checkbox" id="mf-diario-tudo"><span><b>Relatório Diário: visão geral do dia</b><small>Inclui canceladas e em digitação (CONF CAD), além de aprovadas, reprovadas e pendentes, como na planilha do Relatório Diário. Propostas de teste continuam fora.</small></span></label>
             <label class="mf-opc" title="Relatório de Rendas: por padrão só entram propostas aprovadas e efetivadas (pendentes, canceladas e testes ficam de fora). Ligado: as reprovadas também entram; as que não tiverem a renda do birô (RendaCalculo) no motor saem com a coluna F vazia."><input type="checkbox" id="mf-rendas-repr"><span><b>Rendas: incluir reprovadas</b></span></label>
             <label class="mf-opc" title="Copia o resultado sozinho quando a fila termina."><input type="checkbox" id="mf-auto-copia"><span><b>Copiar ao concluir</b></span></label>
           </details>
@@ -2388,6 +2390,10 @@
       return null;
     };
     const ehConfCad = txt => /\bCONF\s*CAD\b/i.test(txt || '');         // situação "20 - CONF CAD": proposta em digitação, não concluída
+    // Relatório Diário com a visão geral do dia (cfg 'diarioTudo'): canceladas e em digitação (CONF CAD) entram, como na
+    // planilha do Diário; só as propostas de teste ficam fora. Os outros relatórios e a Auditoria não mudam.
+    const diarioTudo = () => $('#mf-modo').value === 'valortransacao' && cfg('diarioTudo');
+    const motivoFora = cels => (diarioTudo() ? (ehTeste(cels) ? 'teste' : null) : motivoIgnorar(cels));
 
     /* ---- telas do sistema que algumas funções precisam (ver "NAVEGAÇÃO AUTOMÁTICA" no fim) ---- */
     const TELAS = {
@@ -2558,6 +2564,7 @@
     };
     ligarOpcao('#mf-audit-full', 'auditoriaCompleta');
     ligarOpcao('#mf-canc', 'ignorarCanceladasTestes');
+    ligarOpcao('#mf-diario-tudo', 'diarioTudo');
     ligarOpcao('#mf-rendas-repr', 'rendasReprovadas');
     ligarOpcao('#mf-auto-copia', 'copiarAoConcluir');
     ligarOpcao('#mf-formato-auto', 'formatoAuto');
@@ -2981,12 +2988,12 @@
       const base = (document.getElementById('txtCaminhoSistema') || {}).value || '';
       if (!GM_getValue('extra', {})[id]) await buscarDetalhe(base, id);
       const e = GM_getValue('extra', {})[id] || {};
-      if (e.situacao && /cancelad/i.test(e.situacao)) return 'cancelada';
+      if (e.situacao && /cancelad/i.test(e.situacao) && !diarioTudo()) return 'cancelada';
       if (ehTeste([e.cliente, e.vendedor])) return 'teste';
       return null;
     }
     // depois de ler o detalhe (auditoria completa e relatórios): cliente ou digitador "TESTE" = proposta de teste
-    const motivoDetalhe = e => (e && e.situacao && /cancelad/i.test(e.situacao) ? 'cancelada' : e && ehTeste([e.cliente, e.vendedor]) ? 'teste' : null);
+    const motivoDetalhe = e => (e && e.situacao && /cancelad/i.test(e.situacao) && !diarioTudo() ? 'cancelada' : e && ehTeste([e.cliente, e.vendedor]) ? 'teste' : null);
     const marcarIgnorada = (id, motivo) => { const ig = ignoradas(); ig[id] = motivo; GM_setValue('ignoradas', ig); };
 
     /* ---------- cópia ---------- */
@@ -3127,7 +3134,8 @@
           return f.length ? id + ' (falta: ' + f.join(', ') + ')' : null;
         }).filter(Boolean);
       }
-      if (m === 'valortransacao') return ativos.filter(id => !valorTransacao(ex[id])).map(id => id + ' (sem valor de transação)');
+      // em digitação (CONF CAD) ainda não tem valor: não é falta (a linha sai com N/A no valor)
+      if (m === 'valortransacao') { const mt = GM_getValue('meta', {}); return ativos.filter(id => !valorTransacao(ex[id]) && !ehConfCad((mt[id] || {}).sit)).map(id => id + ' (sem valor de transação)'); }
       if (m === 'efetivadas') return ativos.filter(id => !(ex[id] && ex[id].vendedor)).map(id => id + ' (falta: vendedor)');
       if (m === 'aprovadas') {
         return ativos.map(id => {
@@ -3323,10 +3331,10 @@
         GM_setValue('meta', meta);
       } else {
         const todasLinhas = lerLinhas();
-        const semConf = todasLinhas.filter(l => !ehConfCad(l.sit));   // CONF CAD fora de todos os relatórios
+        const semConf = diarioTudo() ? todasLinhas : todasLinhas.filter(l => !ehConfCad(l.sit));   // CONF CAD fora dos relatórios (menos o Diário com a visão geral)
         confCadIgnoradas = todasLinhas.length - semConf.length;
         const elegiveis = semConf.filter(l => FILTROS[m](l.sit));
-        const linhas = elegiveis.filter(l => !(ign && motivoIgnorar(l.cels)));
+        const linhas = elegiveis.filter(l => !(ign && motivoFora(l.cels)));
         canceladasTestesIgnoradas = elegiveis.length - linhas.length;
         if (!linhas.length) return msg('Nenhuma proposta desse tipo na lista da tela. Confira o filtro de data/situação da Mesa de Crédito.');
         const meta = {};
@@ -3355,7 +3363,7 @@
       linhasTela.forEach(l => { porId[l.id] = l; });
       const ign = cfg('ignorarCanceladasTestes');
       const novasIgnoradas = {};
-      if (ign) ids.forEach(id => { const l = porId[id]; const mot = l && motivoIgnorar(l.cels); if (mot) novasIgnoradas[id] = mot; });
+      if (ign) ids.forEach(id => { const l = porId[id]; const mot = l && motivoFora(l.cels); if (mot) novasIgnoradas[id] = mot; });
       // lista colada da planilha (Auditoria) e Relatório Diário: a proposta ignorada continua na fila como linha em branco,
       // para a cópia ficar alinhada com as linhas da planilha. Nos outros casos ela sai da lista.
       const alinhado = (modo() === 'coleta' && GM_getValue('origem', 'manual') !== 'tela') || modo() === 'valortransacao';

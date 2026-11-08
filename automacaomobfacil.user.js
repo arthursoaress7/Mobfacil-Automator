@@ -6703,6 +6703,7 @@
       const r = await cacReq('/MesaCredito/MesaCreditoLista', { strDados: JSON.stringify(dados) });
       if (!r.ok) return { erro: r.erro || 'Mesa de Crédito respondeu HTTP ' + r.status };
       const linhas = bsLinhasMesa(cacDoc(r.texto));
+      if (!linhas && /n[ãa]o foi localizada nenhuma proposta/i.test(r.texto)) return { linhas: [] };   // sem resultado: o ER manda só o aviso, sem a tabela
       return linhas ? { linhas } : { erro: ehLogin(r.texto) ? 'sessão expirada' : 'resposta da Mesa sem a lista de propostas' };
     }
     // Fila: só com o modelo aprendido da própria tela da Fila
@@ -7517,6 +7518,8 @@
       const semAprovador = erTxt(r.texto.replace(/<[^>]*>/g, ' ')).match(/Aprovador\s+(\S+)\s+n[ãa]o\s+cadastrad/i);
       if (semAprovador) return { erro: 'a conta ' + semAprovador[1] + ', que está logada no ER deste navegador, não é aprovadora da Mesa de Crédito: entre no ER com a conta da Mesa (no painel do ER: Trocar de conta) e clique em "1. Analisar" de novo' };
       const t = erTabelaMesa(r.texto);
+      // busca sem resultado: o ER devolve só o aviso, sem a tabela (não é erro; os outros caminhos continuam)
+      if (!t && /n[ãa]o foi localizada nenhuma proposta/i.test(r.texto)) return { linhas: [] };
       if (!t) return { erro: 'resposta do ER sem a lista de propostas (' + erDiagnostico(r) + ')' };
       const ths = [...t.querySelectorAll('thead th')].map(th => erTxt(th.textContent).toLowerCase());
       const col = n => ths.findIndex(x => x.startsWith(n));

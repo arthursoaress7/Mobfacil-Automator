@@ -6966,7 +6966,8 @@
         sel.onchange = () => { const x = analises(); x[i].tabulacao = sel.value; guardarAnalises(x); };
         lin.append(sel, el('div', 'margin-top:4px;color:#334155', 'Solicitação: ' + it.solicitacao + (it.observacoes && it.observacoes !== 'N/A' ? ' · Obs.: ' + it.observacoes : '') + ' · ' + it.tipo +
           ' · CPF: ' + (it.cpf ? 'ok' : 'N/A') + ' · Proposta: ' + (it.proposta || 'N/A') +
-          (it.vendedor || it.filial ? ' · ER: ' + [it.vendedor, it.filial].filter(Boolean).join(' · ') : '')));
+          (it.vendedor || it.filial ? ' · ER: ' + [it.vendedor, it.filial].filter(Boolean).join(' · ') : '') +
+          (it.erAchadoPor ? ' · achado pelo ' + it.erAchadoPor + (it.erConfirmado ? ' ✓' : ' (não confirmado)') : '')));
         if (it.aviso) lin.append(el('div', 'margin-top:4px;color:#b45309;font-weight:600', '⚠ ' + it.aviso));
         tabela.append(lin);
       });
@@ -7221,32 +7222,81 @@
       }
       return '';
     }
-    // CPF primeiro (identifica o cliente); sem CPF, o nº da proposta citado na conversa
-    async function cruzarER(cpf, propostaConversa) {
-      const avisos = [];
-      const cpfDig = String(cpf || '').replace(/\D/g, '');
-      let res = null, termo = '';
-      if (cpfDig.length === 11) { termo = cpfDig; res = await erMesa(cpfDig); }
-      else if (propostaConversa) { termo = propostaConversa; res = await erMesa(propostaConversa); }
-      else return { avisos: ['sem CPF nem proposta para consultar o ER'] };
-      if (res.erro) return { avisos: ['ER: ' + res.erro] };
-      let cands = res.linhas;
-      if (termo === propostaConversa) cands = cands.filter(c => c.proposta === propostaConversa);
-      if (!cands.length) return { avisos: ['ER: nenhuma proposta encontrada para ' + (termo === cpfDig ? 'o CPF' : 'a proposta ' + termo)] };
+    // aba Cliente da proposta no ER (a mesma que a Mesa abre): nome, CPF e telefones do cadastro, para confirmar quem é
+    async function erCadastro(proposta) {
+      const r = await erReq('/MesaCredito/MesaAnaliseCliente', { lngProposta: proposta });
+      if (!r.ok || !r.texto || erLogin(r.texto)) return null;
+      const doc = erDoc(r.texto), bloco = doc.querySelector('#divDetalhePropostaCadastro') || doc.body;
+      const campo = rot => {   // valor = <b> da mesma célula do <small> com o rótulo exato
+        const sm = [...bloco.querySelectorAll('small')].find(x => erTxt(x.textContent).toLowerCase() === rot.toLowerCase());
+        const cel = sm && (sm.closest('td') || sm.parentElement), b = cel && cel.querySelector('b');
+        return b ? erTxt(b.textContent) : '';
+      };
+      const nome = campo('Nome do Cliente'), cpf = campo('CPF').replace(/\D/g, '');
+      if (!nome && !cpf) return null;
+      return { nome, cpf, telefones: [campo('Telefone 1'), campo('Telefone 2'), campo('Celular')].map(t => t.replace(/\D/g, '')).filter(t => t.length >= 8) };
+    }
+    // proposta de uma lista: a EFETIVADA (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa;
+    // senão a mais recente que não está cancelada
+    function escolherProposta(cands, propostaConversa) {
       const unicas = [...new Map(cands.map(c => [c.proposta, c])).values()].sort((a, b) => erData(b.data) - erData(a.data));
-      // várias propostas no CPF: a EFETIVADA (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa;
-      // senão a mais recente que não está cancelada
       const efetivadas = unicas.filter(c => /efetivad/i.test(c.situacao) && !/n[ãa]o\s+efetivad/i.test(c.situacao));
       const citada = propostaConversa && unicas.find(c => c.proposta === propostaConversa);
-      let p = efetivadas[0] || citada || unicas.find(c => !/cancelad/i.test(c.situacao)) || unicas[0];
+      const p = efetivadas[0] || citada || unicas.find(c => !/cancelad/i.test(c.situacao)) || unicas[0];
       const sit = c => c.proposta + (c.situacao ? ' (' + c.situacao.replace(/^\d+\s*-\s*/, '') + ')' : '');
-      if (unicas.length > 1) avisos.push('ER: ' + unicas.length + ' propostas neste CPF: ' + unicas.map(sit).join(', ') + '; usei a ' + p.proposta + (efetivadas[0] === p ? ' (efetivada)' : ''));
-      if (efetivadas.length > 1) avisos.push('ER: ' + efetivadas.length + ' propostas efetivadas neste CPF; usei a mais recente');
-      if (!efetivadas.length && unicas.length) avisos.push('ER: nenhuma proposta efetivada neste CPF');
+      const avisos = [];
+      if (unicas.length > 1) avisos.push('ER: ' + unicas.length + ' propostas: ' + unicas.map(sit).join(', ') + '; usei a ' + p.proposta + (efetivadas[0] === p ? ' (efetivada)' : ''));
+      if (efetivadas.length > 1) avisos.push('ER: ' + efetivadas.length + ' propostas efetivadas; usei a mais recente');
+      if (!efetivadas.length) avisos.push('ER: nenhuma proposta efetivada');
       if (citada && citada !== p) avisos.push('a conversa cita a proposta ' + citada.proposta + ', mas a efetivada é a ' + p.proposta);
-      const vendedor = await erVendedor(p.proposta);
-      if (!vendedor) avisos.push('ER: vendedor não encontrado no detalhe da proposta ' + p.proposta);
-      return { proposta: p.proposta, nome: p.nome, filial: p.filial, situacao: p.situacao, vendedor, avisos };
+      return { p, avisos };
+    }
+    // Procura o cliente no ER por vários caminhos, porque o CPF do Perfil pode estar errado (ou ser de outra pessoa):
+    //   1) CPF do Perfil  2) CPF que o cliente escreveu  3) proposta citada na conversa  4) nome completo (só nome igual)
+    // Cada achado é CONFIRMADO na aba Cliente da proposta: o telefone do RD ou o nome conhecido têm de bater com o cadastro.
+    // Fica o primeiro confirmado; sem nenhum confirmado, o primeiro achado, com aviso para conferir.
+    async function cruzarER(d) {
+      const tentativas = [];
+      const add = (tipo, valor, rotulo) => { if (valor && !tentativas.some(t => t.tipo === tipo && t.valor === valor)) tentativas.push({ tipo, valor, rotulo }); };
+      add('cpf', String(d.cpfPerfil || '').replace(/\D/g, ''), 'CPF do Perfil');
+      add('cpf', String(d.cpfConversa || '').replace(/\D/g, ''), 'CPF escrito na conversa');
+      add('proposta', d.propostaConversa, 'proposta citada na conversa');
+      (d.nomes || []).filter(n => /\S+\s+\S+/.test(n || '')).forEach(n => add('nome', n.trim(), 'nome ' + n.trim()));
+      tentativas.forEach(t => { if (t.tipo === 'cpf' && t.valor.length !== 11) t.invalida = true; });
+      const validas = tentativas.filter(t => !t.invalida);
+      if (!validas.length) return { avisos: ['sem CPF, proposta ou nome completo para consultar o ER'] };
+      const nomesConhecidos = (d.nomes || []).filter(Boolean).map(semAcento);
+      const fim8 = t => String(t || '').replace(/\D/g, '').slice(-8);
+      const telRD = fim8(d.telefone);
+      const naoAchou = [];
+      let reserva = null;
+      for (const t of validas) {
+        const res = await erMesa(t.valor);
+        if (res.erro) return { avisos: ['ER: ' + res.erro] };   // sem endereço / sessão expirada: nada adianta tentar
+        let cands = res.linhas;
+        if (t.tipo === 'proposta') cands = cands.filter(c => c.proposta === t.valor);
+        if (t.tipo === 'nome') cands = cands.filter(c => semAcento(c.nome) === semAcento(t.valor));
+        if (!cands.length) { naoAchou.push(t.rotulo); continue; }
+        const esc = escolherProposta(cands, d.propostaConversa);
+        const cad = await erCadastro(esc.p.proposta);
+        const porTelefone = !!(cad && telRD && cad.telefones.some(x => fim8(x) === telRD));
+        const porNome = !!((cad && cad.nome && nomesConhecidos.includes(semAcento(cad.nome))) || nomesConhecidos.includes(semAcento(esc.p.nome)));
+        const achado = { t, esc, cad, confirmado: porTelefone || porNome, como: porTelefone ? 'telefone' : porNome ? 'nome' : '' };
+        if (achado.confirmado) { reserva = achado; break; }
+        if (!reserva) reserva = achado;
+        naoAchou.push(t.rotulo + ' (achou ' + (esc.p.nome || 'outra pessoa') + ', que não bate com o telefone nem com o nome do RD)');
+      }
+      if (!reserva) return { avisos: ['ER: nenhuma proposta encontrada (' + naoAchou.join('; ') + ')'] };
+      const { t, esc, cad } = reserva;
+      const avisos = [...esc.avisos];
+      if (naoAchou.length) avisos.unshift('ER: não deu pelo ' + naoAchou.join('; ') + '. Achei pelo ' + t.rotulo);
+      if (!reserva.confirmado) avisos.unshift('⚠ ER: não consegui confirmar que é o mesmo cliente (telefone e nome do RD não batem com o cadastro da proposta ' + esc.p.proposta + '); confira antes de encerrar');
+      const cpfER = cad && cad.cpf && cad.cpf.length === 11 ? fmtCpf(cad.cpf) : '';
+      if (cpfER && d.cpfPerfil && fmtCpf(d.cpfPerfil) !== cpfER) avisos.push('o CPF do Perfil do RD (' + fmtCpf(d.cpfPerfil) + ') está diferente do cadastro no ER (' + cpfER + ')');
+      const vendedor = await erVendedor(esc.p.proposta);
+      if (!vendedor) avisos.push('ER: vendedor não encontrado no detalhe da proposta ' + esc.p.proposta);
+      return { proposta: esc.p.proposta, nome: (cad && cad.nome) || esc.p.nome, cpf: cpfER, filial: esc.p.filial, situacao: esc.p.situacao, vendedor,
+        confirmado: reserva.confirmado, achadoPor: t.rotulo, avisos };
     }
 
     /* ---- etapa 1: analisar ---- */
@@ -7285,12 +7335,17 @@
               nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
             // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
             status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + ' (consultando o ER)...');
-            const er = await cruzarER(reg.cpf, reg.proposta);
+            const nomeIA = (j.nome_cliente || '').trim();
+            const er = await cruzarER({ cpfPerfil, cpfConversa, propostaConversa: reg.proposta, telefone: reg.telefone,
+              nomes: [...new Set([nomePerfil, nomeIA, /\S+\s+\S+/.test(reg.nome) ? reg.nome : ''].filter(Boolean))] });
             if (er.proposta) {
               const nomeER = er.nome || '';
-              if (nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
-              if (reg.proposta && reg.proposta !== er.proposta && !(er.avisos || []).some(a => /a conversa cita/.test(a))) avisos.push('a conversa cita a proposta ' + reg.proposta + ', que não está entre as do CPF no ER (usei a ' + er.proposta + ')');
-              Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, filial: er.filial || '', vendedor: er.vendedor || '', situacaoER: er.situacao || '' });
+              if (er.confirmado && nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
+              if (reg.proposta && reg.proposta !== er.proposta && !(er.avisos || []).some(a => /a conversa cita/.test(a))) avisos.push('a conversa cita a proposta ' + reg.proposta + ', que não é a do cliente no ER (usei a ' + er.proposta + ')');
+              // o CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil)
+              Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, cpf: er.cpf || reg.cpf, filial: er.filial || '', vendedor: er.vendedor || '',
+                situacaoER: er.situacao || '', erConfirmado: !!er.confirmado, erAchadoPor: er.achadoPor || '' });
+              if (!er.confirmado) reg.marcado = false;   // não confirmado: fica desmarcado até o funcionário conferir
             }
             avisos.push(...(er.avisos || []));
             reg.aviso = avisos.join(' · ');

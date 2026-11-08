@@ -31,7 +31,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 | D Solicitação | Gemini |
 | E Proposta | ER: a proposta efetivada do CPF (Mesa de Crédito); senão a citada na conversa ("proposta 1234") |
 | F Nome do Cliente | ER; senão Perfil (nome com 2+ palavras) ou Gemini |
-| G CPF | Perfil; senão o CPF que o cliente escreveu |
+| G CPF | ER: CPF do cadastro (aba Cliente da proposta); senão Perfil ou o CPF que o cliente escreveu |
 | H Vendedor | ER: Digitador do detalhe da proposta |
 | I Filial | ER: Ponto de Atendimento da Mesa de Crédito |
 | J Canal | RD |
@@ -63,8 +63,13 @@ Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): a
 
 Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
 
-1. `MesaCreditoLista` pelo CPF (Perfil do RD; senão o da conversa). Sem CPF, pelo nº da proposta citado na conversa.
-2. Várias propostas no CPF: a **efetivada** (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa; senão a mais recente que não está cancelada. O aviso lista todas com a situação.
-3. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
+1. **Caminhos, em ordem** (`MesaCreditoLista`), porque o CPF do Perfil pode estar errado ou ser de outra pessoa:
+   1. CPF do Perfil do RD
+   2. CPF que o cliente escreveu na conversa
+   3. Nº da proposta citado na conversa
+   4. Nome completo (Perfil, Gemini ou nome do contato com 2+ palavras) — só propostas com o **nome igual**
+2. Em cada caminho, várias propostas: a **efetivada** (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa; senão a mais recente que não está cancelada (`escolherProposta`).
+3. **Confirmação** na aba Cliente da proposta (`MesaAnaliseCliente`, `erCadastro`): o telefone do RD (últimos 8 dígitos) ou um nome conhecido tem de bater com o cadastro. Fica o primeiro caminho confirmado; se nenhum confirmar, o primeiro achado, **desmarcado** e com aviso para conferir.
+4. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
 
-Avisos na revisão: nome do ER diferente do RD, proposta da conversa diferente da do ER, várias propostas no CPF, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.
+O CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil). Avisos na revisão: por qual caminho o cliente foi achado (e os que não deram), CPF do Perfil diferente do ER, cliente não confirmado, nome do ER diferente do RD, proposta da conversa diferente da do cliente, várias/nenhuma efetivada, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.

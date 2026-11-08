@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.16
+// @version      13.17
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.16');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.17');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -1688,6 +1688,8 @@
         #mf-p[data-ui=nova] .mf-top>div:first-child>.mf-ui-chip:empty,#mf-p[data-ui=nova].mf-min .mf-top>div:first-child>.mf-ui-chip{display:none}
         /* botões de ícone do topo sempre quadrados (no painel estreito eles eram espremidos para 25 px) */
         #mf-p[data-ui=nova] .mf-top .mf-mini,#mf-p[data-ui=nova] .mf-top .mf-ui-icone{flex:none;width:28px !important;height:28px}
+        /* só o ícone desenhado: no modo claro o texto (⤢/⤡) do botão de ampliar aparecia junto, duplicado */
+        #mf-p[data-ui=nova] .mf-top .mf-mini{font-size:0 !important;line-height:0;padding:0 !important}
         #mf-p[data-ui=nova] .mf-abas>button{padding:5px 2px 6px;gap:2px}
         #mf-p[data-ui=nova] .mf-abas>button::before{width:16px;height:16px}
         #mf-p[data-ui=nova] .mf-bs{padding:8px 12px}

@@ -79,3 +79,7 @@ O CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfi
 Os limites mudam com frequência e valem **por projeto do Google** (não por chave) e **por modelo**; a cota diária volta à meia-noite do horário do Pacífico (por volta das 4 h–5 h de Brasília). Os modelos Flash cheios mais novos chegam a ter só cerca de 20 pedidos por dia no grátis, enquanto os Flash-Lite têm centenas — por isso o painel começa pelos Lite. Cada conversa analisada usa 1 pedido (mais as tentativas, se o modelo falhar).
 
 Limite por minuto (HTTP 429): espera `RD_ESPERA_LIMITE` s e tenta de novo. Limite do dia esgotado: passa direto para o próximo modelo (cada modelo tem a sua cota); sem nenhum modelo com cota, a análise para com o aviso.
+
+## Tom das observações
+
+O prompt exige Solicitação e Observações neutras, só com fatos do assunto da conversa, e proíbe dizer ou insinuar que a equipe/atendente deixou de responder, demorou ou falhou — mesmo quando a última mensagem é do cliente; nesse caso a IA descreve o pedido ou o assunto do cliente. Reserva no código (`RD_CULPA_ATENDIMENTO`): texto que ainda assim culpe o atendimento não vai para a planilha — a Observação vira a própria Solicitação (ou N/A) e a revisão mostra um aviso. Frases sobre o cliente ("Sem respostas do cliente", "Cliente não retornou") passam normalmente.

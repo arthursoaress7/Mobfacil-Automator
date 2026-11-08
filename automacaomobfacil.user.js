@@ -7130,10 +7130,17 @@
       'Quando o cliente disse o que queria (mesmo sem resolver), use a categoria do assunto principal.',
       'solicitacao: o pedido do cliente em 2 a 6 palavras, no estilo "Informou pagamento", "Desbloqueio por pagamento", "2º via de boleto", "Negociação", "Dúvida sobre bloqueio"; "N/A" se não houve pedido.',
       'observacoes: no máximo uma frase curta com algo útil para o histórico (ex.: "Informado sobre o App"); "N/A" se não houver.',
+      'Tom de solicitacao e observacoes: neutro, profissional e só com fatos do assunto da conversa (o que o cliente pediu, informou ou o que foi orientado).',
+      'NUNCA diga nem insinue que a equipe, o atendente ou a PaymobiFin deixou de responder, demorou, esqueceu, falhou ou é responsável por o atendimento não ter sido concluído (não escreva coisas como "atendente não respondeu", "cliente ficou sem retorno", "sem resposta da equipe", "atendimento não finalizado pelo atendente").',
+      'Mesmo que a última mensagem seja do cliente e o atendente não tenha respondido, descreva o contexto da conversa: o pedido ou o assunto do cliente (ex.: "Cliente solicitou segunda via do boleto", "Cliente informou o pagamento da parcela"). A tabulação segue o assunto da conversa.',
       'tipo_atendimento: "Lojista" se quem conversa é loja, vendedor ou parceiro; senão "Cliente".',
       'nome_cliente: o nome completo do cliente se aparecer escrito na conversa; senão "".',
       'Dados pessoais aparecem trocados por [CPF], [TELEFONE] e [EMAIL]: não tente adivinhá-los.',
     ].join('\n');
+    // trava: texto que culpa o atendimento pela falta de resposta não vai para a planilha (o prompt já proíbe; isto é a reserva)
+    // só pega quando a "falha" é do lado da equipe: "sem respostas do cliente", "falha no app" e "sem resposta no RD" passam
+    const RD_CULPA_ATENDIMENTO = /(atendente|atendimento|equipe|time|empresa|paymobi\w*|n[óo]s)\b[^.]{0,40}\b(n[ãa]o (respond|retorn|deu retorno|finaliz|conclu|atendeu)|demorou|esqueceu|falhou|ignorou|deixou de (respond|retorn|atend))|(sem|n[ãa]o (teve|houve|obteve|recebeu)) (resposta|retorno|atendimento) (do|da|de) (atendente|atendimento|equipe|empresa|paymobi\w*)|ficou sem (resposta|retorno|atendimento)|aguardando (resposta|retorno) (do|da) (atendente|equipe)|falta de (resposta|retorno)(?! d[oa]s? clientes?)/i;
+    const rdTextoNeutro = (texto, reserva) => (RD_CULPA_ATENDIMENTO.test(texto || '') ? { texto: reserva, trocado: true } : { texto, trocado: false });
     async function analisarTexto(nomeContato, msgs) {
       const conversa = mascarar(msgs.map(m => m.quem + ' (' + m.meta + '): ' + m.texto).join('\n')).slice(-CONFIG.RD_MAX_CARACTERES);
       const corpoReq = {
@@ -7400,6 +7407,11 @@
             const nomePerfil = /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
             const avisos = [];
             if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
+            // Solicitação/Observações que culpam o atendimento: a observação vira a própria solicitação (o pedido do cliente)
+            const sol = rdTextoNeutro((j.solicitacao || 'N/A').trim(), 'N/A');
+            const obs = rdTextoNeutro((j.observacoes || 'N/A').trim(), sol.texto !== 'N/A' ? sol.texto : 'N/A');
+            if (sol.trocado || obs.trocado) avisos.push('a IA escreveu que o atendimento não respondeu; troquei pelo assunto da conversa (confira a solicitação e a observação)');
+            j.solicitacao = sol.texto; j.observacoes = obs.texto;
             Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
               nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
             // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor

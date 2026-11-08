@@ -105,3 +105,11 @@ Botão **"+ Analisar a conversa aberta"**: o funcionário abre no RD um atendime
 ## Minimizar e continuar
 
 O topo do painel tem **— (minimizar)** e **✕ (fechar)**: os dois só recolhem o painel no botão do canto; a análise e o encerramento continuam (só **Parar** interrompe). Recolhido, o botão do canto mostra o andamento ao vivo ("🔒 Analisando 3 de 20: …", depois o resultado) e o texto completo ao passar o mouse. Ao reabrir, o painel mantém o andamento/resultado em vez de trocar pela contagem da lista. Fechar ou recarregar a **aba** do RD para o script; o que já foi analisado/encerrado fica salvo e "Analisar"/"Encerrar marcados" continuam de onde pararam.
+
+## Botão "Analisar (IA)" no topo do atendimento
+
+Ao lado de Transferir / Encerrar aparece **"✨ Analisar (IA)"**: analisa a conversa aberta (mesma função do "+ Analisar a conversa aberta" do painel), coloca na lista marcada e abre o painel na revisão. O botão fica **fora da árvore do React do RD** (posição fixa calculada a partir dos botões do topo, conferida a cada `CONFIG.RD_BOTAO_MS`), para não quebrar a tela quando o RD redesenha o cabeçalho; some quando não há conversa aberta ou há uma janela aberta.
+
+## Janela de encerrar diferente
+
+O encerramento aceita variações da janela do RD (comuns quando a conversa ainda está dentro das 24 h): reconhece a janela que abriu depois do clique em Encerrar (qualquer título), procura a lista que tem as categorias PaymobiFin entre todos os campos de lista (inclusive dropdown fora do modal, via `aria-owns`), aceita o botão de confirmar "Encerrar/Finalizar/Confirmar/Concluir/Sim" e responde a uma segunda confirmação ("Tem certeza?"). Conversa já aberta não é clicada de novo. Quando não dá para encerrar, o aviso "Não encerrado" traz o resumo da janela (título, botões e se estão desativados, campos, obrigatórios vazios).

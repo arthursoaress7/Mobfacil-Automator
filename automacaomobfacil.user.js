@@ -61,6 +61,7 @@
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
     ER_BASE_RECONFERIR: 5,  // s depois de abrir o ER para gravar de novo o endereço do ER (usado pelo RD Atendimento)
+    RD_BOTAO_MS: 700,       // ms entre conferências da posição do botão "Analisar (IA)" no topo do atendimento
     RD_HORAS_JANELA: 24,    // h sem mensagem para considerar vencida uma conversa SEM cadeado (janela do WhatsApp)
     RD_ESPERA: 15,         // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
@@ -6922,12 +6923,13 @@
     raiz.append(card, abrir);
     document.body.appendChild(raiz);
     // reabrir no meio da automação não troca o andamento pela contagem da lista
-    abrir.onclick = () => {
+    const abrirPainel = manter => {
       card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); pintarCopiar();
       // em andamento ou com resultado ainda não visto: mantém o texto; senão mostra a contagem da lista
-      if (rdRodando || /^(Análise|Encerrados|Parei)/.test(st.textContent)) desenhar(); else rdContar();
+      if (manter || rdRodando || /^(Análise|Encerrados|Parei)/.test(st.textContent)) desenhar(); else rdContar();
       abrir.textContent = ROTULO_ABRIR; abrir.title = TITULO_ABRIR;
     };
+    abrir.onclick = () => abrirPainel(false);
     const recolher = () => {
       card.style.display = 'none'; abrir.style.display = '';
       const t = (st && st.textContent) || '';
@@ -7113,6 +7115,8 @@
     const itemPorNome = nome => { const l = lista(); return l ? [...l.children].find(y => nomeDoItem(y) === nome) || null : null; };
     async function abrirConversa(it) {
       const nome = nomeDoItem(it);
+      // já está aberta (ex.: conversa escolhida pelo funcionário): não clica de novo no item, que pode fechar a conversa
+      if (abertaE(nome) && document.querySelector('#chat-show-messages .card')) return true;
       const antes = (document.querySelector('#chat-show-messages') || {}).innerText || '';
       (it.querySelector('div') || it).click();
       const ok = await esperar(() => abertaE(nome) && document.querySelector('#chat-show-messages .card'));
@@ -7540,52 +7544,128 @@
     };
 
     /* ---- conversa escolhida pelo funcionário (antes das 24 h): a que está aberta no RD agora ---- */
-    btAberta.onclick = async () => {
-      if (rdRodando) return;
-      if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
+    // usada pelo botão do painel e pelo botão "Analisar (IA)" do topo do atendimento
+    // (as mensagens começam com "Análise" para o painel não trocá-las pela contagem da lista ao abrir)
+    async function analisarConversaAberta() {
+      if (rdRodando) return status('Análise: já tem uma análise ou encerramento em andamento; aguarde terminar.');
+      if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Análise: informe a chave do Gemini em "Configuração do Gemini".'); }
       const l = lista();
       const it = l && [...l.children].find(y => { const n = nomeDoItem(y); return n && abertaE(n); });
-      if (!it) return status('Abra no RD a conversa que quer encerrar (ela precisa estar na lista "Meus atendimentos") e clique de novo.');
+      if (!it) return status('Análise: abra no RD a conversa que quer encerrar (ela precisa estar na lista "Meus atendimentos") e clique de novo.');
       const nome = nomeDoItem(it);
       const ja = analises().find(a => a.chave === nome);
-      if (ja && !ja.erro) return status(ja.encerrado ? 'Esta conversa já foi encerrada hoje pelo painel.' : 'Esta conversa já está na lista abaixo, pronta para revisar e encerrar.');
+      if (ja && !ja.erro) return status('Análise da conversa aberta: ' + (ja.encerrado ? 'esta conversa já foi encerrada hoje pelo painel.' : 'esta conversa já está na lista, pronta para revisar e encerrar.'));
       if (ja) guardarAnalises(analises().filter(a => a.chave !== nome));   // tinha dado erro: analisa de novo
       rdRodando = true;
       try {
         const reg = await analisarItem(it, nome, 'Analisando a conversa aberta: ' + nome, motivoDoItem(it) || 'escolhida antes das 24 h');
         guardarAnalises([...analises(), reg]);
         desenhar();
-        status(reg.erro ? 'Não deu para analisar ' + reg.nome + ': ' + reg.erro + '.' : reg.nome + ' entrou na lista (marcada). Revise e clique em "2. Encerrar marcados".');
+        status('Análise da conversa aberta: ' + (reg.erro ? 'não deu para analisar ' + reg.nome + ': ' + reg.erro + '.' : reg.nome + ' entrou na lista (marcada). Revise e clique em "2. Encerrar marcados".'));
       } finally { rdRodando = false; }
+    }
+    btAberta.onclick = analisarConversaAberta;
+
+    /* ---- botão "Analisar (IA)" no topo do atendimento, junto de Transferir / Encerrar ----
+       Fica FORA da árvore do React do RD: posição fixa calculada a partir dos botões do topo (à esquerda deles), para
+       não quebrar a tela quando o RD redesenha o cabeçalho. Some quando não há conversa aberta ou há uma janela aberta. */
+    const btIA = el('button', 'position:fixed;z-index:2147483645;display:none;align-items:center;gap:6px;border:0;border-radius:8px;padding:0 16px;background:#bdf2ff;color:#0b4a6b;font:700 15px/1 system-ui,Segoe UI,Arial;cursor:pointer;white-space:nowrap', '✨ Analisar (IA)');
+    btIA.title = 'PaymobiFin: analisa esta conversa com a IA e coloca na lista para encerrar (mesmo antes das 24 h)';
+    document.body.appendChild(btIA);
+    const posicionarBotaoIA = () => {
+      const enc = document.querySelector('button[aria-label=Encerrar]');
+      const r = enc && enc.getBoundingClientRect();
+      if (!r || !r.height || dialogos().length) { btIA.style.display = 'none'; return; }
+      // botões do topo na mesma linha do Encerrar (⋮, telefone, Transferir, Encerrar): o nosso fica à esquerda de todos
+      const linha = [...((cabecalho() || document).querySelectorAll('button'))].filter(b => { const q = b.getBoundingClientRect(); return q.height && Math.abs(q.top - r.top) < 12 && q.right <= r.right + 1; });
+      const esq = Math.min(r.left, ...linha.map(b => b.getBoundingClientRect().left));
+      btIA.style.display = 'inline-flex';
+      btIA.style.height = r.height + 'px';
+      btIA.style.top = r.top + 'px';
+      btIA.style.left = Math.max(0, esq - btIA.offsetWidth - 12) + 'px';
+    };
+    setInterval(posicionarBotaoIA, CONFIG.RD_BOTAO_MS);
+    window.addEventListener('resize', posicionarBotaoIA);
+    btIA.onclick = async () => {
+      if (!rdRodando) {
+        btIA.disabled = true; btIA.textContent = '⏳ Analisando…';
+        try { await analisarConversaAberta(); } finally { btIA.disabled = false; btIA.textContent = '✨ Analisar (IA)'; }
+      }
+      abrirPainel(true);   // abre o painel já na revisão
     };
 
     /* ---- etapa 2: encerrar (fluxo da própria tela) ---- */
     // sem "view": no Tampermonkey o "window" do script não é a janela da página e o navegador recusa o evento
     const clicar = e => { ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => e.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true }))); };
-    const janela = () => [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find(d => /Encerrar atendimento/.test(d.textContent));
-    // qualquer falha no meio do caminho fecha a janela "Encerrar atendimento" (nada fica aberto por cima da próxima conversa)
+    // janela de encerrar: o modal que abre ao clicar em Encerrar. Com a janela do WhatsApp ainda aberta (conversa
+    // escolhida antes das 24 h) o RD pode mostrar o modal com outro título, mais campos ou outro botão de confirmar.
+    const visivelRD = e => !!e && e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden';
+    const dialogos = () => [...document.querySelectorAll('[role=dialog], [role=alertdialog], [aria-modal=true]')].filter(visivelRD);
+    const janela = () => dialogos().find(d => /Encerrar atendimento|encerrar|finalizar/i.test(d.textContent) && d.querySelector('button'));
+    const fecharJanela = async d => {
+      const x = d && (d.querySelector('button[aria-label=close]') || [...d.querySelectorAll('button')].find(b => /^(cancelar|fechar|voltar)$/i.test(b.textContent.trim())));
+      if (x) { x.click(); await esperar(() => !visivelRD(d) || !d.isConnected, 3); }
+    };
+    const habilitado = b => b && !b.disabled && b.getAttribute('aria-disabled') !== 'true';
+    // botão que confirma o encerramento (não o de fechar/cancelar)
+    const botaoConfirmar = d => [...d.querySelectorAll('button')].filter(b => b.getAttribute('aria-label') !== 'close' && !/^(cancelar|fechar|voltar|close icon)$/i.test(b.textContent.trim()))
+      .find(b => /^(encerrar|finalizar|confirmar|concluir|sim)\b/i.test(b.textContent.trim()));
+    // o que a janela tem, para o aviso quando não dá para encerrar (sem dados do cliente)
+    const resumoJanela = d => {
+      if (!d) return 'nenhuma janela aberta';
+      const tit = String((d.querySelector('[id*=itle], h1, h2, h3, h4, [class*=Title], [class*=Header]') || {}).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      const bts = [...d.querySelectorAll('button')].map(b => b.textContent.trim() + (habilitado(b) ? '' : ' (desativado)')).filter(t => t && t !== 'Close Icon').slice(0, 6);
+      const campos = [...d.querySelectorAll('label, legend')].map(l => l.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 5);
+      const obrig = [...d.querySelectorAll('input, textarea, select')].filter(i => (i.required || i.getAttribute('aria-required') === 'true') && !String(i.value || '').trim()).length;
+      return 'janela "' + tit + '" · botões: ' + (bts.join(', ') || 'nenhum') + (campos.length ? ' · campos: ' + campos.join(', ') : '') + (obrig ? ' · ' + obrig + ' campo(s) obrigatório(s) vazio(s)' : '');
+    };
+    // qualquer falha no meio do caminho fecha a janela (nada fica aberto por cima da próxima conversa) e diz o que ela tinha
     async function encerrarAberto(categoria) {
       try { await encerrarPassos(categoria); }
       catch (e) {
-        const d = janela(), x = d && (d.querySelector('button[aria-label=close]') || [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Cancelar'));
-        if (x) { x.click(); await esperar(() => !janela(), 3); }
+        const d = janela();
+        if (!/\(janela "/.test(e.message)) e.message += ' (' + resumoJanela(d) + ')';
+        await fecharJanela(d);
         throw e;
       }
     }
     async function encerrarPassos(categoria) {
-      const bt = document.querySelector('button[aria-label=Encerrar]');
+      const bt = document.querySelector('button[aria-label=Encerrar]') || [...((cabecalho() || document).querySelectorAll('button'))].find(b => /^encerrar$/i.test(b.textContent.trim()));
       if (!bt) throw new Error('botão Encerrar não encontrado');
+      const antes = new Set(dialogos());
       bt.click();
-      const d = await esperar(janela); if (!d) throw new Error('a janela de encerrar não abriu');
-      const gatilho = d.querySelector('[aria-haspopup=listbox]');
-      if (gatilho && gatilho.getAttribute('aria-expanded') !== 'true') clicar(gatilho);
-      const op = await esperar(() => [...d.querySelectorAll('[role=option]')].find(o => rdNorm(o.textContent) === rdNorm(categoria)));
-      if (!op) { const x = d.querySelector('button[aria-label=close]'); if (x) x.click(); throw new Error('categoria não encontrada na lista do RD: ' + categoria); }
+      // a janela nova (a que apareceu depois do clique); se não der para saber, a que fala em encerrar
+      const d = await esperar(() => dialogos().find(x => !antes.has(x) && x.querySelector('button')) || janela());
+      if (!d) throw new Error('a janela de encerrar não abriu');
+      // categoria: abre cada lista da janela até achar a que tem as categorias PaymobiFin (o dropdown pode estar fora do modal)
+      const listaDe = g => [d, document.getElementById(g.getAttribute('aria-owns') || g.getAttribute('aria-controls') || '')].filter(Boolean);
+      const acharOpcao = g => { for (const raiz of listaDe(g)) { const o = [...raiz.querySelectorAll('[role=option]')].find(x => rdNorm(x.textContent) === rdNorm(categoria)); if (o) return o; } return null; };
+      const gatilhos = [...d.querySelectorAll('[aria-haspopup=listbox], [role=combobox]')];
+      if (!gatilhos.length) throw new Error('a janela não tem a lista de categorias');
+      let op = null;
+      for (const g of gatilhos) {
+        if (g.getAttribute('aria-expanded') !== 'true') clicar(g);
+        op = await esperar(() => acharOpcao(g), 5);
+        if (op) break;
+        if (g.getAttribute('aria-expanded') === 'true') clicar(g);   // não era esta lista: fecha e tenta a próxima
+      }
+      if (!op) throw new Error('categoria não encontrada na lista do RD: ' + categoria);
       op.scrollIntoView({ block: 'nearest' }); clicar(op);
-      const conf = await esperar(() => [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Encerrar' && b.getAttribute('aria-disabled') !== 'true'));
-      if (!conf) { const x = d.querySelector('button[aria-label=close]'); if (x) x.click(); throw new Error('o botão Encerrar da janela não liberou'); }
+      const conf = await esperar(() => { const b = botaoConfirmar(d); return habilitado(b) ? b : null; });
+      if (!conf) throw new Error('o botão de confirmar da janela não liberou');
+      const abertasAntes = new Set(dialogos());
       conf.click();
-      if (!(await esperar(() => !janela()))) throw new Error('a janela de encerrar não fechou');
+      // segunda confirmação ("Tem certeza?"), se o RD pedir: confirma uma vez
+      let confirmouDeNovo = false;
+      const fechou = await esperar(() => {
+        if (!confirmouDeNovo) {
+          const nova = dialogos().find(x => !abertasAntes.has(x) && x !== d);
+          const b2 = nova && botaoConfirmar(nova);
+          if (habilitado(b2)) { b2.click(); confirmouDeNovo = true; }
+        }
+        return !visivelRD(d) || !d.isConnected;
+      });
+      if (!fechou) throw new Error('a janela de encerrar não fechou');
     }
     const linhaPlanilha = a => {
       const etiqueta = (a.etiquetas || []).find(t => /^(xpanse|mundo amarelo)/i.test(t)) || 'N/A';

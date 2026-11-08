@@ -57,7 +57,7 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 
 `RD_ESPERA`, `RD_PAUSA_IA`, `RD_TIMEOUT_IA`, `RD_ESPERA_LIMITE`, `RD_ESPERA_FALHA`, `RD_TENTATIVAS_IA`, `RD_FALHAS_SEGUIDAS`, `RD_MAX_MENSAGENS`, `RD_MAX_CARACTERES`.
 
-Sem resposta do Gemini (tempo esgotado, rede ou HTTP 5xx): até `RD_TENTATIVAS_IA` tentativas por conversa; com `RD_FALHAS_SEGUIDAS` conversas seguidas sem resposta, a análise para e mostra o modelo. Nos modelos Gemini 2.5 Flash o "pensamento" é desligado (`thinkingBudget: 0`), o que deixa a resposta bem mais rápida.
+Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): até `RD_TENTATIVAS_IA` tentativas por conversa; no modelo automático, o painel passa para o próximo "flash" da lista e repete a mesma conversa (o modelo que falhou sai da vez até a página ser recarregada). Com `RD_FALHAS_SEGUIDAS` conversas seguidas sem resposta, ou nenhum modelo respondendo, a análise para e mostra o modelo. "Pensamento" reduzido: `thinkingBudget: 0` nos Gemini 2.5 Flash e `thinkingLevel: low` do Gemini 3 em diante; o modelo que recusar o ajuste é repetido sem ele. Ao clicar em Analisar, as conversas que deram erro voltam para a fila.
 
 ## Cruzamento com o ER
 

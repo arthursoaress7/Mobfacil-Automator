@@ -7059,19 +7059,26 @@
         });
       });
     }
+    // escolha automática: lista dos "flash" da chave, em ordem de preferência (refeita a cada vez que a página abre, não fica
+    // salva). Modelo que não responde (sem resposta / sobrecarregado) sai da vez nesta página e o próximo da lista é usado.
+    let modelosLista = null;
+    const modelosRuins = new Set();
     async function modeloGemini() {
       const salvo = modeloManual();
       if (salvo) return salvo;
-      if (modeloAuto) return modeloAuto;
-      const r = await gemini('GET', 'models?pageSize=200');
-      if (r.status !== 200 || !r.json) throw new Error(r.status === 400 || r.status === 403 ? 'chave do Gemini recusada (confira em Configuração do Gemini)' : 'não consegui listar os modelos do Gemini (HTTP ' + r.status + ')');
-      // estável antes de preview/experimental (que costumam ficar lentos ou sobrecarregados); dentro disso, a versão mais nova
-      const nota = n => { const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); return v * 10 - (/preview|exp/.test(n) ? 1000 : 0) - (/lite/.test(n) ? 1 : 0); };
-      const ok = (r.json.models || []).map(m => ({ n: String(m.name).replace(/^models\//, ''), g: m.supportedGenerationMethods || [] }))
-        .filter(m => m.g.includes('generateContent') && /^gemini-[\d.]+-flash/.test(m.n) && !/image|tts|audio|live|thinking/.test(m.n))
-        .sort((a, b) => nota(b.n) - nota(a.n));
-      if (!ok.length) throw new Error('nenhum modelo "flash" do Gemini disponível para esta chave');
-      modeloAuto = ok[0].n;   // escolha automática: refeita a cada vez que a página abre (não fica salva)
+      if (modeloAuto && !modelosRuins.has(modeloAuto)) return modeloAuto;
+      if (!modelosLista) {
+        const r = await gemini('GET', 'models?pageSize=200');
+        if (r.status !== 200 || !r.json) throw new Error(r.status === 400 || r.status === 403 ? 'chave do Gemini recusada (confira em Configuração do Gemini)' : 'não consegui listar os modelos do Gemini (HTTP ' + r.status + ')');
+        // estável antes de preview/experimental; dentro disso, a versão mais nova (a "lite" logo depois da cheia da mesma versão)
+        const nota = n => { const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); return v * 10 - (/preview|exp/.test(n) ? 1000 : 0) - (/lite/.test(n) ? 1 : 0); };
+        modelosLista = (r.json.models || []).map(m => ({ n: String(m.name).replace(/^models\//, ''), g: m.supportedGenerationMethods || [] }))
+          .filter(m => m.g.includes('generateContent') && /^gemini-[\d.]+-flash/.test(m.n) && !/image|tts|audio|live|thinking/.test(m.n))
+          .sort((a, b) => nota(b.n) - nota(a.n)).map(m => m.n);
+        if (!modelosLista.length) { modelosLista = null; throw new Error('nenhum modelo "flash" do Gemini disponível para esta chave'); }
+      }
+      modeloAuto = modelosLista.find(n => !modelosRuins.has(n)) || '';
+      if (!modeloAuto) throw new Error('nenhum modelo do Gemini respondeu (' + [...modelosRuins].join(', ') + '); tente de novo em alguns minutos');
       return modeloAuto;
     }
     const INSTRUCOES = [
@@ -7098,10 +7105,27 @@
             tipo_atendimento: { type: 'STRING', enum: ['Cliente', 'Lojista'] }, nome_cliente: { type: 'STRING' } } },
         },
       };
-      const mod = await modeloGemini();
-      // Gemini 2.5 Flash "pensa" antes de responder por padrão: para classificar não precisa, e sem isso responde bem mais rápido
-      if (/^gemini-2\.5-flash/.test(mod)) corpoReq.generationConfig.thinkingConfig = { thinkingBudget: 0 };
-      const msgGoogle = r => String((((r.json || {}).error || {}).message) || '').slice(0, 160);
+      // modelo sem resposta: no automático, passa para o próximo da lista e repete a mesma conversa
+      for (;;) {
+        const mod = await modeloGemini();
+        try { return await pedirAoModelo(mod, JSON.parse(JSON.stringify(corpoReq))); }
+        catch (e) {
+          if (!e.semResposta || modeloManual()) throw e;
+          modelosRuins.add(mod);
+          const prox = (modelosLista || []).find(n => !modelosRuins.has(n));
+          if (!prox) throw e;
+          status('O Gemini (' + mod + ') não está respondendo; trocando para ' + prox + '...');
+        }
+      }
+    }
+    const msgGoogle = r => String((((r.json || {}).error || {}).message) || '').slice(0, 160);
+    const modelosSemThinking = new Set();   // modelos que recusaram o ajuste de "pensamento" (nesta página)
+    async function pedirAoModelo(mod, corpoReq) {
+      // "pensamento" reduzido: para classificar não precisa, e assim o modelo responde bem mais rápido.
+      // Se o modelo não aceitar o ajuste (HTTP 400), o pedido é repetido sem ele e o modelo é lembrado.
+      if (modelosSemThinking.has(mod)) { /* sem ajuste */ }
+      else if (/^gemini-2\.5-flash/.test(mod)) corpoReq.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      else if (/^gemini-([3-9]|\d{2,})/.test(mod)) corpoReq.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
       for (let t = 1; t <= CONFIG.RD_TENTATIVAS_IA; t++) {
         const r = await gemini('POST', 'models/' + encodeURIComponent(mod) + ':generateContent', corpoReq);
         const ultima = t >= CONFIG.RD_TENTATIVAS_IA;
@@ -7109,16 +7133,20 @@
         // sem resposta, erro de rede ou servidor sobrecarregado: tenta de novo
         if ((r.status <= 0 || r.status >= 500) && !ultima) { status('O Gemini (' + mod + ') não respondeu; tentando de novo (' + (t + 1) + ' de ' + CONFIG.RD_TENTATIVAS_IA + ')...'); await sleep(CONFIG.RD_ESPERA_FALHA * 1000); continue; }
         // pedido recusado por causa do ajuste de "pensamento": repete sem ele
-        if (r.status === 400 && corpoReq.generationConfig.thinkingConfig && /think/i.test(msgGoogle(r)) && !ultima) { delete corpoReq.generationConfig.thinkingConfig; continue; }
+        if (r.status === 400 && corpoReq.generationConfig.thinkingConfig && /think/i.test(msgGoogle(r))) { delete corpoReq.generationConfig.thinkingConfig; modelosSemThinking.add(mod); t--; continue; }
         if (r.status === 404) {
           if (modeloManual()) throw new Error('o modelo ' + mod + ' (digitado em Configuração do Gemini) não existe para esta chave; apague o campo para o painel escolher sozinho');
-          modeloAuto = ''; throw new Error('modelo ' + mod + ' indisponível; tente de novo (o painel escolhe outro)');
+          const e = new Error('modelo ' + mod + ' indisponível para esta chave'); e.semResposta = true; throw e;   // o automático passa para o próximo
         }
-        if (r.status !== 200) throw new Error(
-          r.status === 401 || r.status === 403 || (r.status === 400 && /api key|API_KEY/i.test(msgGoogle(r))) ? 'chave do Gemini recusada'
-          : r.status === 429 ? 'limite de uso do Gemini atingido; tente mais tarde'
-          : r.status === 400 ? 'o Gemini recusou o pedido: ' + (msgGoogle(r) || 'HTTP 400')
-          : 'o Gemini (' + mod + ') não respondeu' + (r.status === -1 ? ' em ' + CONFIG.RD_TIMEOUT_IA + ' s' : ' (HTTP ' + r.status + ')'));
+        if (r.status !== 200) {
+          const e = new Error(
+            r.status === 401 || r.status === 403 || (r.status === 400 && /api key|API_KEY/i.test(msgGoogle(r))) ? 'chave do Gemini recusada'
+            : r.status === 429 ? 'limite de uso do Gemini atingido; tente mais tarde'
+            : r.status === 400 ? 'o Gemini recusou o pedido: ' + (msgGoogle(r) || 'HTTP 400')
+            : 'o Gemini (' + mod + ') não respondeu' + (r.status === -1 ? ' em ' + CONFIG.RD_TIMEOUT_IA + ' s' : ' (HTTP ' + r.status + ')'));
+          e.semResposta = r.status <= 0 || r.status >= 500;
+          throw e;
+        }
         const txt = (((((r.json || {}).candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
         let j; try { j = JSON.parse(txt); } catch (_) { throw new Error('resposta do Gemini fora do formato'); }
         if (!RD_CATEGORIAS.includes(j.tabulacao)) throw new Error('o Gemini devolveu uma categoria fora da lista PaymobiFin: ' + j.tabulacao);
@@ -7218,6 +7246,9 @@
     btAnalisar.onclick = async () => {
       if (rdRodando) return;
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
+      // as que deram erro voltam para a fila (as encerradas e as analisadas sem erro ficam como estão)
+      const comErro = analises().filter(a => a.erro && !a.encerrado);
+      if (comErro.length) guardarAnalises(analises().filter(a => !(a.erro && !a.encerrado)));
       const jaFeitos = new Set(analises().map(a => a.chave));
       const fila = [...new Set(itensComCadeado().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
       if (!fila.length) return status('Nenhum atendimento com cadeado novo para analisar (os já analisados hoje estão abaixo).');
@@ -7260,7 +7291,7 @@
           guardarAnalises([...analises(), reg]);
           desenhar();
           feitos++;
-          if (/chave do Gemini recusada|limite de uso|recusou o pedido/.test(reg.erro || '')) { rdParar = true; status('Parei: ' + reg.erro + '.'); break; }
+          if (/chave do Gemini recusada|limite de uso|recusou o pedido|nenhum modelo do Gemini/.test(reg.erro || '')) { rdParar = true; status('Parei: ' + reg.erro + '.'); break; }
           // o Gemini não está respondendo: para em vez de esperar em cada uma das próximas conversas
           semResposta = /não respondeu/.test(reg.erro || '') ? semResposta + 1 : 0;
           if (semResposta >= CONFIG.RD_FALHAS_SEGUIDAS) {

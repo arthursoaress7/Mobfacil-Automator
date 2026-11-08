@@ -170,6 +170,7 @@ Todas as chaves usadas no script. Modificar uma chave sem migração quebra dado
 | `tmExpediente/tmVolume` | Config de timers | Timers |
 | `geminiChave/geminiModelo` | Chave e modelo do Gemini (só neste navegador) | RD Atendimento |
 | `rdAnalises/rdLinhas` | Análises e linhas da planilha de encerramento do dia | RD Atendimento |
+| `erBase` | Endereço do ER (gravado pelo painel do ER; usado pelo RD Atendimento) | RD Atendimento |
 | `gruposCfg` | Estado aberto/fechado dos grupos de config | Config |
 
 ---

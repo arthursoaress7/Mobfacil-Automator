@@ -29,10 +29,11 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 | B Data Contato | data da última mensagem |
 | C Etiqueta | etiqueta de loja do item (`xpanse ...` / `mundo amarelo ...`) ou N/A |
 | D Solicitação | Gemini |
-| E Proposta | conversa ("proposta 1234") |
-| F Nome do Cliente | Perfil (nome com 2+ palavras) ou Gemini |
+| E Proposta | ER (Mesa de Crédito pelo CPF); senão a citada na conversa ("proposta 1234") |
+| F Nome do Cliente | ER; senão Perfil (nome com 2+ palavras) ou Gemini |
 | G CPF | Perfil; senão o CPF que o cliente escreveu |
-| H Vendedor / I Filial | N/A (busca no ER fica para depois) |
+| H Vendedor | ER: Digitador do detalhe da proposta |
+| I Filial | ER: Ponto de Atendimento da Mesa de Crédito |
 | J Canal | RD |
 | K Observações | Gemini |
 | L Tabulação | categoria usada no encerramento |
@@ -50,7 +51,18 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 | `geminiModelo` | Modelo usado (escolhido sozinho entre os "flash" disponíveis; pode ser trocado no painel) |
 | `rdAnalises` | `{ dia, itens: [...] }` — análises do dia |
 | `rdLinhas` | `{ dia, linhas: [[A..M], ...] }` — linhas da planilha dos encerrados do dia |
+| `erBase` | Endereço do ER, gravado pelo painel do ER (só o endereço) |
 
 ## Configuração (`CONFIG`)
 
 `RD_ESPERA`, `RD_PAUSA_IA`, `RD_TIMEOUT_IA`, `RD_ESPERA_LIMITE`, `RD_TENTATIVAS_IA`, `RD_MAX_MENSAGENS`, `RD_MAX_CARACTERES`.
+
+## Cruzamento com o ER
+
+Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
+
+1. `MesaCreditoLista` pelo CPF (Perfil do RD; senão o da conversa). Sem CPF, pelo nº da proposta citado na conversa.
+2. Várias propostas no CPF: a citada na conversa; senão a mais recente que não está cancelada (com aviso listando todas).
+3. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
+
+Avisos na revisão: nome do ER diferente do RD, proposta da conversa diferente da do ER, várias propostas no CPF, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.

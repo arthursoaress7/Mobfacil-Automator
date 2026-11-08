@@ -1,13 +1,12 @@
-# CLAUDE.md — Instruções de entrada para o Claude Code
+# CLAUDE.md — Entrada para o Claude Code
 
-> Este arquivo direciona o Claude Code ao contexto correto do projeto.
-> As diretrizes completas estão em `instructions.md` — não estão duplicadas aqui.
+> Direciona o Claude Code ao contexto correto. Diretrizes completas em `instructions.md`.
 
 ---
 
-## Leia antes de qualquer trabalho
+## Antes de qualquer trabalho, leia:
 
-1. **`instructions.md`** — fonte central de todas as diretrizes do projeto
+1. **`instructions.md`** — regras de desenvolvimento, autonomia, Git e arquitetura
 2. **`docs/script/<módulo>.md`** — documentação do módulo que será alterado
 3. **Bloco correspondente em `automacaomobfacil.user.js`** — o código é a fonte de verdade
 
@@ -17,50 +16,66 @@
 
 | Item | Valor |
 |---|---|
-| Arquivo principal | `automacaomobfacil.user.js` (~6.300 linhas) |
+| Arquivo principal | `automacaomobfacil.user.js` (~8.300 linhas) |
 | Tipo | Tampermonkey userscript (monólito, sem build) |
+| Versão atual | 13.22 |
 | Sites alvo | `paymobi.ercard.com.br` e `enviamotor.mobfacil.com.br` |
-| Arquitetura | **Monolítica** — não divida em arquivos nesta etapa |
-| Branch de trabalho | `development` → `main` (via PR) |
+| Arquitetura | **Monolítica** — não dividir em arquivos |
+| Fluxo Git | branch temporária → PR → `main` (Squash Merge) |
 
 ---
 
 ## Regras inegociáveis
 
-- **Não divida o arquivo em módulos** — a refatoração não está no escopo atual
-- **Não altere `@downloadURL` / `@updateURL`** — qualquer push na `main` atualiza todos os usuários automaticamente
-- **Não sobrescreva dados existentes no armazenamento** — siga o padrão da função `salvar()`
-- **Use o prefixo correto** para novas funções (ex.: `ng`, `at`, `lb`, `tm`, `cac`, `eq` — ver tabela em `instructions.md`)
-- **Dentro do painel, use `$()` em vez de `document.querySelector()`** — o `$` é um atalho local para o painel
-- **Todos os timeouts ficam em `CONFIG`** — nunca valores hard-coded fora dele
+- **Não divida o arquivo** — refatoração não está no escopo atual
+- **Não altere `@downloadURL`/`@updateURL`** — push na `main` atualiza todos os usuários
+- **Não commite na `main` diretamente** — sempre via branch + PR
+- **Não sobrescreva dados de armazenamento existentes** — siga o padrão de `salvar()`
+- **Dentro do painel, use `$()`, não `document.querySelector()`**
+- **Timeouts apenas em `CONFIG`** — nunca valores hard-coded fora dele
+- **Use o prefixo correto** para novas funções (`ng`, `at`, `lb`, `tm`, `cac`, `eq`, `hs`, `bs`, `rd`)
+- **Alterações críticas (arquitetura, armazenamento, segurança) exigem autorização explícita**
 
 ---
 
-## Como usar sem o Claude Code (chat normal)
+## Ciclo de trabalho (Categoria A — rotineiro)
 
-Se estiver usando o Claude via chat (não Claude Code), cole manualmente o conteúdo relevante:
-
-1. Cole `instructions.md` completo no início da conversa
-2. Cole `docs/script/<módulo>.md` do módulo que será trabalhado
-3. Cole o trecho do código (`automacaomobfacil.user.js`) relacionado à alteração
-4. Descreva o que precisa
+```bash
+git checkout main && git pull
+git checkout -b tipo/descricao-curta
+# implementar
+git add <arquivos>
+git commit -m "tipo: descrição"
+git push -u origin tipo/descricao-curta
+# abrir Pull Request no GitHub
+```
 
 ---
 
-## Arquivos de documentação disponíveis
+## Como usar via chat (sem Claude Code)
+
+Cole no início da conversa:
+1. `instructions.md` completo
+2. `docs/script/<módulo>.md` do módulo envolvido
+3. O trecho relevante de `automacaomobfacil.user.js`
+4. Descrição do que precisa
+
+---
+
+## Documentação disponível
 
 ```
 instructions.md                     ← LEIA PRIMEIRO
-docs/script/01-visao-geral.md       ← mapa do script
-docs/script/02-motor-coleta.md      ← coleta de dados MobFacil
-docs/script/03-painel-interface.md  ← painel e auditoria
-docs/script/04-atendimento.md       ← negociação/renegociação
-docs/script/05-historico.md         ← histórico de acordos
-docs/script/06-lembretes-timers.md  ← lembretes e timers
-docs/script/07-cac.md               ← consulta CAC
-docs/script/08-ccbs-contas.md       ← CCBs e contas
-docs/script/09-equipe.md            ← compartilhamento Pusher
-docs/script/10-navegacao-busca.md   ← navegação e busca
-docs/script/11-rd-encerramento.md   ← RD Atendimento: encerramento com IA
-README.md                           ← referência funcional (usuário)
+docs/script/01-visao-geral.md
+docs/script/02-motor-coleta.md
+docs/script/03-painel-interface.md
+docs/script/04-atendimento.md
+docs/script/05-historico.md
+docs/script/06-lembretes-timers.md
+docs/script/07-cac.md
+docs/script/08-ccbs-contas.md
+docs/script/09-equipe.md
+docs/script/10-navegacao-busca.md
+docs/script/11-rd-encerramento.md
+README.md
 ```

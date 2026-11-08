@@ -6791,7 +6791,7 @@
       const r = await cacReq('/MesaCredito/MesaCreditoLista', { strDados: JSON.stringify(dados) });
       if (!r.ok) return { erro: r.erro || 'Mesa de Crédito respondeu HTTP ' + r.status };
       const linhas = bsLinhasMesa(cacDoc(r.texto));
-      if (!linhas && /n[ãa]o foi localizada nenhuma proposta/i.test(r.texto)) return { linhas: [] };   // sem resultado: o ER manda só o aviso, sem a tabela
+      if (!linhas && /n[ãa]o foi localizada nenhuma proposta/i.test(limpoTxt((cacDoc(r.texto).body || {}).textContent))) return { linhas: [] };   // sem resultado: o ER manda só o aviso, sem a tabela
       return linhas ? { linhas } : { erro: ehLogin(r.texto) ? 'sessão expirada' : 'resposta da Mesa sem a lista de propostas' };
     }
     // Fila: só com o modelo aprendido da própria tela da Fila
@@ -7603,11 +7603,13 @@
       if (!r.ok) return { erro: 'o ER não respondeu (HTTP ' + r.status + ')' };
       if (erLogin(r.texto)) return { erro: 'sessão do ER expirada: entre no ER neste navegador' };
       // a Mesa de Crédito só responde para usuário cadastrado como aprovador ("Aprovador FULANO não cadastrado.")
-      const semAprovador = erTxt(r.texto.replace(/<[^>]*>/g, ' ')).match(/Aprovador\s+(\S+)\s+n[ãa]o\s+cadastrad/i);
+      // o texto do aviso é lido já decodificado (o ER pode mandar o "ã" como &#227; no HTML)
+      const avisoER = erTxt((erDoc(r.texto).body || {}).textContent || '');
+      const semAprovador = avisoER.match(/Aprovador\s+(\S+)\s+n[ãa]o\s+cadastrad/i);
       if (semAprovador) return { erro: 'a conta ' + semAprovador[1] + ', que está logada no ER deste navegador, não é aprovadora da Mesa de Crédito: entre no ER com a conta da Mesa (no painel do ER: Trocar de conta) e clique em "1. Analisar" de novo' };
       const t = erTabelaMesa(r.texto);
       // busca sem resultado: o ER devolve só o aviso, sem a tabela (não é erro; os outros caminhos continuam)
-      if (!t && /n[ãa]o foi localizada nenhuma proposta/i.test(r.texto)) return { linhas: [] };
+      if (!t && /n[ãa]o foi localizada nenhuma proposta/i.test(avisoER)) return { linhas: [] };
       if (!t) return { erro: 'resposta do ER sem a lista de propostas (' + erDiagnostico(r) + ')' };
       const ths = [...t.querySelectorAll('thead th')].map(th => erTxt(th.textContent).toLowerCase());
       const col = n => ths.findIndex(x => x.startsWith(n));

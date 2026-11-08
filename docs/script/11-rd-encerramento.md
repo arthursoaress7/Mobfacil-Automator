@@ -83,3 +83,7 @@ Limite por minuto (HTTP 429): espera `RD_ESPERA_LIMITE` s e tenta de novo. Limit
 ## Tom das observações
 
 O prompt exige Solicitação e Observações neutras, só com fatos do assunto da conversa, e proíbe dizer ou insinuar que a equipe/atendente deixou de responder, demorou ou falhou — mesmo quando a última mensagem é do cliente; nesse caso a IA descreve o pedido ou o assunto do cliente. Reserva no código (`RD_CULPA_ATENDIMENTO`): texto que ainda assim culpe o atendimento não vai para a planilha — a Observação vira a própria Solicitação (ou N/A) e a revisão mostra um aviso. Frases sobre o cliente ("Sem respostas do cliente", "Cliente não retornou") passam normalmente.
+
+## Conversas vencidas sem cadeado
+
+Além das com cadeado ("Janela de 24 horas fechada"), o "1. Analisar" pega as **sem cadeado paradas há mais de `CONFIG.RD_HORAS_JANELA` (24 h)** — opção "Incluir conversas sem cadeado paradas…", ligada por padrão (GM `rdIncluirParadas`). A lista mostra a data da última mensagem (de qualquer lado): hora = hoje, "Ontem", ou a data completa. Só a data completa conta, medida a partir do fim daquele dia; como a janela do WhatsApp corre desde a última mensagem do cliente, essas conversas já passaram das 24 h com certeza. "Ontem" e hoje só entram com cadeado. A revisão mostra o motivo (🔒 cadeado ou ⏱ parada desde dd/mm/aaaa).

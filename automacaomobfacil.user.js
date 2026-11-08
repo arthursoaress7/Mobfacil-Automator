@@ -61,6 +61,7 @@
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
     ER_BASE_RECONFERIR: 5,  // s depois de abrir o ER para gravar de novo o endereço do ER (usado pelo RD Atendimento)
+    RD_HORAS_JANELA: 24,    // h sem mensagem para considerar vencida uma conversa SEM cadeado (janela do WhatsApp)
     RD_ESPERA: 15,         // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
     RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
@@ -6871,7 +6872,8 @@
   }
 
   /* ================= RD ATENDIMENTO: ENCERRAMENTO COM IA (app.tallos.com.br) =================
-     Encerra os atendimentos com cadeado ("Janela de 24 horas fechada") da lista "Meus atendimentos".
+     Encerra os atendimentos vencidos da lista "Meus atendimentos": com cadeado ("Janela de 24 horas fechada") e, se
+     ligado, os sem cadeado parados há mais de CONFIG.RD_HORAS_JANELA (pela data da última mensagem na lista).
      Duas etapas, sempre nesta ordem:
        1) Analisar: abre cada conversa com cadeado, lê as mensagens (sem enviar nada ao cliente), tira CPF, telefone e
           e-mail do texto e pede ao Gemini a tabulação (SÓ as categorias PaymobiFin de RD_CATEGORIAS) e os campos da
@@ -6963,14 +6965,19 @@
     const st = el('div', 'padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;white-space:pre-wrap');
     const status = t => { st.textContent = t; };
     const acoes = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
-    const btAnalisar = el('button', BT_PRI, '1. Analisar conversas com cadeado');
+    const btAnalisar = el('button', BT_PRI, '1. Analisar conversas vencidas');
     const btEncerrar = el('button', BT_PERIGO, '2. Encerrar marcados');
     const btParar = el('button', BT, 'Parar');
     const btCopiar = el('button', BT, 'Copiar linhas da planilha');
     const btLimpar = el('button', BT, 'Limpar lista');
     acoes.append(btAnalisar, btEncerrar, btParar, btCopiar, btLimpar);
+    // incluir as conversas SEM cadeado que estão paradas há mais de RD_HORAS_JANELA (ligado por padrão)
+    const opParadas = el('label', 'display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer');
+    const chkParadas = el('input'); chkParadas.type = 'checkbox'; chkParadas.checked = GM_getValue('rdIncluirParadas', true);
+    chkParadas.onchange = () => { GM_setValue('rdIncluirParadas', chkParadas.checked); rdContar(); };
+    opParadas.append(chkParadas, el('span', '', 'Incluir conversas sem cadeado paradas há mais de ' + CONFIG.RD_HORAS_JANELA + ' h (pela data da última mensagem na lista)'));
     const tabela = el('div', 'display:flex;flex-direction:column;gap:6px');
-    corpo.append(cfgBox, st, acoes, tabela);
+    corpo.append(cfgBox, st, acoes, opParadas, tabela);
 
     /* ---- dados guardados (sobrevivem a recarregar a página; ficam só os de hoje) ---- */
     const analises = () => { const a = GM_getValue('rdAnalises', null); return a && a.dia === rdHoje() ? a.itens : []; };
@@ -6995,7 +7002,7 @@
         const cab = el('div', 'display:flex;align-items:center;gap:8px');
         const marca = el('input'); marca.type = 'checkbox'; marca.checked = !!it.marcado && !it.encerrado && !it.erro; marca.disabled = !!it.encerrado || !!it.erro;
         marca.onchange = () => { const x = analises(); x[i].marcado = marca.checked; guardarAnalises(x); };
-        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', it.encerrado ? 'encerrado' : it.erro ? 'erro' : it.erroEncerrar ? 'não encerrado' : 'analisado'));
+        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', (it.motivo ? (it.motivo === 'cadeado' ? '🔒 ' : '⏱ ' + it.motivo + ' · ') : '') + (it.encerrado ? 'encerrado' : it.erro ? 'erro' : it.erroEncerrar ? 'não encerrado' : 'analisado')));
         lin.append(cab);
         if (it.erro) { lin.append(el('div', 'color:#b91c1c;margin-top:4px', it.erro)); tabela.append(lin); return; }
         const sel = el('select', 'width:100%;margin-top:6px;padding:6px;border:1px solid #d3dbe6;border-radius:8px');
@@ -7014,16 +7021,37 @@
 
     /* ---- página do RD Atendimento ---- */
     const lista = () => document.querySelector('[data-testid=calls-list]');
-    const itensComCadeado = () => {
+    // Conversa vencida: com cadeado ("Janela de 24 horas fechada") OU, sem cadeado, parada há mais de RD_HORAS_JANELA.
+    // A lista mostra a data da ÚLTIMA mensagem (de qualquer lado): "11:23 AM" = hoje, "Ontem", ou "30/09/2026".
+    // Só a data completa conta (conta-se a partir do fim daquele dia, para nunca pegar uma conversa ainda dentro da janela);
+    // como a janela do WhatsApp corre desde a última mensagem do CLIENTE, essas já passaram das 24 h com certeza.
+    const temCadeado = it => [...it.querySelectorAll('svg title')].some(t => t.textContent.trim() === RD_CADEADO);
+    const dataDoItem = it => {
+      for (const e of it.querySelectorAll('span, p')) {
+        if (e.childElementCount) continue;
+        const m = e.textContent.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) return { texto: m[0], fimDoDia: new Date(+m[3], +m[2] - 1, +m[1], 23, 59, 59) };
+      }
+      return null;
+    };
+    const incluirParadas = () => GM_getValue('rdIncluirParadas', true);
+    const motivoDoItem = it => {
+      if (temCadeado(it)) return 'cadeado';
+      const d = incluirParadas() && dataDoItem(it);
+      return d && (Date.now() - d.fimDoDia) / 36e5 >= CONFIG.RD_HORAS_JANELA ? 'parada desde ' + d.texto : '';
+    };
+    const itensExpirados = () => {
       const l = lista(); if (!l) return [];
-      return [...l.children].filter(it => [...it.querySelectorAll('svg title')].some(t => t.textContent.trim() === RD_CADEADO));
+      return [...l.children].filter(it => !!motivoDoItem(it));
     };
     const nomeDoItem = it => rdNorm((it.querySelector('p') || {}).textContent);
     const etiquetasDoItem = it => [...it.querySelectorAll('[class*="Tag__Display"]')].map(s => s.textContent.trim()).filter(t => !/^\+\d+$/.test(t));
     function rdContar() {
       desenhar();
-      const n = itensComCadeado().length;
-      status(lista() ? n + ' atendimento(s) com cadeado carregado(s) em "Meus atendimentos".' : 'Abra a tela de atendimentos (lista "Meus atendimentos").');
+      const itens = itensExpirados(), cad = itens.filter(temCadeado).length;
+      status(lista() ? itens.length + ' atendimento(s) vencido(s) em "Meus atendimentos": ' + cad + ' com cadeado' +
+        (incluirParadas() ? ' e ' + (itens.length - cad) + ' sem cadeado parado(s) há mais de ' + CONFIG.RD_HORAS_JANELA + ' h.' : ' (as paradas sem cadeado estão desligadas).')
+        : 'Abra a tela de atendimentos (lista "Meus atendimentos").');
     }
     async function esperar(fn, s) {
       const fim = Date.now() + (s || CONFIG.RD_ESPERA) * 1000;
@@ -7035,7 +7063,7 @@
     // a conversa aberta é a do contato quando uma das linhas do cabeçalho é exatamente o nome dele
     const abertaE = nome => { const h = cabecalho(); return !!h && h.innerText.split('\n').some(x => rdNorm(x) === nome); };
     // o item é procurado de novo a cada passo: a lista é redesenhada quando uma conversa abre ou é encerrada
-    const itemPorNome = nome => itensComCadeado().find(y => nomeDoItem(y) === nome) || null;
+    const itemPorNome = nome => { const l = lista(); return l ? [...l.children].find(y => nomeDoItem(y) === nome) || null : null; };
     async function abrirConversa(it) {
       const nome = nomeDoItem(it);
       const antes = (document.querySelector('#chat-show-messages') || {}).innerText || '';
@@ -7383,8 +7411,8 @@
       const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu|resposta do ER sem a lista)/.test(a.aviso || ''));
       if (analises().some(refazer)) guardarAnalises(analises().filter(a => !refazer(a)));
       const jaFeitos = new Set(analises().map(a => a.chave));
-      const fila = [...new Set(itensComCadeado().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
-      if (!fila.length) return status('Nenhum atendimento com cadeado novo para analisar (os já analisados hoje estão abaixo).');
+      const fila = [...new Set(itensExpirados().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
+      if (!fila.length) return status('Nenhum atendimento vencido novo para analisar (os já analisados hoje estão abaixo).');
       rdRodando = true; rdParar = false;
       let feitos = 0, semResposta = 0;
       try {
@@ -7394,7 +7422,7 @@
           if (!it) continue;
           const mod = modeloManual() || modeloAuto;
           status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + '...' + (mod ? '\nModelo: ' + mod : ''));
-          const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true };
+          const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true, motivo: motivoDoItem(it) };
           try {
             if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
             reg.telefone = telefoneAberto();
@@ -7498,7 +7526,7 @@
           const x = analises(), i = x.findIndex(y => y.chave === a.chave);
           try {
             const it = itemPorNome(a.chave);
-            if (!it) throw new Error('não está mais na lista com cadeado');
+            if (!it) throw new Error('não está mais na lista de atendimentos');
             if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
             if (a.telefone && telefoneAberto() !== a.telefone) throw new Error('a conversa aberta não é a analisada (telefone diferente)');
             await encerrarAberto(a.tabulacao);

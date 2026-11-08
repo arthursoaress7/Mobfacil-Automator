@@ -64,7 +64,8 @@ Mobfacil-Automator/
         ├── 07-cac.md
         ├── 08-ccbs-contas.md
         ├── 09-equipe.md
-        └── 10-navegacao-busca.md
+        ├── 10-navegacao-busca.md
+        └── 11-rd-encerramento.md
 ```
 
 > ⚠️ **Arquitetura monolítica:** todo o código está em `automacaomobfacil.user.js`. Não existe separação de módulos em arquivos diferentes. A refatoração em módulos **não faz parte do escopo atual** — qualquer alteração deve respeitar essa estrutura.
@@ -167,6 +168,8 @@ Todas as chaves usadas no script. Modificar uma chave sem migração quebra dado
 | `posPainel/tamPainel/tamAmpliado/min` | Posição e tamanho do painel | Interface |
 | `navAuto` | Navegação automática ligada/desligada | Navegação |
 | `tmExpediente/tmVolume` | Config de timers | Timers |
+| `geminiChave/geminiModelo` | Chave e modelo do Gemini (só neste navegador) | RD Atendimento |
+| `rdAnalises/rdLinhas` | Análises e linhas da planilha de encerramento do dia | RD Atendimento |
 | `gruposCfg` | Estado aberto/fechado dos grupos de config | Config |
 
 ---
@@ -461,6 +464,7 @@ A arquitetura monolítica é intencional **no momento atual**. A refatoração e
 | `docs/script/08-ccbs-contas.md` | CCBs e Contas | Mudança no download ou troca de conta |
 | `docs/script/09-equipe.md` | Equipe | Mudança na criptografia ou protocolo Pusher |
 | `docs/script/10-navegacao-busca.md` | Navegação e Busca | Mudança nas telas gerenciadas |
+| `docs/script/11-rd-encerramento.md` | RD Atendimento (encerramento com IA) | Mudança na tela do RD ou nas categorias |
 
 ### Regras
 

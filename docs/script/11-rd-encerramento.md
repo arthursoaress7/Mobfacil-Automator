@@ -48,14 +48,16 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 | Chave | Conteúdo |
 |---|---|
 | `geminiChave` | Chave da API do Gemini (só neste navegador, sem criptografia) |
-| `geminiModelo` | Modelo usado (escolhido sozinho entre os "flash" disponíveis; pode ser trocado no painel) |
+| `geminiModelo` + `geminiModeloManual` | Modelo digitado no painel (fica salvo). Vazio: o painel escolhe sozinho, a cada vez que a página abre, o "flash" estável mais novo (preview/experimental só se não houver outro) |
 | `rdAnalises` | `{ dia, itens: [...] }` — análises do dia |
 | `rdLinhas` | `{ dia, linhas: [[A..M], ...] }` — linhas da planilha dos encerrados do dia |
 | `erBase` | Endereço do ER, gravado pelo painel do ER (só o endereço) |
 
 ## Configuração (`CONFIG`)
 
-`RD_ESPERA`, `RD_PAUSA_IA`, `RD_TIMEOUT_IA`, `RD_ESPERA_LIMITE`, `RD_TENTATIVAS_IA`, `RD_MAX_MENSAGENS`, `RD_MAX_CARACTERES`.
+`RD_ESPERA`, `RD_PAUSA_IA`, `RD_TIMEOUT_IA`, `RD_ESPERA_LIMITE`, `RD_ESPERA_FALHA`, `RD_TENTATIVAS_IA`, `RD_FALHAS_SEGUIDAS`, `RD_MAX_MENSAGENS`, `RD_MAX_CARACTERES`.
+
+Sem resposta do Gemini (tempo esgotado, rede ou HTTP 5xx): até `RD_TENTATIVAS_IA` tentativas por conversa; com `RD_FALHAS_SEGUIDAS` conversas seguidas sem resposta, a análise para e mostra o modelo. Nos modelos Gemini 2.5 Flash o "pensamento" é desligado (`thinkingBudget: 0`), o que deixa a resposta bem mais rápida.
 
 ## Cruzamento com o ER
 

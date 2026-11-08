@@ -36,7 +36,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 | C Etiqueta | etiqueta de loja do item (`xpanse ...` / `mundo amarelo ...`) ou N/A |
 | D Solicitação | Gemini |
 | E Proposta | ER: a proposta efetivada do CPF (Mesa de Crédito); senão a citada na conversa ("proposta 1234") |
-| F Nome do Cliente | ER; senão Perfil (nome com 2+ palavras) ou Gemini |
+| F Nome do Cliente | ER (nome do cadastro, quando o cruzamento acha o cliente); senão **sempre o nome do contato no RD** (o do Perfil; sem Perfil, o da lista), mesmo que o cliente não tenha dito o nome na conversa. O nome que a IA lê na conversa só serve para procurar no ER |
 | G CPF | ER: CPF do cadastro (aba Cliente da proposta); senão Perfil ou o CPF que o cliente escreveu |
 | H Vendedor | ER: Digitador do detalhe da proposta |
 | I Filial | ER: Ponto de Atendimento da Mesa de Crédito |

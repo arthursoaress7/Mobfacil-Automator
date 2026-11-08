@@ -7533,6 +7533,9 @@
         const cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
         const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
         const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
+        // Nome do cliente na planilha: o do ER quando o cruzamento acha o cliente (logo abaixo); senão é SEMPRE o nome do
+        // contato no RD (o do Perfil; sem Perfil, o da lista), mesmo que o cliente não tenha dito o nome na conversa
+        const nomeContato = String(perfil.nome || '').trim() || reg.nome || '';
         const avisos = tel.aviso ? [tel.aviso] : [];
         if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
         // Solicitação/Observações que culpam o atendimento: a observação vira a própria solicitação (o pedido do cliente)
@@ -7541,7 +7544,7 @@
         if (sol.trocado || obs.trocado) avisos.push('a IA escreveu que o atendimento não respondeu; troquei pelo assunto da conversa (confira a solicitação e a observação)');
         j.solicitacao = sol.texto; j.observacoes = obs.texto;
         Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
-          nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
+          nomeCliente: nomeContato, cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
         // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
         status(rotulo + ' (consultando o ER)...');
         const nomeIA = (j.nome_cliente || '').trim();

@@ -3529,8 +3529,8 @@
     function colunasFila(tab) {
       const ths = [...tab.querySelectorAll('thead th')].map(th => th.textContent.replace(/\s+/g, ' ').trim().toLowerCase());
       if (!ths.length) return COLS_FILA;
-      if (/situa/.test(ths[2] || '') && /client|nome/.test(ths[3] || '')) return COLS_FILA;
-      const sit = ths.findIndex(x => /situa/.test(x)), cli = ths.findIndex(x => /client|nome/.test(x)), ass = ths.findIndex(x => /assina/.test(x));
+      if (/^sit\b|situa/.test(ths[2] || '') && /client|nome/.test(ths[3] || '')) return COLS_FILA;   // no sistema o cabeçalho é "Sit"
+      const sit = ths.findIndex(x => /^sit\b|situa/.test(x)), cli = ths.findIndex(x => /client|nome/.test(x)), ass = ths.findIndex(x => /assina/.test(x));
       return sit >= 0 && cli >= 0 && ass >= 0 ? { sit, cli, ass } : COLS_FILA;
     }
     function linhasFila() {
@@ -4939,8 +4939,21 @@
         const r = await cacReq('/CentralAtendimento/CentralPesquisaCliente', { strCliente: termo });
         const doc = r.texto ? cacDoc(r.texto) : null;
         const tab = doc && doc.querySelector('#tabCentralClientes');
+        // sem resultado: avisa e, se o script trocou de conta para esta consulta, volta para a conta de antes
+        const semResultado = texto => {
+          const st = cacSS();
+          if ((extra && extra.voltar) || (st && st.voltar)) return cacFim(texto, extra);
+          cacSSSet(null); cacStatus(''); msg(texto);
+        };
         if (!r.ok || !tab) {
-          const motivo = r.erro || (ehLogin(r.texto) ? 'a sessão expirou' : 'esta conta não tem acesso ao CAC (HTTP ' + r.status + ')');
+          // Sem a tabela, o CAC responde um aviso (visto no sistema real). Só "sem direito" é falta de acesso:
+          //   "Nenhum registro selecionado" = não achou · "Informe corretamente o CPF / CNPJ..." = termo inválido
+          //   "Usuário sem direito de pesquisa por nome de cliente" = a conta só pesquisa pelo CPF (a master pesquisa pelo nome)
+          const aviso = r.ok && doc && doc.body ? limpoTxt(doc.body.textContent) : '';
+          if (/nenhum registro/i.test(aviso)) return semResultado('CAC: nenhum cliente encontrado para "' + termo + '".');
+          if (/informe corretamente/i.test(aviso)) return semResultado('CAC: ' + aviso);
+          const motivo = r.erro || (ehLogin(r.texto) ? 'a sessão expirou' : /sem direito/i.test(aviso) ? 'esta conta não pesquisa o CAC pelo nome do cliente (pelo CPF ela pesquisa)'
+            : 'esta conta não tem acesso ao CAC (HTTP ' + r.status + ')');
           return cacSemAcesso(termo, motivo, extra);
         }
         let rows = [...tab.querySelectorAll('tbody tr[onclick*="Atendimento("]')].map(tr => {
@@ -4950,7 +4963,7 @@
         }).filter(x => x.produto && x.conta);
         const cpfBusca = /^\d{11}$/.test(termo) ? termo : '';
         if (cpfBusca) rows = rows.filter(x => x.cpf.startsWith(cpfBusca));
-        if (!rows.length) { cacSSSet(null); cacStatus(''); return msg('CAC: nenhum cliente encontrado para "' + termo + '".'); }
+        if (!rows.length) return semResultado('CAC: nenhum cliente encontrado para "' + termo + '".');
         if (rows.length > 1) {
           cacStatus('Mais de um resultado: escolha o cliente/produto.');
           const caixa = $('#mf-cac-escolha');

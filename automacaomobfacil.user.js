@@ -6901,6 +6901,10 @@
     const rdNorm = t => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase();
     const rdHoje = () => new Date().toLocaleDateString('pt-BR');
     let rdParar = false, rdRodando = false;
+    // análises pelo botão "Analisar (IA)" rodam em segundo plano e podem ser várias ao mesmo tempo (uma por conversa);
+    // só a leitura da conversa é uma por vez (rdLendo). rdRodando continua sendo a análise das vencidas e o encerramento.
+    let rdAbertas = 0, rdLendo = false;
+    const emAnalise = new Set();
 
     /* ---- interface (estilos pelo CSSOM: não depende de <style> liberado pelo site) ---- */
     const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
@@ -6927,15 +6931,15 @@
     const abrirPainel = manter => {
       card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); pintarCopiar();
       // em andamento ou com resultado ainda não visto: mantém o texto; senão mostra a contagem da lista
-      if (manter || rdRodando || /^(Análise|Encerrados|Parei)/.test(st.textContent)) desenhar(); else rdContar();
+      if (manter || rdRodando || rdAbertas || /^(Análise|Encerrados|Parei)/.test(st.textContent)) desenhar(); else rdContar();
       abrir.textContent = ROTULO_ABRIR; abrir.title = TITULO_ABRIR;
     };
     abrir.onclick = () => abrirPainel(false);
     const recolher = () => {
       card.style.display = 'none'; abrir.style.display = '';
       const t = (st && st.textContent) || '';
-      abrir.textContent = rdRodando && t ? '🔒 ' + t.split('\n')[0] : ROTULO_ABRIR;
-      abrir.title = rdRodando && t ? t + '\n\n(clique para abrir o painel; a automação continua)' : TITULO_ABRIR;
+      abrir.textContent = (rdRodando || rdAbertas) && t ? '🔒 ' + t.split('\n')[0] : ROTULO_ABRIR;
+      abrir.title = (rdRodando || rdAbertas) && t ? t + '\n\n(clique para abrir o painel; a automação continua)' : TITULO_ABRIR;
     };
     minimizar.onclick = recolher;
     fechar.onclick = recolher;
@@ -6975,9 +6979,9 @@
     // com o painel recolhido, o andamento aparece no botão do canto (e o texto completo ao passar o mouse)
     const status = t => {
       st.textContent = t;
-      if (card.style.display === 'none' && (rdRodando || /^(Análise|Encerrados|Parei)/.test(t))) {
+      if (card.style.display === 'none' && (rdRodando || rdAbertas || /^(Análise|Encerrados|Parei)/.test(t))) {
         abrir.textContent = '🔒 ' + String(t).split('\n')[0];
-        abrir.title = t + '\n\n(clique para abrir o painel' + (rdRodando ? '; a automação continua)' : ')');
+        abrir.title = t + '\n\n(clique para abrir o painel' + (rdRodando || rdAbertas ? '; a automação continua)' : ')');
       }
     };
     const acoes = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
@@ -7157,7 +7161,9 @@
       const daAnterior = () => (topoAnterior.nome && topoAnterior.nome !== nome ? topoAnterior.tels : []);
       const outra = x => [...telsAntesDaAbertura, ...daAnterior()].some(t => fim8Tel(t) === fim8Tel(x)) ? 'a conversa aberta antes'
         : ((analises().find(a => a.chave !== nome && a.telefone && fim8Tel(a.telefone) === fim8Tel(x)) || {}).nome || '');
-      const bom = await esperar(() => { vigiarTopo(); return telefonesAbertos().find(x => !outra(x)); }, CONFIG.RD_ESPERA_TELEFONE);
+      // (para na hora se o funcionário abrir outra conversa: quem chamou confere e avisa)
+      const bom = await esperar(() => { vigiarTopo(); if (!abertaE(nome)) return '-'; return telefonesAbertos().find(x => !outra(x)); }, CONFIG.RD_ESPERA_TELEFONE);
+      if (bom === '-') return { telefone: '' };
       if (bom) return { telefone: bom };
       const t = telefoneAberto();
       return { telefone: t, aviso: t ? 'o telefone do topo (…' + t.slice(-4) + ') é o mesmo de ' + outra(t) + '; confira o número antes de encerrar' : '' };
@@ -7512,16 +7518,23 @@
 
     /* ---- analisar UMA conversa (usado pela lista de vencidas e pelo botão "Analisar a conversa aberta") ---- */
     // abre a conversa, lê mensagens e Perfil, pede ao Gemini, cruza com o ER; devolve o registro da revisão (com erro, se falhar)
-    async function analisarItem(it, nome, rotulo, motivo) {
+    // aoLer: avisado quando a leitura da conversa terminou (dali em diante o funcionário já pode abrir outra conversa)
+    async function analisarItem(it, nome, rotulo, motivo, aoLer) {
       const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true, motivo: motivo || motivoDoItem(it) };
       try {
         if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
-        const tel = await telefoneDaConversa(nome);
-        reg.telefone = tel.telefone;
+        // leitura (tudo que depende da conversa aberta): mensagens, telefone e Perfil. Se a conversa for trocada no meio,
+        // para em vez de misturar dados de dois contatos
+        const trocou = () => !abertaE(nome);
         const msgs = lerMensagens();
         if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
+        const tel = await telefoneDaConversa(nome);
+        if (trocou()) throw new Error('a conversa foi trocada antes de terminar a leitura; abra de novo e clique em Analisar (IA)');
+        reg.telefone = tel.telefone;
         const perfil = await lerPerfil();
+        if (trocou()) throw new Error('a conversa foi trocada antes de terminar a leitura; abra de novo e clique em Analisar (IA)');
         reg.setor = setorDoItem(it);
+        if (aoLer) aoLer();
         const j = await analisarTexto(reg.nome, msgs, reg.setor);
         // Lojista: o setor do RD ou o nome do contato decidem antes da IA; sem esses sinais, vale a leitura da IA
         const peloRD = tipoPeloRD(reg.setor, reg.nome);
@@ -7568,6 +7581,7 @@
     /* ---- etapa 1: analisar ---- */
     btAnalisar.onclick = async () => {
       if (rdRodando) return;
+      if (rdAbertas) return status('Aguarde: ' + rdAbertas + ' análise(s) do botão "Analisar (IA)" ainda em andamento.');
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
       // as que deram erro voltam para a fila (as encerradas e as analisadas sem erro ficam como estão)
       // também voltam as que ficaram sem os dados do ER porque o ER não estava disponível (endereço, sessão ou rede)
@@ -7616,37 +7630,61 @@
     /* ---- conversa escolhida pelo funcionário (antes das 24 h): a que está aberta no RD agora ---- */
     // usada pelo botão do painel e pelo botão "Analisar (IA)" do topo do atendimento
     // (as mensagens começam com "Análise" para o painel não trocá-las pela contagem da lista ao abrir)
-    async function analisarConversaAberta() {
-      if (rdRodando) return status('Análise: já tem uma análise ou encerramento em andamento; aguarde terminar.');
+    // Roda em segundo plano: só a LEITURA da conversa (mensagens, telefone, Perfil) segura o botão; depois disso o
+    // funcionário já pode abrir outra conversa e analisar, enquanto a IA e o ER terminam a anterior.
+    async function analisarConversaAberta(opc) {
+      opc = opc || {};
+      if (rdRodando) return status('Análise: já tem uma análise das vencidas ou um encerramento em andamento; aguarde terminar.');
+      if (rdLendo) return status('Análise: ainda estou lendo a conversa anterior; aguarde um instante e clique de novo.');
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Análise: informe a chave do Gemini em "Configuração do Gemini".'); }
       const l = lista();
       const it = l && [...l.children].find(y => { const n = nomeDoItem(y); return n && abertaE(n); });
       if (!it) return status('Análise: abra no RD a conversa que quer encerrar (ela precisa estar na lista "Meus atendimentos") e clique de novo.');
       const nome = nomeDoItem(it);
+      if (emAnalise.has(nome)) return status('Análise da conversa aberta: ' + nome + ' já está sendo analisada.');
       const ja = analises().find(a => a.chave === nome);
       if (ja && !ja.erro) return status('Análise da conversa aberta: ' + (ja.encerrado ? 'esta conversa já foi encerrada hoje pelo painel.' : 'esta conversa já está na lista, pronta para revisar e encerrar.'));
       if (ja) guardarAnalises(analises().filter(a => a.chave !== nome));   // tinha dado erro: analisa de novo
-      rdRodando = true;
+      rdAbertas++; rdLendo = true; emAnalise.add(nome);
+      const fimLeitura = () => { if (!rdLendo) return; rdLendo = false; if (opc.aoLer) opc.aoLer(); };
       status('Analisando a conversa aberta: ' + nome + '...');
       try {
-        const reg = await analisarItem(it, nome, 'Analisando a conversa aberta: ' + nome, motivoDoItem(it) || 'escolhida antes das 24 h');
+        const reg = await analisarItem(it, nome, 'Analisando a conversa aberta: ' + nome, motivoDoItem(it) || 'escolhida antes das 24 h', fimLeitura);
+        fimLeitura();
         guardarAnalises([...analises(), reg]);
         desenhar();
         status('Análise da conversa aberta: ' + (reg.erro ? 'não deu para analisar ' + reg.nome + ': ' + reg.erro + '.' : reg.nome + ' entrou na lista (marcada). Revise e clique em "2. Encerrar marcados".'));
-      } finally { rdRodando = false; }
+      } finally { fimLeitura(); rdAbertas--; emAnalise.delete(nome); }
     }
-    btAberta.onclick = analisarConversaAberta;
+    btAberta.onclick = () => analisarConversaAberta();
 
     /* ---- botão "Analisar (IA)" no topo do atendimento, junto de Transferir / Encerrar ----
        Fica FORA da árvore do React do RD: posição fixa calculada a partir dos botões do topo (à esquerda deles), para
-       não quebrar a tela quando o RD redesenha o cabeçalho. Some quando não há conversa aberta ou há uma janela aberta. */
+       não quebrar a tela quando o RD redesenha o cabeçalho. Some quando não há conversa aberta ou há uma janela aberta.
+       Não abre o painel: o texto do botão mostra a situação da conversa aberta e o botão do canto, o resultado. */
     const btIA = el('button', 'position:fixed;z-index:2147483645;display:none;align-items:center;gap:6px;border:0;border-radius:8px;padding:0 16px;background:#bdf2ff;color:#0b4a6b;font:700 15px/1 system-ui,Segoe UI,Arial;cursor:pointer;white-space:nowrap', '✨ Analisar (IA)');
-    btIA.title = 'PaymobiFin: analisa esta conversa com a IA e coloca na lista para encerrar (mesmo antes das 24 h)';
+    const BT_IA_DICA = 'PaymobiFin: analisa esta conversa com a IA e coloca na lista para encerrar (mesmo antes das 24 h). A análise continua em segundo plano: pode abrir a próxima conversa assim que o botão sair de "Lendo a conversa".';
+    btIA.title = BT_IA_DICA;
     document.body.appendChild(btIA);
+    // situação da conversa aberta: lendo (espere) · em análise · já na lista / encerrada · com erro · livre
+    const pintarBotaoIA = () => {
+      const nome = nomeNoTopo(), a = nome ? analises().find(x => x.chave === nome) : null;
+      const [txt, ocupado, dica] = rdLendo ? ['⏳ Lendo a conversa…', true, 'Lendo as mensagens e o Perfil: espere terminar antes de trocar de conversa.']
+        : nome && emAnalise.has(nome) ? ['⏳ Analisando…', true, 'A IA está analisando esta conversa. Pode abrir outra conversa enquanto isso.']
+        : a && a.encerrado ? ['✓ Encerrada hoje', false, 'Esta conversa já foi encerrada hoje pelo painel.']
+        : a && !a.erro ? ['✓ Na lista', false, 'Esta conversa já está na lista do painel, pronta para revisar e encerrar (botão do canto).']
+        : a && a.erro ? ['⚠ Analisar de novo', false, 'A última análise deu erro: ' + a.erro + '. Clique para analisar de novo.']
+        : ['✨ Analisar (IA)', false, BT_IA_DICA];
+      const extra = rdAbertas > (nome && emAnalise.has(nome) ? 1 : 0) ? ' · ⏳' + rdAbertas : '';
+      if (btIA.textContent !== txt + extra) btIA.textContent = txt + extra;
+      btIA.dataset.ocupado = ocupado ? '1' : ''; btIA.style.cursor = ocupado ? 'progress' : 'pointer'; btIA.style.opacity = ocupado ? '.85' : '1';
+      btIA.title = dica + (rdAbertas ? '\n\nEm análise agora: ' + [...emAnalise].join(', ') : '');
+    };
     const posicionarBotaoIA = () => {
       const enc = document.querySelector('button[aria-label=Encerrar]');
       const r = enc && enc.getBoundingClientRect();
       if (!r || !r.height || dialogos().length) { btIA.style.display = 'none'; return; }
+      try { pintarBotaoIA(); } catch (_) {}
       // botões do topo na mesma linha do Encerrar (⋮, telefone, Transferir, Encerrar): o nosso fica à esquerda de todos
       const linha = [...((cabecalho() || document).querySelectorAll('button'))].filter(b => { const q = b.getBoundingClientRect(); return q.height && Math.abs(q.top - r.top) < 12 && q.right <= r.right + 1; });
       const esq = Math.min(r.left, ...linha.map(b => b.getBoundingClientRect().left));
@@ -7658,11 +7696,13 @@
     setInterval(posicionarBotaoIA, CONFIG.RD_BOTAO_MS);
     window.addEventListener('resize', posicionarBotaoIA);
     btIA.onclick = async () => {
-      if (!rdRodando) {
-        btIA.disabled = true; btIA.textContent = '⏳ Analisando…';
-        try { await analisarConversaAberta(); } finally { btIA.disabled = false; btIA.textContent = '✨ Analisar (IA)'; }
-      }
-      abrirPainel(true);   // abre o painel já na revisão
+      // confere a situação na hora do clique (o texto do botão pode estar atrasado alguns instantes depois de trocar de conversa)
+      pintarBotaoIA();
+      if (btIA.dataset.ocupado) return;
+      const feito = analisarConversaAberta({ aoLer: posicionarBotaoIA });
+      posicionarBotaoIA();
+      await feito;
+      posicionarBotaoIA();
     };
 
     /* ---- etapa 2: encerrar (fluxo da própria tela) ---- */
@@ -7745,6 +7785,7 @@
     };
     btEncerrar.onclick = async () => {
       if (rdRodando) return;
+      if (rdAbertas) return status('Aguarde: ' + rdAbertas + ' análise(s) do botão "Analisar (IA)" ainda em andamento.');
       const alvo = analises().filter(a => a.marcado && !a.erro && !a.encerrado);
       if (!alvo.length) return status('Nenhum atendimento marcado para encerrar.');
       const resumo = {}; alvo.forEach(a => { resumo[a.tabulacao] = (resumo[a.tabulacao] || 0) + 1; });
@@ -7792,6 +7833,7 @@
     };
     btLimpar.onclick = () => {
       if (rdRodando) return;
+      if (rdAbertas) return status('Aguarde: ' + rdAbertas + ' análise(s) do botão "Analisar (IA)" ainda em andamento.');
       const pendentes = linhasHoje().filter(x => !x.copiada).length;
       if (!confirm('Limpar a lista de conversas analisadas hoje e as linhas da planilha?' +
         (pendentes ? '\n\nAtenção: ' + pendentes + ' linha(s) de atendimentos encerrados ainda NÃO foram copiadas e vão ser perdidas. Clique em Cancelar e use "Copiar linhas da planilha" antes.' : ''))) return;

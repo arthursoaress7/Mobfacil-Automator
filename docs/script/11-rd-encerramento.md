@@ -116,7 +116,15 @@ O topo do painel tem **— (minimizar)** e **✕ (fechar)**: os dois só recolhe
 
 ## Botão "Analisar (IA)" no topo do atendimento
 
-Ao lado de Transferir / Encerrar aparece **"✨ Analisar (IA)"**: analisa a conversa aberta (mesma função do "+ Analisar a conversa aberta" do painel), coloca na lista marcada e abre o painel na revisão. O botão fica **fora da árvore do React do RD** (posição fixa calculada a partir dos botões do topo, conferida a cada `CONFIG.RD_BOTAO_MS`), para não quebrar a tela quando o RD redesenha o cabeçalho; some quando não há conversa aberta ou há uma janela aberta.
+Ao lado de Transferir / Encerrar aparece **"✨ Analisar (IA)"**. Ele analisa a conversa aberta (mesma função do "+ Analisar a conversa aberta" do painel) e a coloca na lista, marcada. **Não abre o painel**: a análise roda em segundo plano, para o funcionário seguir para o próximo cliente.
+
+- **Leitura (uma por vez, `rdLendo`)**: mensagens, telefone e Perfil. Enquanto isso o botão mostra "⏳ Lendo a conversa…" e é preciso esperar. Se a conversa for trocada no meio, a análise para com o erro "a conversa foi trocada…", em vez de misturar dados de dois contatos.
+- **Depois da leitura**: a IA e o ER terminam sozinhos. Dá para abrir outra conversa e analisar, e várias podem estar em análise ao mesmo tempo (`rdAbertas`, `emAnalise`).
+- **Texto do botão**: mostra a situação da conversa aberta: "⏳ Analisando…", "✓ Na lista", "✓ Encerrada hoje", "⚠ Analisar de novo" (deu erro) ou "✨ Analisar (IA)". Com outras em análise, aparece "· ⏳N". O clique confere a situação na hora, porque o texto pode estar atrasado alguns instantes depois de trocar de conversa.
+- **Botão "🔒" do canto**: com o painel fechado, mostra o andamento e o resultado da última análise.
+- **Bloqueios**: "1. Analisar", "2. Encerrar marcados" e "Limpar lista" esperam terminar as análises em andamento.
+
+O botão fica **fora da árvore do React do RD** (posição fixa calculada a partir dos botões do topo, conferida a cada `CONFIG.RD_BOTAO_MS`), para não quebrar a tela quando o RD redesenha o cabeçalho; some quando não há conversa aberta ou há uma janela aberta.
 
 ## Janela de encerrar diferente
 

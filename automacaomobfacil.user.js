@@ -20,6 +20,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      api-sa1.pusher.com
 // @connect      generativelanguage.googleapis.com
+// @connect      paymobi.ercard.com.br
 // @require      https://js.pusher.com/8.4.0/pusher.min.js
 // @run-at       document-idle
 // ==/UserScript==
@@ -61,9 +62,11 @@
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
     RD_ESPERA: 15,          // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
-    RD_TIMEOUT_IA: 60,      // s máximos esperando a resposta do Gemini
+    RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
     RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
-    RD_TENTATIVAS_IA: 3,    // tentativas por conversa quando o Gemini avisa limite de uso
+    RD_ESPERA_FALHA: 5,     // s de espera quando o Gemini não responde ou está sobrecarregado, antes de tentar de novo
+    RD_TENTATIVAS_IA: 3,    // tentativas por conversa (limite de uso, sem resposta ou servidor sobrecarregado)
+    RD_FALHAS_SEGUIDAS: 2,  // conversas seguidas sem resposta do Gemini para parar a análise
     RD_MAX_MENSAGENS: 60,   // últimas mensagens da conversa enviadas para a análise
     RD_MAX_CARACTERES: 9000, // tamanho máximo do texto da conversa enviado para a análise
   };
@@ -4725,6 +4728,8 @@
       const m = location.pathname.match(/^(.*?\/ErCardWeb)(\/|$)/i);
       return location.origin + (m ? m[1] : '');
     };
+    // endereço do ER guardado para o módulo do RD Atendimento consultar a Mesa (só o endereço; nenhum dado de cliente)
+    try { const b = cacBase(); if (/^https:\/\/paymobi\.ercard\.com\.br/i.test(b) && GM_getValue('erBase', '') !== b) GM_setValue('erBase', b); } catch (_) {}
     let cacOcupado = false;
     const cacStatus = t => { $('#mf-cac-st').textContent = t; };
     const limpoTxt = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
@@ -6861,7 +6866,8 @@
        2) Encerrar: depois de o funcionário revisar (e poder trocar a categoria), encerra os marcados pelo fluxo da
           própria tela (Encerrar > categoria > Encerrar) e guarda a linha da planilha (A–M) para copiar.
      Chave do Gemini: só neste navegador (GM 'geminiChave'), nunca no código. Modelo: escolhido sozinho entre os
-     "flash" disponíveis para a chave (GM 'geminiModelo' guarda a escolha; dá para trocar no painel). */
+     "flash" estáveis disponíveis para a chave a cada vez que a página abre; um modelo digitado no painel fica salvo
+     (GM 'geminiModelo' + 'geminiModeloManual'). */
   const RD_CATEGORIAS = [
     'PaymobiFin - Alteração Data de Vencimento de Parcela', 'PaymobiFin - Antecipação de parcela', 'PaymobiFin - Cancelamento',
     'PaymobiFin - Desbloqueio do aparelho por pagamento', 'PaymobiFin - Dúvidas e esclarecimentos', 'PaymobiFin - Encaminhado para Loja',
@@ -6908,13 +6914,19 @@
     const salvar = el('button', BT + ';margin-top:6px', 'Salvar');
     const aviso = el('div', 'font-size:12px;color:#64748b;margin-top:6px', 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.');
     cfgBox.append(chave, modelo, salvar, aviso);
-    const pintarCfg = () => { chave.value = GM_getValue('geminiChave', '') ? '••••••••' : ''; modelo.value = GM_getValue('geminiModelo', ''); cfgBox.open = !GM_getValue('geminiChave', ''); };
+    // modelo: o digitado em Configuração fica salvo (geminiModelo + geminiModeloManual); o automático só vale nesta página.
+    // A 13.4 salvava a escolha automática em geminiModelo sem a marca: ela é ignorada e apagada.
+    let modeloAuto = '';
+    if (GM_getValue('geminiModelo', '') && !GM_getValue('geminiModeloManual', false)) GM_deleteValue('geminiModelo');
+    const modeloManual = () => (GM_getValue('geminiModeloManual', false) && GM_getValue('geminiModelo', '')) || '';
+    const pintarCfg = () => { chave.value = GM_getValue('geminiChave', '') ? '••••••••' : ''; modelo.value = modeloManual(); cfgBox.open = !GM_getValue('geminiChave', ''); };
     chave.addEventListener('focus', () => { if (chave.value === '••••••••') chave.value = ''; });
     salvar.onclick = () => {
       const k = chave.value.trim();
       if (k && k !== '••••••••') GM_setValue('geminiChave', k);
       const m = modelo.value.trim().replace(/^models\//, '');
-      if (m) GM_setValue('geminiModelo', m); else GM_deleteValue('geminiModelo');
+      if (m) { GM_setValue('geminiModelo', m); GM_setValue('geminiModeloManual', true); } else { GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual'); }
+      modeloAuto = '';
       pintarCfg(); status(GM_getValue('geminiChave', '') ? 'Configuração salva.' : 'Informe a chave do Gemini.');
     };
 
@@ -6953,7 +6965,8 @@
         sel.value = it.tabulacao; sel.disabled = !!it.encerrado;
         sel.onchange = () => { const x = analises(); x[i].tabulacao = sel.value; guardarAnalises(x); };
         lin.append(sel, el('div', 'margin-top:4px;color:#334155', 'Solicitação: ' + it.solicitacao + (it.observacoes && it.observacoes !== 'N/A' ? ' · Obs.: ' + it.observacoes : '') + ' · ' + it.tipo +
-          ' · CPF: ' + (it.cpf ? 'ok' : 'N/A') + ' · Proposta: ' + (it.proposta || 'N/A')));
+          ' · CPF: ' + (it.cpf ? 'ok' : 'N/A') + ' · Proposta: ' + (it.proposta || 'N/A') +
+          (it.vendedor || it.filial ? ' · ER: ' + [it.vendedor, it.filial].filter(Boolean).join(' · ') : '')));
         if (it.aviso) lin.append(el('div', 'margin-top:4px;color:#b45309;font-weight:600', '⚠ ' + it.aviso));
         tabela.append(lin);
       });
@@ -7047,17 +7060,19 @@
       });
     }
     async function modeloGemini() {
-      const salvo = GM_getValue('geminiModelo', '');
+      const salvo = modeloManual();
       if (salvo) return salvo;
+      if (modeloAuto) return modeloAuto;
       const r = await gemini('GET', 'models?pageSize=200');
       if (r.status !== 200 || !r.json) throw new Error(r.status === 400 || r.status === 403 ? 'chave do Gemini recusada (confira em Configuração do Gemini)' : 'não consegui listar os modelos do Gemini (HTTP ' + r.status + ')');
-      const nota = n => { const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); return v * 10 - (/preview|exp/.test(n) ? 5 : 0) - (/lite/.test(n) ? 1 : 0); };
+      // estável antes de preview/experimental (que costumam ficar lentos ou sobrecarregados); dentro disso, a versão mais nova
+      const nota = n => { const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); return v * 10 - (/preview|exp/.test(n) ? 1000 : 0) - (/lite/.test(n) ? 1 : 0); };
       const ok = (r.json.models || []).map(m => ({ n: String(m.name).replace(/^models\//, ''), g: m.supportedGenerationMethods || [] }))
         .filter(m => m.g.includes('generateContent') && /^gemini-[\d.]+-flash/.test(m.n) && !/image|tts|audio|live|thinking/.test(m.n))
         .sort((a, b) => nota(b.n) - nota(a.n));
       if (!ok.length) throw new Error('nenhum modelo "flash" do Gemini disponível para esta chave');
-      GM_setValue('geminiModelo', ok[0].n);
-      return ok[0].n;
+      modeloAuto = ok[0].n;   // escolha automática: refeita a cada vez que a página abre (não fica salva)
+      return modeloAuto;
     }
     const INSTRUCOES = [
       'Você classifica atendimentos de WhatsApp da PaymobiFin (financiamento de celulares com aparelho bloqueável) que vão ser encerrados.',
@@ -7084,17 +7099,119 @@
         },
       };
       const mod = await modeloGemini();
+      // Gemini 2.5 Flash "pensa" antes de responder por padrão: para classificar não precisa, e sem isso responde bem mais rápido
+      if (/^gemini-2\.5-flash/.test(mod)) corpoReq.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      const msgGoogle = r => String((((r.json || {}).error || {}).message) || '').slice(0, 160);
       for (let t = 1; t <= CONFIG.RD_TENTATIVAS_IA; t++) {
         const r = await gemini('POST', 'models/' + encodeURIComponent(mod) + ':generateContent', corpoReq);
-        if (r.status === 429 && t < CONFIG.RD_TENTATIVAS_IA) { status('Limite de uso do Gemini: aguardando ' + CONFIG.RD_ESPERA_LIMITE + ' s...'); await sleep(CONFIG.RD_ESPERA_LIMITE * 1000); continue; }
-        if (r.status === 404) { GM_deleteValue('geminiModelo'); throw new Error('modelo ' + mod + ' indisponível; tente de novo (o painel escolhe outro)'); }
-        if (r.status !== 200) throw new Error(r.status === 400 || r.status === 403 ? 'chave do Gemini recusada' : r.status === 429 ? 'limite de uso do Gemini atingido; tente mais tarde' : 'Gemini não respondeu (HTTP ' + r.status + ')');
+        const ultima = t >= CONFIG.RD_TENTATIVAS_IA;
+        if (r.status === 429 && !ultima) { status('Limite de uso do Gemini: aguardando ' + CONFIG.RD_ESPERA_LIMITE + ' s...'); await sleep(CONFIG.RD_ESPERA_LIMITE * 1000); continue; }
+        // sem resposta, erro de rede ou servidor sobrecarregado: tenta de novo
+        if ((r.status <= 0 || r.status >= 500) && !ultima) { status('O Gemini (' + mod + ') não respondeu; tentando de novo (' + (t + 1) + ' de ' + CONFIG.RD_TENTATIVAS_IA + ')...'); await sleep(CONFIG.RD_ESPERA_FALHA * 1000); continue; }
+        // pedido recusado por causa do ajuste de "pensamento": repete sem ele
+        if (r.status === 400 && corpoReq.generationConfig.thinkingConfig && /think/i.test(msgGoogle(r)) && !ultima) { delete corpoReq.generationConfig.thinkingConfig; continue; }
+        if (r.status === 404) {
+          if (modeloManual()) throw new Error('o modelo ' + mod + ' (digitado em Configuração do Gemini) não existe para esta chave; apague o campo para o painel escolher sozinho');
+          modeloAuto = ''; throw new Error('modelo ' + mod + ' indisponível; tente de novo (o painel escolhe outro)');
+        }
+        if (r.status !== 200) throw new Error(
+          r.status === 401 || r.status === 403 || (r.status === 400 && /api key|API_KEY/i.test(msgGoogle(r))) ? 'chave do Gemini recusada'
+          : r.status === 429 ? 'limite de uso do Gemini atingido; tente mais tarde'
+          : r.status === 400 ? 'o Gemini recusou o pedido: ' + (msgGoogle(r) || 'HTTP 400')
+          : 'o Gemini (' + mod + ') não respondeu' + (r.status === -1 ? ' em ' + CONFIG.RD_TIMEOUT_IA + ' s' : ' (HTTP ' + r.status + ')'));
         const txt = (((((r.json || {}).candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
         let j; try { j = JSON.parse(txt); } catch (_) { throw new Error('resposta do Gemini fora do formato'); }
         if (!RD_CATEGORIAS.includes(j.tabulacao)) throw new Error('o Gemini devolveu uma categoria fora da lista PaymobiFin: ' + j.tabulacao);
         return j;
       }
       throw new Error('limite de uso do Gemini atingido; tente mais tarde');
+    }
+
+    /* ---- ER (Mesa de Crédito), com a sessão do ER deste navegador ----
+       Mesmas consultas da busca de cliente do painel: MesaCreditoLista (pelo CPF ou nº da proposta) e o detalhe da
+       proposta (Digitador = vendedor). O endereço do ER é guardado pelo painel do ER (GM 'erBase'). */
+    const semAcento = t => rdNorm(t).normalize('NFD').replace(/[̀-ͯ]/g, '');
+    function erReq(caminho, params) {
+      const base = GM_getValue('erBase', '');
+      return new Promise(resolve => {
+        if (!base) return resolve({ ok: false, status: 0, texto: '', semBase: true });
+        GM_xmlhttpRequest({
+          method: 'GET', url: base + caminho + '?' + new URLSearchParams(params).toString(), timeout: CONFIG.TIMEOUT_REDE * 1000,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          onload: r => resolve({ ok: r.status >= 200 && r.status < 300, status: r.status, texto: r.responseText || '' }),
+          onerror: () => resolve({ ok: false, status: 0, texto: '' }), ontimeout: () => resolve({ ok: false, status: -1, texto: '' }),
+        });
+      });
+    }
+    const erDoc = t => new DOMParser().parseFromString(t, 'text/html');
+    const erLogin = t => /id=["']?frmLogin|id=["']?txtSenha/i.test(t || '');
+    const erTxt = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
+    const erProprio = e => erTxt([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(''));
+    // valor que vem logo depois do rótulo (ex.: "Digitador"), como na leitura do detalhe da proposta no painel
+    const erRotulo = (doc, rotulo) => {
+      for (const e of doc.querySelectorAll('body *')) {
+        if (erProprio(e).replace(/:$/, '').trim().toLowerCase() !== rotulo) continue;
+        let n = e.nextSibling;
+        while (n && ((n.nodeType === 3 && !n.textContent.trim()) || n.nodeName === 'BR')) n = n.nextSibling;
+        let t = n ? erTxt(n.textContent) : '';
+        if (!t && e.parentElement && e.parentElement.nextElementSibling) t = erTxt(e.parentElement.nextElementSibling.textContent);
+        if (t) return t;
+      }
+      return '';
+    };
+    const erData = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/); return m ? +new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)) : 0; };
+    async function erMesa(termo) {
+      const dados = {
+        strDataInicial: '01/01/2020', strDataFinal: rdHoje(), strProduto: '', strSituacao: '00', strReanalise: 'T', strMesa: '',
+        strVisualizacao: 'N', strNomePesquisa: termo, strPromotora: '', strPromotoraFilial: '', strLojista: '', strLoja: '', strPontoAtendimento: '', strConveniada: '',
+        strParceiro: '', lstPlanos: [], strCodigoEmprestimo: '', strTipoData: 'INCLUSAO', strDataVencimentoLiberacaoInicial: '', strDataVencimentoLiberacaoFinal: '',
+      };
+      const r = await erReq('/MesaCredito/MesaCreditoLista', { strDados: JSON.stringify(dados) });
+      if (r.semBase) return { erro: 'abra o ER (Paymobi) uma vez neste navegador para o painel saber o endereço' };
+      if (!r.ok) return { erro: 'o ER não respondeu (HTTP ' + r.status + ')' };
+      if (erLogin(r.texto)) return { erro: 'sessão do ER expirada: entre no ER neste navegador' };
+      const t = erDoc(r.texto).querySelector('#tabMesaCreditoLista');
+      if (!t) return { erro: 'resposta do ER sem a lista de propostas' };
+      const ths = [...t.querySelectorAll('thead th')].map(th => erTxt(th.textContent).toLowerCase());
+      const col = n => ths.findIndex(x => x.startsWith(n));
+      const ci = { id: col('proposta'), sit: col('situa'), dh: col('data/hora'), cli: col('cliente'), loja: col('pto') };
+      const linhas = [...t.querySelectorAll('tbody tr')].map(tr => {
+        const c = [...tr.children].map(td => erTxt(td.textContent));
+        const td = tr.querySelector('td[onclick*="DetalheProposta"]');
+        const idOc = td ? ((td.getAttribute('onclick') || '').match(/DetalheProposta\(\s*['"]?(\d+)/) || [])[1] : '';
+        const proposta = idOc || (c[ci.id] || '').replace(/\D/g, '');
+        return proposta ? { proposta, situacao: c[ci.sit] || '', data: c[ci.dh] || '', nome: c[ci.cli] || '', filial: c[ci.loja] || '' } : null;
+      }).filter(Boolean);
+      return { linhas };
+    }
+    async function erVendedor(proposta) {
+      for (const a of ['/MesaCredito/DetalheProposta', '/MesaCredito/MesaAnaliseProposta']) {
+        const r = await erReq(a, { lngProposta: proposta });
+        if (!r.ok || !r.texto || erLogin(r.texto)) continue;
+        const v = erRotulo(erDoc(r.texto), 'digitador');
+        if (v) return v.replace(/^\d+\s+/, '').replace(/\s+-\s+.*$/, '').trim();   // "4144175588 LUCAS S. LINERES - XP ..." -> "LUCAS S. LINERES"
+      }
+      return '';
+    }
+    // CPF primeiro (identifica o cliente); sem CPF, o nº da proposta citado na conversa
+    async function cruzarER(cpf, propostaConversa) {
+      const avisos = [];
+      const cpfDig = String(cpf || '').replace(/\D/g, '');
+      let res = null, termo = '';
+      if (cpfDig.length === 11) { termo = cpfDig; res = await erMesa(cpfDig); }
+      else if (propostaConversa) { termo = propostaConversa; res = await erMesa(propostaConversa); }
+      else return { avisos: ['sem CPF nem proposta para consultar o ER'] };
+      if (res.erro) return { avisos: ['ER: ' + res.erro] };
+      let cands = res.linhas;
+      if (termo === propostaConversa) cands = cands.filter(c => c.proposta === propostaConversa);
+      if (!cands.length) return { avisos: ['ER: nenhuma proposta encontrada para ' + (termo === cpfDig ? 'o CPF' : 'a proposta ' + termo)] };
+      const unicas = [...new Map(cands.map(c => [c.proposta, c])).values()].sort((a, b) => erData(b.data) - erData(a.data));
+      // várias propostas no CPF: a citada na conversa; senão a mais recente que não está cancelada
+      let p = (propostaConversa && unicas.find(c => c.proposta === propostaConversa)) || unicas.find(c => !/cancelad/i.test(c.situacao)) || unicas[0];
+      if (unicas.length > 1) avisos.push('ER: ' + unicas.length + ' propostas neste CPF (' + unicas.map(c => c.proposta).join(', ') + '); usei a ' + p.proposta);
+      const vendedor = await erVendedor(p.proposta);
+      if (!vendedor) avisos.push('ER: vendedor não encontrado no detalhe da proposta ' + p.proposta);
+      return { proposta: p.proposta, nome: p.nome, filial: p.filial, situacao: p.situacao, vendedor, avisos };
     }
 
     /* ---- etapa 1: analisar ---- */
@@ -7105,13 +7222,14 @@
       const fila = [...new Set(itensComCadeado().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
       if (!fila.length) return status('Nenhum atendimento com cadeado novo para analisar (os já analisados hoje estão abaixo).');
       rdRodando = true; rdParar = false;
-      let feitos = 0;
+      let feitos = 0, semResposta = 0;
       try {
         for (const nome of fila) {
           if (rdParar) break;
           const it = itemPorNome(nome);
           if (!it) continue;
-          status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + '...');
+          const mod = modeloManual() || modeloAuto;
+          status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + '...' + (mod ? '\nModelo: ' + mod : ''));
           const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true };
           try {
             if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
@@ -7126,12 +7244,31 @@
             const avisos = [];
             if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
             Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
-              nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs), aviso: avisos.join(' · ') });
+              nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
+            // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
+            status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + ' (consultando o ER)...');
+            const er = await cruzarER(reg.cpf, reg.proposta);
+            if (er.proposta) {
+              const nomeER = er.nome || '';
+              if (nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
+              if (reg.proposta && reg.proposta !== er.proposta) avisos.push('a conversa cita a proposta ' + reg.proposta + ', o ER achou a ' + er.proposta);
+              Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, filial: er.filial || '', vendedor: er.vendedor || '', situacaoER: er.situacao || '' });
+            }
+            avisos.push(...(er.avisos || []));
+            reg.aviso = avisos.join(' · ');
           } catch (e) { reg.erro = e.message; reg.marcado = false; }
           guardarAnalises([...analises(), reg]);
           desenhar();
           feitos++;
-          if (/chave do Gemini recusada|limite de uso/.test(reg.erro || '')) { rdParar = true; status('Parei: ' + reg.erro + '.'); break; }
+          if (/chave do Gemini recusada|limite de uso|recusou o pedido/.test(reg.erro || '')) { rdParar = true; status('Parei: ' + reg.erro + '.'); break; }
+          // o Gemini não está respondendo: para em vez de esperar em cada uma das próximas conversas
+          semResposta = /não respondeu/.test(reg.erro || '') ? semResposta + 1 : 0;
+          if (semResposta >= CONFIG.RD_FALHAS_SEGUIDAS) {
+            rdParar = true;
+            status('Parei: o Gemini não respondeu em ' + semResposta + ' conversas seguidas (modelo ' + (modeloManual() || modeloAuto || '?') + '). ' +
+              'Tente de novo em alguns minutos ou troque o modelo em "Configuração do Gemini" (ex.: gemini-2.5-flash-lite).');
+            break;
+          }
           await sleep(CONFIG.RD_PAUSA_IA);
         }
       } finally { rdRodando = false; }
@@ -7160,7 +7297,7 @@
     const linhaPlanilha = a => {
       const etiqueta = (a.etiquetas || []).find(t => /^(xpanse|mundo amarelo)/i.test(t)) || 'N/A';
       const tel = String(a.telefone || '').replace(/^55(?=\d{10,11}$)/, '');
-      return [tel || 'N/A', a.data || rdHoje(), etiqueta, a.solicitacao || 'N/A', a.proposta || 'N/A', a.nomeCliente || 'N/A', a.cpf || 'N/A', 'N/A', 'N/A', 'RD', a.observacoes || 'N/A', a.tabulacao, a.tipo || 'Cliente'];
+      return [tel || 'N/A', a.data || rdHoje(), etiqueta, a.solicitacao || 'N/A', a.proposta || 'N/A', a.nomeCliente || 'N/A', a.cpf || 'N/A', a.vendedor || 'N/A', a.filial || 'N/A', 'RD', a.observacoes || 'N/A', a.tabulacao, a.tipo || 'Cliente'];
     };
     btEncerrar.onclick = async () => {
       if (rdRodando) return;

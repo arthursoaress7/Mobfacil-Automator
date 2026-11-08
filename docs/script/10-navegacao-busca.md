@@ -33,6 +33,15 @@ Abre automaticamente a tela do sistema que uma função precisa, sem que o usuá
 
 Em Configurações → Painel e diagnóstico: marque/desmarque "Navegação automática".
 
+### Mesa de Crédito com as datas de hoje (`mesaHoje`, padrão ligado)
+
+Ao abrir, a Mesa vem do sistema com as datas padrão dele (dois dias para trás). O painel faz o seguinte:
+- **Aplica as datas do dia:** põe as datas nos campos do próprio filtro (`#txtDataInicial` e `#txtDataFinal`, dentro da janela `#dlgFiltrosMesaCredito`) e refiltra como o botão "Filtrar" (`waitingDialog.show()` + `objMesaCredito.MesaCredito()`). Antes, espera a lista padrão terminar de carregar (`jQuery.active`).
+- **Quais datas:** hoje. Se o funcionário mudou as datas hoje, usa as que ele escolheu (GM `mesaDatas = { dia, ini, fim }`, gravado no `change` ou `input` dos dois campos). No dia seguinte, `dia` não bate e volta para hoje.
+- **Quando aplica:** cada abertura da Mesa recria os campos, e o painel aplica uma vez por campo novo (`WeakSet`, conferido a cada `MESA_HOJE_CONFERE_MS`).
+- **Leitura da tela:** enquanto refiltra (`mesaFiltrando`), a Mesa não conta como pronta para a navegação automática; as funções que leem a lista esperam a lista nova.
+- **Teste no ER real (08/11/2026):** de 06–08/11, com 135 propostas, para 08–08/11, com 25 propostas, todas com a data de situação de hoje (o filtro do sistema está em "DATA SITUAÇÃO").
+
 ---
 
 ## Busca de Cliente

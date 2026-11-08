@@ -70,6 +70,8 @@
     LOGIN_AUTO_ESPERA_MS: 1500,   // ms antes de ir para a tela de login quando a sessão expira com a página aberta
     LOGIN_AUTO_OUTRA_ABA_MS: 8000, // ms que uma aba espera (e recarrega) enquanto outra aba faz o login automático
     LOGIN_AUTO_OUTRA_ABA_LIMITE_S: 30, // s depois dos quais o login de outra aba é dado como abandonado e esta aba assume
+    MESA_HOJE_CONFERE_MS: 700,    // ms entre conferências da tela da Mesa de Crédito (filtro de datas do dia)
+    MESA_HOJE_ESPERA_MS: 15000,   // ms máximos esperando a lista da Mesa carregar antes/depois de aplicar as datas do dia
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
     RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
     RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
@@ -100,6 +102,7 @@
     cacTrocaAuto: true,              // Consulta CAC: troca sozinho para a conta master quando a atual não tem acesso
     cacVoltarConta: true,            // Consulta CAC: volta para a conta anterior depois da consulta
     cacPosicaoGeral: true,           // Consulta CAC: abre a Posição Geral (o sistema registra protocolo, como na tela)            // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
+    mesaHoje: true,                  // Mesa de Crédito abre com as datas de hoje (ou as que você escolheu hoje)
     navAuto: true,                   // abre sozinho a tela do sistema que a função precisa (Mesa de Crédito, Fila de Propostas)
     equipeAtiva: false,              // sincronização da equipe (Pusher): só liga quando o funcionário configura
   };
@@ -2105,6 +2108,7 @@
           </details>
           <details class="mf-grupo" data-grupo="painel"><summary>Painel, navegação e diagnóstico</summary>
             <label class="mf-opc"><input type="checkbox" id="mf-nav-auto"><span><b>Abrir sozinho a tela necessária</b><small>Busca e Relatórios abrem a Mesa de Crédito; CCBs abrem a Fila de Propostas, pelo menu do próprio sistema.</small></span></label>
+            <label class="mf-opc"><input type="checkbox" id="mf-mesa-hoje"><span><b>Mesa de Crédito com as datas de hoje</b><small>Ao abrir a Mesa, a data inicial e a final ficam no dia de hoje. Se você mudar as datas, elas ficam até o fim do dia; no dia seguinte volta para hoje.</small></span></label>
             <button id="mf-pos" class="cinza" style="width:100%" title="Arraste o painel pela barra escura do título; a posição fica salva.">Restaurar posição original do painel</button>
             <div class="mf-info" id="mf-tam-info" style="margin:8px 0 4px"></div>
             <div class="mf-grade">
@@ -2387,10 +2391,12 @@
 
     /* ---- telas do sistema que algumas funções precisam (ver "NAVEGAÇÃO AUTOMÁTICA" no fim) ---- */
     const TELAS = {
-      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') },
+      // (enquanto o painel aplica as datas do dia, a lista ainda é a padrão do sistema: espera a nova)
+      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') && !mesaFiltrando },
       fila: { nome: 'Fila de Propostas', menu: 'FilaPropostas', pronta: () => !!document.querySelector('#tabPropostasLista, #txtPropostasPesquisa') },
     };
     let navOcupado = false;
+    let mesaFiltrando = false;   // a Mesa está sendo refiltrada com as datas do dia (ver MESA DE CRÉDITO: DATAS DO DIA)
     async function irParaTela(t) {
       const tela = TELAS[t];
       if (tela.pronta()) return true;
@@ -7050,6 +7056,50 @@
        a tela ficar pronta. Só quando o item existe no menu desta conta. Sem o item no menu (conta sem acesso) ou na tela de login, nada
        é feito e a mensagem explica. Desligável em Configurações > Painel, navegação e diagnóstico. */
     ligarOpcao('#mf-nav-auto', 'navAuto');
+    ligarOpcao('#mf-mesa-hoje', 'mesaHoje');
+
+    /* ================= MESA DE CRÉDITO: DATAS DO DIA =================
+       Ao abrir a Mesa (pelo menu ou pelo painel), o sistema traz as datas padrão dele (ex.: dois dias para trás). O painel
+       põe as datas do dia nos campos do próprio filtro (#txtDataInicial / #txtDataFinal, na janela de filtros) e refiltra
+       como o botão "Filtrar" (waitingDialog.show() + objMesaCredito.MesaCredito()). Se o funcionário mudar as datas, elas
+       ficam guardadas para o mesmo dia (GM 'mesaDatas' = { dia, ini, fim }); no dia seguinte volta para hoje.
+       Cada abertura da Mesa recria os campos: o painel aplica uma vez por campo novo. Enquanto refiltra, a tela da Mesa
+       não conta como pronta (as funções que leem a lista esperam a lista nova). Desligável em Configurações. */
+    const mesaHojeBR = () => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const mesaVistos = new WeakSet();
+    function mesaDatasDoDia() {
+      const h = mesaHojeBR(), s = GM_getValue('mesaDatas', null);
+      return s && s.dia === h && s.ini && s.fim ? { ini: s.ini, fim: s.fim } : { ini: h, fim: h };
+    }
+    const mesaAjaxLivre = async () => {
+      const ate = Date.now() + CONFIG.MESA_HOJE_ESPERA_MS;
+      while (Date.now() < ate) { let n = 0; try { n = PAGINA.jQuery ? PAGINA.jQuery.active : 0; } catch (_) {} if (!n) return; await sleep(200); }
+    };
+    async function mesaAplicarDatas() {
+      const di = document.querySelector('#txtDataInicial'), df = document.querySelector('#txtDataFinal');
+      if (!di || !df || mesaVistos.has(di) || painel.contains(di) || !document.querySelector('#divMesaCredito')) return;
+      mesaVistos.add(di);
+      // mudança feita pelo funcionário (não pelo painel) = escolha do dia
+      const guardar = () => { if (!mesaFiltrando) GM_setValue('mesaDatas', { dia: mesaHojeBR(), ini: di.value.trim(), fim: df.value.trim() }); };
+      [di, df].forEach(x => { x.addEventListener('change', guardar); x.addEventListener('input', guardar); });
+      if (!cfg('mesaHoje')) return;
+      const alvo = mesaDatasDoDia();
+      if (di.value.trim() === alvo.ini && df.value.trim() === alvo.fim) return;
+      mesaFiltrando = true;
+      try {
+        await sleep(300); await mesaAjaxLivre();   // a lista padrão termina de carregar antes (sem duas respostas disputando a tela)
+        if (!di.isConnected) return;
+        di.value = alvo.ini; df.value = alvo.fim;
+        const o = PAGINA.objMesaCredito;
+        if (!o || typeof o.MesaCredito !== 'function') return;
+        try { if (PAGINA.waitingDialog) PAGINA.waitingDialog.show(); } catch (_) {}
+        o.MesaCredito();
+        await sleep(300); await mesaAjaxLivre();
+        const ok = alvo.ini === alvo.fim && alvo.ini === mesaHojeBR();
+        msg('Mesa de Crédito filtrada ' + (ok ? 'no dia de hoje (' + alvo.ini + ').' : 'de ' + alvo.ini + ' a ' + alvo.fim + ' (as datas que você escolheu hoje).'));
+      } catch (_) {} finally { mesaFiltrando = false; }
+    }
+    setInterval(() => { mesaAplicarDatas(); }, CONFIG.MESA_HOJE_CONFERE_MS);
     const exigirTela = (sel, t) => {
       const el = $(sel), orig = el.onclick;
       el.onclick = async e => { if (TELAS[t].pronta() || await irParaTela(t)) return orig.call(el, e); };

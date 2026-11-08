@@ -7009,7 +7009,14 @@
         RD_CATEGORIAS.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
         sel.value = it.tabulacao; sel.disabled = !!it.encerrado;
         sel.onchange = () => { const x = analises(); x[i].tabulacao = sel.value; guardarAnalises(x); };
-        lin.append(sel, el('div', 'margin-top:4px;color:#334155', 'Solicitação: ' + it.solicitacao + (it.observacoes && it.observacoes !== 'N/A' ? ' · Obs.: ' + it.observacoes : '') + ' · ' + it.tipo +
+        // tipo do atendimento (coluna M): dá para corrigir antes de encerrar
+        const selTipo = el('select', 'margin-top:6px;padding:5px;border:1px solid #d3dbe6;border-radius:8px');
+        ['Cliente', 'Lojista'].forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; selTipo.appendChild(o); });
+        selTipo.value = it.tipo || 'Cliente'; selTipo.disabled = !!it.encerrado;
+        selTipo.onchange = () => { const x = analises(); x[i].tipo = selTipo.value; x[i].tipoPor = 'escolhido na revisão'; guardarAnalises(x); desenhar(); };
+        const linTipo = el('div', 'display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b');
+        linTipo.append(selTipo, el('span', '', it.tipoPor || ''));
+        lin.append(sel, linTipo, el('div', 'margin-top:4px;color:#334155', 'Solicitação: ' + it.solicitacao + (it.observacoes && it.observacoes !== 'N/A' ? ' · Obs.: ' + it.observacoes : '') +
           ' · CPF: ' + (it.cpf ? 'ok' : 'N/A') + ' · Proposta: ' + (it.proposta || 'N/A') +
           (it.vendedor || it.filial ? ' · ER: ' + [it.vendedor, it.filial].filter(Boolean).join(' · ') : '') +
           (it.erAchadoPor ? ' · achado pelo ' + it.erAchadoPor + (it.erConfirmado ? ' ✓' : ' (não confirmado)') : '')));
@@ -7046,6 +7053,23 @@
     };
     const nomeDoItem = it => rdNorm((it.querySelector('p') || {}).textContent);
     const etiquetasDoItem = it => [...it.querySelectorAll('[class*="Tag__Display"]')].map(s => s.textContent.trim()).filter(t => !/^\+\d+$/.test(t));
+    // setor do atendimento, mostrado no pé do item ("PaymobiFin Clientes", "PaymobiFin Lojista"...); a tela corta o texto
+    // com reticências, mas o texto completo está na página
+    const setorDoItem = it => {
+      for (const e of it.querySelectorAll('span, p, div')) {
+        if (e.childElementCount || e.closest('[class*="Tag__"]')) continue;
+        const t = String(e.textContent || '').replace(/\s+/g, ' ').trim();
+        if (/^paymobi\s*fin\b/i.test(t) && t.length <= 60) return t;
+      }
+      return '';
+    };
+    // Lojista sem depender da IA: setor de lojista, ou nome do contato com cara de loja
+    // ("iphone"/"apple" ficam de fora: cliente às vezes usa "iPhone de Fulano" como nome no WhatsApp)
+    const RD_NOME_LOJA = /\b(loja|lojas|lojista|xpanse|mundo amarelo|shop|store|celulares?|cell|smartphones?|assist[eê]ncia|com[eé]rcio|ltda|eireli|realme|samsung|motorola|xiaomi)\b/i;
+    const tipoPeloRD = (setor, nomeContato) =>
+      /lojist/i.test(setor || '') ? { tipo: 'Lojista', por: 'setor ' + setor }
+      : RD_NOME_LOJA.test(nomeContato || '') ? { tipo: 'Lojista', por: 'nome do contato' }
+      : null;
     function rdContar() {
       desenhar();
       const itens = itensExpirados(), cad = itens.filter(temCadeado).length;
@@ -7161,7 +7185,7 @@
       'Tom de solicitacao e observacoes: neutro, profissional e só com fatos do assunto da conversa (o que o cliente pediu, informou ou o que foi orientado).',
       'NUNCA diga nem insinue que a equipe, o atendente ou a PaymobiFin deixou de responder, demorou, esqueceu, falhou ou é responsável por o atendimento não ter sido concluído (não escreva coisas como "atendente não respondeu", "cliente ficou sem retorno", "sem resposta da equipe", "atendimento não finalizado pelo atendente").',
       'Mesmo que a última mensagem seja do cliente e o atendente não tenha respondido, descreva o contexto da conversa: o pedido ou o assunto do cliente (ex.: "Cliente solicitou segunda via do boleto", "Cliente informou o pagamento da parcela"). A tabulação segue o assunto da conversa.',
-      'tipo_atendimento: "Lojista" se quem conversa é loja, vendedor ou parceiro; senão "Cliente".',
+      'tipo_atendimento: "Lojista" se quem conversa com a PaymobiFin é uma loja, vendedor, gerente ou parceiro (fala em nome da loja, de "meu cliente"/"o cliente", de uma venda, cadastro, IMEI, ativação ou aparelho de um cliente, ou o setor do atendimento é de lojista); "Cliente" se é a própria pessoa que comprou/financiou falando do contrato, boleto, parcela ou aparelho dela.',
       'nome_cliente: o nome completo do cliente se aparecer escrito na conversa; senão "".',
       'Dados pessoais aparecem trocados por [CPF], [TELEFONE] e [EMAIL]: não tente adivinhá-los.',
     ].join('\n');
@@ -7169,11 +7193,11 @@
     // só pega quando a "falha" é do lado da equipe: "sem respostas do cliente", "falha no app" e "sem resposta no RD" passam
     const RD_CULPA_ATENDIMENTO = /(atendente|atendimento|equipe|time|empresa|paymobi\w*|n[óo]s)\b[^.]{0,40}\b(n[ãa]o (respond|retorn|deu retorno|finaliz|conclu|atendeu)|demorou|esqueceu|falhou|ignorou|deixou de (respond|retorn|atend))|(sem|n[ãa]o (teve|houve|obteve|recebeu)) (resposta|retorno|atendimento) (do|da|de) (atendente|atendimento|equipe|empresa|paymobi\w*)|ficou sem (resposta|retorno|atendimento)|aguardando (resposta|retorno) (do|da) (atendente|equipe)|falta de (resposta|retorno)(?! d[oa]s? clientes?)/i;
     const rdTextoNeutro = (texto, reserva) => (RD_CULPA_ATENDIMENTO.test(texto || '') ? { texto: reserva, trocado: true } : { texto, trocado: false });
-    async function analisarTexto(nomeContato, msgs) {
+    async function analisarTexto(nomeContato, msgs, setor) {
       const conversa = mascarar(msgs.map(m => m.quem + ' (' + m.meta + '): ' + m.texto).join('\n')).slice(-CONFIG.RD_MAX_CARACTERES);
       const corpoReq = {
         systemInstruction: { parts: [{ text: INSTRUCOES }] },
-        contents: [{ role: 'user', parts: [{ text: 'Nome do contato no RD: ' + mascarar(nomeContato) + '\n\nConversa:\n' + conversa }] }],
+        contents: [{ role: 'user', parts: [{ text: 'Nome do contato no RD: ' + mascarar(nomeContato) + (setor ? '\nSetor do atendimento no RD: ' + setor : '') + '\n\nConversa:\n' + conversa }] }],
         generationConfig: {
           temperature: 0, responseMimeType: 'application/json',
           responseSchema: { type: 'OBJECT', required: ['tabulacao', 'solicitacao', 'observacoes', 'tipo_atendimento', 'nome_cliente'], properties: {
@@ -7367,7 +7391,7 @@
       (d.nomes || []).filter(n => /\S+\s+\S+/.test(n || '')).forEach(n => add('nome', n.trim(), 'nome ' + n.trim()));
       tentativas.forEach(t => { if (t.tipo === 'cpf' && t.valor.length !== 11) t.invalida = true; });
       const validas = tentativas.filter(t => !t.invalida);
-      if (!validas.length) return { avisos: ['sem CPF, proposta ou nome completo para consultar o ER'] };
+      if (!validas.length) return { avisos: [d.lojista ? 'lojista: a conversa não cita CPF, proposta nem nome completo do cliente para consultar o ER' : 'sem CPF, proposta ou nome completo para consultar o ER'] };
       const nomesConhecidos = (d.nomes || []).filter(Boolean).map(semAcento);
       const fim8 = t => String(t || '').replace(/\D/g, '').slice(-8);
       const telRD = fim8(d.telefone);
@@ -7384,7 +7408,9 @@
         const cad = await erCadastro(esc.p.proposta);
         const porTelefone = !!(cad && telRD && cad.telefones.some(x => fim8(x) === telRD));
         const porNome = !!((cad && cad.nome && nomesConhecidos.includes(semAcento(cad.nome))) || nomesConhecidos.includes(semAcento(esc.p.nome)));
-        const achado = { t, esc, cad, confirmado: porTelefone || porNome, como: porTelefone ? 'telefone' : porNome ? 'nome' : '' };
+        // lojista: o telefone e o nome do contato são da loja; o CPF ou a proposta que o lojista escreveu identificam o cliente
+        const peloLojista = !!d.lojista && (t.tipo === 'cpf' || t.tipo === 'proposta');
+        const achado = { t, esc, cad, confirmado: porTelefone || porNome || peloLojista, como: porTelefone ? 'telefone' : porNome ? 'nome' : peloLojista ? 'dado citado pelo lojista' : '' };
         if (achado.confirmado) { reserva = achado; break; }
         if (!reserva) reserva = achado;
         naoAchou.push(t.rotulo + ' (achou ' + (esc.p.nome || 'outra pessoa') + ', que não bate com o telefone nem com o nome do RD)');
@@ -7429,10 +7455,18 @@
             const msgs = lerMensagens();
             if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
             const perfil = await lerPerfil();
-            const j = await analisarTexto(reg.nome, msgs);
-            // cruzamento: CPF e nome do Perfil do RD têm prioridade; o que o cliente escreveu na conversa confere
-            const cpfPerfil = fmtCpf(perfil.cpf), cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
-            const nomePerfil = /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
+            reg.setor = setorDoItem(it);
+            const j = await analisarTexto(reg.nome, msgs, reg.setor);
+            // Lojista: o setor do RD ou o nome do contato decidem antes da IA; sem esses sinais, vale a leitura da IA
+            const peloRD = tipoPeloRD(reg.setor, reg.nome);
+            if (peloRD) j.tipo_atendimento = 'Lojista';
+            const lojista = j.tipo_atendimento === 'Lojista';
+            reg.tipoPor = peloRD ? 'pelo ' + peloRD.por : 'pela conversa (IA)';
+            // cruzamento: CPF e nome do Perfil do RD têm prioridade; o que o cliente escreveu na conversa confere.
+            // Lojista: o Perfil e o telefone são da LOJA; o cliente sai do CPF/proposta que o lojista citou na conversa.
+            const cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
+            const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
+            const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
             const avisos = [];
             if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
             // Solicitação/Observações que culpam o atendimento: a observação vira a própria solicitação (o pedido do cliente)
@@ -7445,11 +7479,11 @@
             // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
             status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + ' (consultando o ER)...');
             const nomeIA = (j.nome_cliente || '').trim();
-            const er = await cruzarER({ cpfPerfil, cpfConversa, propostaConversa: reg.proposta, telefone: reg.telefone,
-              nomes: [...new Set([nomePerfil, nomeIA, /\S+\s+\S+/.test(reg.nome) ? reg.nome : ''].filter(Boolean))] });
+            const er = await cruzarER({ cpfPerfil, cpfConversa, propostaConversa: reg.proposta, telefone: lojista ? '' : reg.telefone, lojista,
+              nomes: [...new Set([nomePerfil, nomeIA, !lojista && /\S+\s+\S+/.test(reg.nome) ? reg.nome : ''].filter(Boolean))] });
             if (er.proposta) {
               const nomeER = er.nome || '';
-              if (er.confirmado && nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
+              if (!lojista && er.confirmado && nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
               if (reg.proposta && reg.proposta !== er.proposta && !(er.avisos || []).some(a => /a conversa cita/.test(a))) avisos.push('a conversa cita a proposta ' + reg.proposta + ', que não é a do cliente no ER (usei a ' + er.proposta + ')');
               // o CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil)
               Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, cpf: er.cpf || reg.cpf, filial: er.filial || '', vendedor: er.vendedor || '',

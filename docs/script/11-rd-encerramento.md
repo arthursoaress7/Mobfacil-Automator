@@ -37,7 +37,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 | J Canal | RD |
 | K Observações | Gemini |
 | L Tabulação | categoria usada no encerramento |
-| M Tipo de atendimento | Gemini (Cliente / Lojista) |
+| M Tipo de atendimento | Lojista pelo setor do RD ou pelo nome do contato; senão Gemini (Cliente / Lojista); editável na revisão |
 
 ## Privacidade
 
@@ -87,3 +87,13 @@ O prompt exige Solicitação e Observações neutras, só com fatos do assunto d
 ## Conversas vencidas sem cadeado
 
 Além das com cadeado ("Janela de 24 horas fechada"), o "1. Analisar" pega as **sem cadeado paradas há mais de `CONFIG.RD_HORAS_JANELA` (24 h)** — opção "Incluir conversas sem cadeado paradas…", ligada por padrão (GM `rdIncluirParadas`). A lista mostra a data da última mensagem (de qualquer lado): hora = hoje, "Ontem", ou a data completa. Só a data completa conta, medida a partir do fim daquele dia; como a janela do WhatsApp corre desde a última mensagem do cliente, essas conversas já passaram das 24 h com certeza. "Ontem" e hoje só entram com cadeado. A revisão mostra o motivo (🔒 cadeado ou ⏱ parada desde dd/mm/aaaa).
+
+## Identificação de lojista
+
+Ordem de decisão do tipo (coluna M), mostrada na revisão ("pelo setor…", "pelo nome do contato", "pela conversa (IA)") e editável lá:
+
+1. **Setor do atendimento** no pé do item da lista (`setorDoItem`): contém "Lojista" → Lojista.
+2. **Nome do contato** com cara de loja (`RD_NOME_LOJA`: loja, xpanse, mundo amarelo, shop, celulares, ltda, realme, samsung…) → Lojista. "iPhone"/"Apple" ficam de fora (clientes usam "iPhone de Fulano").
+3. Sem esses sinais: o Gemini decide, recebendo o setor e o critério (fala em nome de loja, de "meu cliente", venda, cadastro, IMEI ou aparelho de cliente).
+
+No **lojista**, o Perfil e o telefone do contato são da loja: o cruzamento com o ER ignora o CPF e o nome do Perfil, procura pelo CPF/proposta que o lojista escreveu (ou o nome do cliente citado), aceita o achado sem exigir telefone igual e não avisa "nome do ER diferente do RD".

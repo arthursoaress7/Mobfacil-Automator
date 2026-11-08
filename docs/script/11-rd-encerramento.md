@@ -48,7 +48,7 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 | Chave | Conteúdo |
 |---|---|
 | `geminiChave` | Chave da API do Gemini (só neste navegador, sem criptografia) |
-| `geminiModelo` + `geminiModeloManual` | Modelo digitado no painel (fica salvo). Vazio: o painel escolhe sozinho, a cada vez que a página abre: primeiro os **Flash-Lite** estáveis (no plano grátis têm bem mais pedidos por dia e respondem mais rápido), depois os Flash cheios estáveis, preview/experimental por último; em cada grupo, o mais novo |
+| (modelo) | Sempre automático, sem campo no painel: primeiro os **Flash-Lite** estáveis, depois os Flash cheios estáveis, preview/experimental por último; troca sozinho quando um não responde ou fica sem cota. As chaves antigas `geminiModelo`/`geminiModeloManual` são apagadas ao abrir |
 | `rdAnalises` | `{ dia, itens: [...] }` — análises do dia |
 | `rdLinhas` | `{ dia, linhas: [[A..M], ...] }` — linhas da planilha dos encerrados do dia |
 | `erBase` | Endereço completo do ER, gravado pelo painel do ER ao abrir (e de novo após `ER_BASE_RECONFERIR` s), mesmo quando o campo do sistema vem relativo |
@@ -69,7 +69,7 @@ Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xm
    3. Nº da proposta citado na conversa
    4. Nome completo (Perfil, Gemini ou nome do contato com 2+ palavras) — só propostas com o **nome igual**
 2. Em cada caminho, várias propostas: a **efetivada** (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa; senão a mais recente que não está cancelada (`escolherProposta`).
-3. **Confirmação** na aba Cliente da proposta (`MesaAnaliseCliente`, `erCadastro`): o telefone do RD (últimos 8 dígitos) ou um nome conhecido tem de bater com o cadastro. Fica o primeiro caminho confirmado; se nenhum confirmar, o primeiro achado, **desmarcado** e com aviso para conferir.
+3. **Confirmação** na aba Cliente da proposta (`MesaAnaliseCliente`, `erCadastro`): o telefone do RD (últimos 8 dígitos) ou um nome conhecido tem de bater com o cadastro. Fica o primeiro caminho confirmado; se nenhum confirmar, o primeiro achado, com aviso para conferir (continua marcado; só as conversas com erro na análise vêm desmarcadas).
 4. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
 
 O CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil). Avisos na revisão: por qual caminho o cliente foi achado (e os que não deram), CPF do Perfil diferente do ER, cliente não confirmado, nome do ER diferente do RD, proposta da conversa diferente da do cliente, várias/nenhuma efetivada, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.
@@ -97,3 +97,7 @@ Ordem de decisão do tipo (coluna M), mostrada na revisão ("pelo setor…", "pe
 3. Sem esses sinais: o Gemini decide, recebendo o setor e o critério (fala em nome de loja, de "meu cliente", venda, cadastro, IMEI ou aparelho de cliente).
 
 No **lojista**, o Perfil e o telefone do contato são da loja: o cruzamento com o ER ignora o CPF e o nome do Perfil, procura pelo CPF/proposta que o lojista escreveu (ou o nome do cliente citado), aceita o achado sem exigir telefone igual e não avisa "nome do ER diferente do RD".
+
+## Encerrar antes das 24 h (conversa escolhida)
+
+Botão **"+ Analisar a conversa aberta"**: o funcionário abre no RD um atendimento já resolvido (mesmo sem cadeado e dentro da janela) e clica; a conversa é analisada como as outras (`analisarItem`), entra na lista **marcada** com o motivo "✋ escolhida antes das 24 h" e é encerrada pelo "2. Encerrar marcados". Clicar de novo na mesma conversa não duplica; se ela tinha dado erro, é analisada de novo.

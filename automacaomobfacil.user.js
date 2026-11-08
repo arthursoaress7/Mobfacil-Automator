@@ -6881,8 +6881,8 @@
        2) Encerrar: depois de o funcionário revisar (e poder trocar a categoria), encerra os marcados pelo fluxo da
           própria tela (Encerrar > categoria > Encerrar) e guarda a linha da planilha (A–M) para copiar.
      Chave do Gemini: só neste navegador (GM 'geminiChave'), nunca no código. Modelo: escolhido sozinho entre os
-     "flash" estáveis disponíveis para a chave a cada vez que a página abre; um modelo digitado no painel fica salvo
-     (GM 'geminiModelo' + 'geminiModeloManual'). */
+     "flash" disponíveis para a chave a cada vez que a página abre (sempre automático; não há campo de modelo).
+     */
   const RD_CATEGORIAS = [
     'PaymobiFin - Alteração Data de Vencimento de Parcela', 'PaymobiFin - Antecipação de parcela', 'PaymobiFin - Cancelamento',
     'PaymobiFin - Desbloqueio do aparelho por pagamento', 'PaymobiFin - Dúvidas e esclarecimentos', 'PaymobiFin - Encaminhado para Loja',
@@ -6921,21 +6921,18 @@
     abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); rdContar(); };
     fechar.onclick = () => { card.style.display = 'none'; abrir.style.display = ''; };
 
-    // configuração: chave e modelo do Gemini
+    // configuração: só a chave do Gemini (o modelo é sempre escolhido sozinho, ver modeloGemini)
     const cfgBox = el('details', 'border:1px solid #e4e9f0;border-radius:10px;padding:8px 10px');
     cfgBox.append(el('summary', 'cursor:pointer;font-weight:600', 'Configuração do Gemini'));
     const chave = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:7px 9px;border:1px solid #d3dbe6;border-radius:8px'); chave.type = 'password'; chave.placeholder = 'Chave da API do Gemini (Google AI Studio)'; chave.autocomplete = 'new-password';
-    const modelo = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:7px 9px;border:1px solid #d3dbe6;border-radius:8px'); modelo.placeholder = 'Modelo (vazio = escolher sozinho um "flash")';
     const salvar = el('button', BT + ';margin-top:6px', 'Salvar');
-    const aviso = el('div', 'font-size:12px;color:#64748b;margin-top:6px', 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.');
+    const aviso = el('div', 'font-size:12px;color:#64748b;margin-top:6px', 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O modelo do Gemini é escolhido sozinho (e trocado quando um não responde ou fica sem cota). O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.');
     const chaveInfo = el('div', 'font-size:12px;margin-top:4px;font-weight:600');
-    cfgBox.append(chave, chaveInfo, modelo, salvar, aviso);
-    // modelo: o digitado em Configuração fica salvo (geminiModelo + geminiModeloManual); o automático só vale nesta página.
-    // A 13.4 salvava a escolha automática em geminiModelo sem a marca: ela é ignorada e apagada.
+    cfgBox.append(chave, chaveInfo, salvar, aviso);
+    // modelo: sempre automático (escolhido nesta página). Modelo salvo por versões anteriores (13.4–13.10) é descartado.
     let modeloAuto = '';
-    if (GM_getValue('geminiModelo', '') && !GM_getValue('geminiModeloManual', false)) GM_deleteValue('geminiModelo');
-    const modeloManual = () => (GM_getValue('geminiModeloManual', false) && GM_getValue('geminiModelo', '')) || '';
-    // A chave e o modelo são salvos ao colar/digitar (ao sair do campo ou com Enter), sem depender do botão Salvar.
+    GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual');
+    // A chave é salva ao colar/digitar (ao sair do campo ou com Enter), sem depender do botão Salvar.
     // Só esta parte mexe na configuração: limpar a lista ou recontar os atendimentos nunca apaga nem esconde a chave.
     const pintarChave = () => {
       const k = GM_getValue('geminiChave', '');
@@ -6944,33 +6941,28 @@
       chaveInfo.style.color = k ? '#15803d' : '#b45309';
     };
     const salvarChave = () => { const k = chave.value.trim(); if (k && k !== '••••••••') GM_setValue('geminiChave', k); chave.blur(); pintarChave(); };
-    const salvarModelo = () => {
-      const m = modelo.value.trim().replace(/^models\//, '');
-      if (m) { GM_setValue('geminiModelo', m); GM_setValue('geminiModeloManual', true); } else { GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual'); }
-      modeloAuto = ''; modelo.value = modeloManual();
-    };
     let cfgPintada = false;
-    const pintarCfg = () => { pintarChave(); modelo.value = modeloManual(); if (!cfgPintada) cfgBox.open = !GM_getValue('geminiChave', ''); cfgPintada = true; };
+    const pintarCfg = () => { pintarChave(); if (!cfgPintada) cfgBox.open = !GM_getValue('geminiChave', ''); cfgPintada = true; };
     chave.addEventListener('focus', () => { if (chave.value === '••••••••') chave.value = ''; });
     chave.addEventListener('change', salvarChave);
     chave.addEventListener('blur', () => { if (!chave.value.trim()) pintarChave(); });   // saiu sem digitar: a chave salva continua lá
     chave.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); salvarChave(); } });
-    modelo.addEventListener('change', salvarModelo);
-    modelo.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); salvarModelo(); modelo.blur(); } });
     salvar.onclick = () => {
-      salvarChave(); salvarModelo();
-      status(GM_getValue('geminiChave', '') ? 'Configuração salva.' : 'Informe a chave do Gemini.');
+      salvarChave();
+      status(GM_getValue('geminiChave', '') ? 'Chave salva.' : 'Informe a chave do Gemini.');
     };
 
     const st = el('div', 'padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;white-space:pre-wrap');
     const status = t => { st.textContent = t; };
     const acoes = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
     const btAnalisar = el('button', BT_PRI, '1. Analisar conversas vencidas');
+    const btAberta = el('button', BT, '+ Analisar a conversa aberta');
+    btAberta.title = 'Para encerrar antes das 24 h um atendimento já resolvido: abra a conversa no RD e clique aqui (entra na lista abaixo para revisar e encerrar)';
     const btEncerrar = el('button', BT_PERIGO, '2. Encerrar marcados');
     const btParar = el('button', BT, 'Parar');
     const btCopiar = el('button', BT, 'Copiar linhas da planilha');
     const btLimpar = el('button', BT, 'Limpar lista');
-    acoes.append(btAnalisar, btEncerrar, btParar, btCopiar, btLimpar);
+    acoes.append(btAnalisar, btAberta, btEncerrar, btParar, btCopiar, btLimpar);
     // incluir as conversas SEM cadeado que estão paradas há mais de RD_HORAS_JANELA (ligado por padrão)
     const opParadas = el('label', 'display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer');
     const chkParadas = el('input'); chkParadas.type = 'checkbox'; chkParadas.checked = GM_getValue('rdIncluirParadas', true);
@@ -7002,7 +6994,7 @@
         const cab = el('div', 'display:flex;align-items:center;gap:8px');
         const marca = el('input'); marca.type = 'checkbox'; marca.checked = !!it.marcado && !it.encerrado && !it.erro; marca.disabled = !!it.encerrado || !!it.erro;
         marca.onchange = () => { const x = analises(); x[i].marcado = marca.checked; guardarAnalises(x); };
-        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', (it.motivo ? (it.motivo === 'cadeado' ? '🔒 ' : '⏱ ' + it.motivo + ' · ') : '') + (it.encerrado ? 'encerrado' : it.erro ? 'erro' : it.erroEncerrar ? 'não encerrado' : 'analisado')));
+        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', (it.motivo ? (it.motivo === 'cadeado' ? '🔒 ' : /^escolhida/.test(it.motivo) ? '✋ ' + it.motivo + ' · ' : '⏱ ' + it.motivo + ' · ') : '') + (it.encerrado ? 'encerrado' : it.erro ? 'erro' : it.erroEncerrar ? 'não encerrado' : 'analisado')));
         lin.append(cab);
         if (it.erro) { lin.append(el('div', 'color:#b91c1c;margin-top:4px', it.erro)); tabela.append(lin); return; }
         const sel = el('select', 'width:100%;margin-top:6px;padding:6px;border:1px solid #d3dbe6;border-radius:8px');
@@ -7156,8 +7148,6 @@
     let modelosLista = null;
     const modelosRuins = new Set();
     async function modeloGemini() {
-      const salvo = modeloManual();
-      if (salvo) return salvo;
       if (modeloAuto && !modelosRuins.has(modeloAuto)) return modeloAuto;
       if (!modelosLista) {
         const r = await gemini('GET', 'models?pageSize=200');
@@ -7210,7 +7200,7 @@
         const mod = await modeloGemini();
         try { return await pedirAoModelo(mod, JSON.parse(JSON.stringify(corpoReq))); }
         catch (e) {
-          if (!e.semResposta || modeloManual()) throw e;
+          if (!e.semResposta) throw e;
           modelosRuins.add(mod);
           const prox = (modelosLista || []).find(n => !modelosRuins.has(n));
           if (!prox) {
@@ -7241,7 +7231,6 @@
         // pedido recusado por causa do ajuste de "pensamento": repete sem ele
         if (r.status === 400 && corpoReq.generationConfig.thinkingConfig && /think/i.test(msgGoogle(r))) { delete corpoReq.generationConfig.thinkingConfig; modelosSemThinking.add(mod); t--; continue; }
         if (r.status === 404) {
-          if (modeloManual()) throw new Error('o modelo ' + mod + ' (digitado em Configuração do Gemini) não existe para esta chave; apague o campo para o painel escolher sozinho');
           const e = new Error('modelo ' + mod + ' indisponível para esta chave'); e.semResposta = true; throw e;   // o automático passa para o próximo
         }
         if (r.status !== 200) {
@@ -7428,6 +7417,57 @@
         confirmado: reserva.confirmado, achadoPor: t.rotulo, avisos };
     }
 
+    /* ---- analisar UMA conversa (usado pela lista de vencidas e pelo botão "Analisar a conversa aberta") ---- */
+    // abre a conversa, lê mensagens e Perfil, pede ao Gemini, cruza com o ER; devolve o registro da revisão (com erro, se falhar)
+    async function analisarItem(it, nome, rotulo, motivo) {
+      const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true, motivo: motivo || motivoDoItem(it) };
+      try {
+        if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
+        reg.telefone = telefoneAberto();
+        const msgs = lerMensagens();
+        if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
+        const perfil = await lerPerfil();
+        reg.setor = setorDoItem(it);
+        const j = await analisarTexto(reg.nome, msgs, reg.setor);
+        // Lojista: o setor do RD ou o nome do contato decidem antes da IA; sem esses sinais, vale a leitura da IA
+        const peloRD = tipoPeloRD(reg.setor, reg.nome);
+        if (peloRD) j.tipo_atendimento = 'Lojista';
+        const lojista = j.tipo_atendimento === 'Lojista';
+        reg.tipoPor = peloRD ? 'pelo ' + peloRD.por : 'pela conversa (IA)';
+        // cruzamento: CPF e nome do Perfil do RD têm prioridade; o que o cliente escreveu na conversa confere.
+        // Lojista: o Perfil e o telefone são da LOJA; o cliente sai do CPF/proposta que o lojista citou na conversa.
+        const cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
+        const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
+        const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
+        const avisos = [];
+        if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
+        // Solicitação/Observações que culpam o atendimento: a observação vira a própria solicitação (o pedido do cliente)
+        const sol = rdTextoNeutro((j.solicitacao || 'N/A').trim(), 'N/A');
+        const obs = rdTextoNeutro((j.observacoes || 'N/A').trim(), sol.texto !== 'N/A' ? sol.texto : 'N/A');
+        if (sol.trocado || obs.trocado) avisos.push('a IA escreveu que o atendimento não respondeu; troquei pelo assunto da conversa (confira a solicitação e a observação)');
+        j.solicitacao = sol.texto; j.observacoes = obs.texto;
+        Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
+          nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
+        // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
+        status(rotulo + ' (consultando o ER)...');
+        const nomeIA = (j.nome_cliente || '').trim();
+        const er = await cruzarER({ cpfPerfil, cpfConversa, propostaConversa: reg.proposta, telefone: lojista ? '' : reg.telefone, lojista,
+          nomes: [...new Set([nomePerfil, nomeIA, !lojista && /\S+\s+\S+/.test(reg.nome) ? reg.nome : ''].filter(Boolean))] });
+        if (er.proposta) {
+          const nomeER = er.nome || '';
+          if (!lojista && er.confirmado && nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
+          if (reg.proposta && reg.proposta !== er.proposta && !(er.avisos || []).some(a => /a conversa cita/.test(a))) avisos.push('a conversa cita a proposta ' + reg.proposta + ', que não é a do cliente no ER (usei a ' + er.proposta + ')');
+          // o CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil)
+          Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, cpf: er.cpf || reg.cpf, filial: er.filial || '', vendedor: er.vendedor || '',
+            situacaoER: er.situacao || '', erConfirmado: !!er.confirmado, erAchadoPor: er.achadoPor || '' });
+          // não confirmado: continua marcado (padrão), só com o aviso para conferir
+        }
+        avisos.push(...(er.avisos || []));
+        reg.aviso = avisos.join(' · ');
+      } catch (e) { reg.erro = e.message; reg.marcado = false; }
+      return reg;
+    }
+
     /* ---- etapa 1: analisar ---- */
     btAnalisar.onclick = async () => {
       if (rdRodando) return;
@@ -7446,53 +7486,9 @@
           if (rdParar) break;
           const it = itemPorNome(nome);
           if (!it) continue;
-          const mod = modeloManual() || modeloAuto;
+          const mod = modeloAuto;
           status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + '...' + (mod ? '\nModelo: ' + mod : ''));
-          const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true, motivo: motivoDoItem(it) };
-          try {
-            if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
-            reg.telefone = telefoneAberto();
-            const msgs = lerMensagens();
-            if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
-            const perfil = await lerPerfil();
-            reg.setor = setorDoItem(it);
-            const j = await analisarTexto(reg.nome, msgs, reg.setor);
-            // Lojista: o setor do RD ou o nome do contato decidem antes da IA; sem esses sinais, vale a leitura da IA
-            const peloRD = tipoPeloRD(reg.setor, reg.nome);
-            if (peloRD) j.tipo_atendimento = 'Lojista';
-            const lojista = j.tipo_atendimento === 'Lojista';
-            reg.tipoPor = peloRD ? 'pelo ' + peloRD.por : 'pela conversa (IA)';
-            // cruzamento: CPF e nome do Perfil do RD têm prioridade; o que o cliente escreveu na conversa confere.
-            // Lojista: o Perfil e o telefone são da LOJA; o cliente sai do CPF/proposta que o lojista citou na conversa.
-            const cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
-            const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
-            const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
-            const avisos = [];
-            if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
-            // Solicitação/Observações que culpam o atendimento: a observação vira a própria solicitação (o pedido do cliente)
-            const sol = rdTextoNeutro((j.solicitacao || 'N/A').trim(), 'N/A');
-            const obs = rdTextoNeutro((j.observacoes || 'N/A').trim(), sol.texto !== 'N/A' ? sol.texto : 'N/A');
-            if (sol.trocado || obs.trocado) avisos.push('a IA escreveu que o atendimento não respondeu; troquei pelo assunto da conversa (confira a solicitação e a observação)');
-            j.solicitacao = sol.texto; j.observacoes = obs.texto;
-            Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
-              nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
-            // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
-            status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + ' (consultando o ER)...');
-            const nomeIA = (j.nome_cliente || '').trim();
-            const er = await cruzarER({ cpfPerfil, cpfConversa, propostaConversa: reg.proposta, telefone: lojista ? '' : reg.telefone, lojista,
-              nomes: [...new Set([nomePerfil, nomeIA, !lojista && /\S+\s+\S+/.test(reg.nome) ? reg.nome : ''].filter(Boolean))] });
-            if (er.proposta) {
-              const nomeER = er.nome || '';
-              if (!lojista && er.confirmado && nomeER && reg.nomeCliente && semAcento(nomeER) !== semAcento(reg.nomeCliente)) avisos.push('nome no ER (' + nomeER + ') é diferente do RD (' + reg.nomeCliente + ')');
-              if (reg.proposta && reg.proposta !== er.proposta && !(er.avisos || []).some(a => /a conversa cita/.test(a))) avisos.push('a conversa cita a proposta ' + reg.proposta + ', que não é a do cliente no ER (usei a ' + er.proposta + ')');
-              // o CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil)
-              Object.assign(reg, { proposta: er.proposta, nomeCliente: nomeER || reg.nomeCliente, cpf: er.cpf || reg.cpf, filial: er.filial || '', vendedor: er.vendedor || '',
-                situacaoER: er.situacao || '', erConfirmado: !!er.confirmado, erAchadoPor: er.achadoPor || '' });
-              if (!er.confirmado) reg.marcado = false;   // não confirmado: fica desmarcado até o funcionário conferir
-            }
-            avisos.push(...(er.avisos || []));
-            reg.aviso = avisos.join(' · ');
-          } catch (e) { reg.erro = e.message; reg.marcado = false; }
+          const reg = await analisarItem(it, nome, 'Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome);
           guardarAnalises([...analises(), reg]);
           desenhar();
           feitos++;
@@ -7501,8 +7497,8 @@
           semResposta = /não respondeu/.test(reg.erro || '') ? semResposta + 1 : 0;
           if (semResposta >= CONFIG.RD_FALHAS_SEGUIDAS) {
             rdParar = true;
-            status('Parei: o Gemini não respondeu em ' + semResposta + ' conversas seguidas (modelo ' + (modeloManual() || modeloAuto || '?') + '). ' +
-              'Tente de novo em alguns minutos ou troque o modelo em "Configuração do Gemini" (ex.: gemini-2.5-flash-lite).');
+            status('Parei: o Gemini não respondeu em ' + semResposta + ' conversas seguidas (modelo ' + (modeloAuto || '?') + '). ' +
+              'Tente de novo em alguns minutos.');
             break;
           }
           await sleep(CONFIG.RD_PAUSA_IA);
@@ -7510,6 +7506,26 @@
       } finally { rdRodando = false; }
       const x = analises();
       if (!/^Parei/.test(st.textContent)) status((rdParar ? 'Análise interrompida. ' : 'Análise concluída. ') + x.filter(a => !a.erro && !a.encerrado).length + ' prontos para encerrar, ' + x.filter(a => a.erro).length + ' com erro. Revise as categorias e clique em "2. Encerrar marcados".');
+    };
+
+    /* ---- conversa escolhida pelo funcionário (antes das 24 h): a que está aberta no RD agora ---- */
+    btAberta.onclick = async () => {
+      if (rdRodando) return;
+      if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
+      const l = lista();
+      const it = l && [...l.children].find(y => { const n = nomeDoItem(y); return n && abertaE(n); });
+      if (!it) return status('Abra no RD a conversa que quer encerrar (ela precisa estar na lista "Meus atendimentos") e clique de novo.');
+      const nome = nomeDoItem(it);
+      const ja = analises().find(a => a.chave === nome);
+      if (ja && !ja.erro) return status(ja.encerrado ? 'Esta conversa já foi encerrada hoje pelo painel.' : 'Esta conversa já está na lista abaixo, pronta para revisar e encerrar.');
+      if (ja) guardarAnalises(analises().filter(a => a.chave !== nome));   // tinha dado erro: analisa de novo
+      rdRodando = true;
+      try {
+        const reg = await analisarItem(it, nome, 'Analisando a conversa aberta: ' + nome, motivoDoItem(it) || 'escolhida antes das 24 h');
+        guardarAnalises([...analises(), reg]);
+        desenhar();
+        status(reg.erro ? 'Não deu para analisar ' + reg.nome + ': ' + reg.erro + '.' : reg.nome + ' entrou na lista (marcada). Revise e clique em "2. Encerrar marcados".');
+      } finally { rdRodando = false; }
     };
 
     /* ---- etapa 2: encerrar (fluxo da própria tela) ---- */

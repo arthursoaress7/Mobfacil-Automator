@@ -61,5 +61,6 @@ docs/script/07-cac.md               ← consulta CAC
 docs/script/08-ccbs-contas.md       ← CCBs e contas
 docs/script/09-equipe.md            ← compartilhamento Pusher
 docs/script/10-navegacao-busca.md   ← navegação e busca
+docs/script/11-rd-encerramento.md   ← RD Atendimento: encerramento com IA
 README.md                           ← referência funcional (usuário)
 ```

@@ -8,6 +8,7 @@
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*
+// @include      https://app.tallos.com.br/*
 // @homepageURL  https://github.com/arthursoaress7/Mobfacil-Automator/tree/main
 // @downloadURL  https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/automacaomobfacil.user.js
 // @updateURL    https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/automacaomobfacil.user.js
@@ -18,6 +19,7 @@
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest
 // @connect      api-sa1.pusher.com
+// @connect      generativelanguage.googleapis.com
 // @require      https://js.pusher.com/8.4.0/pusher.min.js
 // @run-at       document-idle
 // ==/UserScript==
@@ -57,6 +59,13 @@
     CORTE_QTD: 10,          // reprova se quantidade de restrições > 10
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
+    RD_ESPERA: 15,          // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
+    RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
+    RD_TIMEOUT_IA: 60,      // s máximos esperando a resposta do Gemini
+    RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
+    RD_TENTATIVAS_IA: 3,    // tentativas por conversa quando o Gemini avisa limite de uso
+    RD_MAX_MENSAGENS: 60,   // últimas mensagens da conversa enviadas para a análise
+    RD_MAX_CARACTERES: 9000, // tamanho máximo do texto da conversa enviado para a análise
   };
 
   // janela da página (fora da sandbox do Tampermonkey): dá acesso aos objetos do próprio site
@@ -6843,7 +6852,360 @@
     atualizarUI();
   }
 
+  /* ================= RD ATENDIMENTO: ENCERRAMENTO COM IA (app.tallos.com.br) =================
+     Encerra os atendimentos com cadeado ("Janela de 24 horas fechada") da lista "Meus atendimentos".
+     Duas etapas, sempre nesta ordem:
+       1) Analisar: abre cada conversa com cadeado, lê as mensagens (sem enviar nada ao cliente), tira CPF, telefone e
+          e-mail do texto e pede ao Gemini a tabulação (SÓ as categorias PaymobiFin de RD_CATEGORIAS) e os campos da
+          planilha de encerramento. Nada é encerrado nesta etapa.
+       2) Encerrar: depois de o funcionário revisar (e poder trocar a categoria), encerra os marcados pelo fluxo da
+          própria tela (Encerrar > categoria > Encerrar) e guarda a linha da planilha (A–M) para copiar.
+     Chave do Gemini: só neste navegador (GM 'geminiChave'), nunca no código. Modelo: escolhido sozinho entre os
+     "flash" disponíveis para a chave (GM 'geminiModelo' guarda a escolha; dá para trocar no painel). */
+  const RD_CATEGORIAS = [
+    'PaymobiFin - Alteração Data de Vencimento de Parcela', 'PaymobiFin - Antecipação de parcela', 'PaymobiFin - Cancelamento',
+    'PaymobiFin - Desbloqueio do aparelho por pagamento', 'PaymobiFin - Dúvidas e esclarecimentos', 'PaymobiFin - Encaminhado para Loja',
+    'PaymobiFin - Encerrado por Inatividade', 'PaymobiFin - Informações de Pagamento', 'PaymobiFin - Migração de Boleto Bradesco',
+    'PaymobiFin - Negociação de parcela/contrato', 'PaymobiFin - Pagamentos', 'PaymobiFin - Quitação de Contrato',
+    'PaymobiFin - Reversão de Parcela', 'PaymobiFin - Roubo', 'PaymobiFin - Segunda via de boleto', 'PaymobiFin - Segunda via de contrato',
+    'PaymobiFin - Solicitação Indevida', 'Paymobifin - venda realizada com erro de loja',
+  ];   // "PaymobiFin - Teste" fica de fora de propósito
+  const RD_CADEADO = 'Janela de 24 horas fechada';
+  const RD_MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+  function iniciarRD() {
+    if (document.getElementById('mf-rd')) return;
+    const rdNorm = t => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const rdHoje = () => new Date().toLocaleDateString('pt-BR');
+    let rdParar = false, rdRodando = false;
+
+    /* ---- interface (estilos pelo CSSOM: não depende de <style> liberado pelo site) ---- */
+    const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
+    const BT = 'border:1px solid #d3dbe6;background:#fff;color:#0f172a;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
+    const BT_PRI = 'border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
+    const BT_PERIGO = 'border:1px solid #dc2626;background:#dc2626;color:#fff;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
+    const raiz = el('div', 'position:fixed;left:84px;bottom:16px;z-index:2147483646;font:13px/1.45 system-ui,Segoe UI,Arial;color:#0f172a');
+    raiz.id = 'mf-rd';
+    const abrir = el('button', BT_PRI + ';box-shadow:0 6px 18px rgba(15,23,42,.25)', '🔒 Encerrar com IA');
+    abrir.title = 'PaymobiFin: encerrar os atendimentos com cadeado (janela de 24 h fechada)';
+    const card = el('div', 'display:none;width:560px;max-width:calc(100vw - 100px);max-height:calc(100vh - 40px);overflow:auto;background:#fff;border:1px solid #d9e0ea;border-radius:14px;box-shadow:0 24px 48px -16px rgba(15,23,42,.35)');
+    const topo = el('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:linear-gradient(180deg,#1e293b,#0f172a);color:#f8fafc;border-radius:13px 13px 0 0;position:sticky;top:0');
+    topo.append(el('b', 'flex:1', 'PaymobiFin · Encerramento com IA'));
+    const fechar = el('button', 'border:0;background:transparent;color:#cbd5e1;font-size:16px;cursor:pointer', '✕'); fechar.title = 'Fechar';
+    topo.append(fechar);
+    const corpo = el('div', 'padding:12px;display:flex;flex-direction:column;gap:10px');
+    card.append(topo, corpo);
+    raiz.append(card, abrir);
+    document.body.appendChild(raiz);
+    abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; rdContar(); };
+    fechar.onclick = () => { card.style.display = 'none'; abrir.style.display = ''; };
+
+    // configuração: chave e modelo do Gemini
+    const cfgBox = el('details', 'border:1px solid #e4e9f0;border-radius:10px;padding:8px 10px');
+    cfgBox.append(el('summary', 'cursor:pointer;font-weight:600', 'Configuração do Gemini'));
+    const chave = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:7px 9px;border:1px solid #d3dbe6;border-radius:8px'); chave.type = 'password'; chave.placeholder = 'Chave da API do Gemini (Google AI Studio)'; chave.autocomplete = 'new-password';
+    const modelo = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:7px 9px;border:1px solid #d3dbe6;border-radius:8px'); modelo.placeholder = 'Modelo (vazio = escolher sozinho um "flash")';
+    const salvar = el('button', BT + ';margin-top:6px', 'Salvar');
+    const aviso = el('div', 'font-size:12px;color:#64748b;margin-top:6px', 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.');
+    cfgBox.append(chave, modelo, salvar, aviso);
+    const pintarCfg = () => { chave.value = GM_getValue('geminiChave', '') ? '••••••••' : ''; modelo.value = GM_getValue('geminiModelo', ''); cfgBox.open = !GM_getValue('geminiChave', ''); };
+    chave.addEventListener('focus', () => { if (chave.value === '••••••••') chave.value = ''; });
+    salvar.onclick = () => {
+      const k = chave.value.trim();
+      if (k && k !== '••••••••') GM_setValue('geminiChave', k);
+      const m = modelo.value.trim().replace(/^models\//, '');
+      if (m) GM_setValue('geminiModelo', m); else GM_deleteValue('geminiModelo');
+      pintarCfg(); status(GM_getValue('geminiChave', '') ? 'Configuração salva.' : 'Informe a chave do Gemini.');
+    };
+
+    const st = el('div', 'padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;white-space:pre-wrap');
+    const status = t => { st.textContent = t; };
+    const acoes = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
+    const btAnalisar = el('button', BT_PRI, '1. Analisar conversas com cadeado');
+    const btEncerrar = el('button', BT_PERIGO, '2. Encerrar marcados');
+    const btParar = el('button', BT, 'Parar');
+    const btCopiar = el('button', BT, 'Copiar linhas da planilha');
+    const btLimpar = el('button', BT, 'Limpar lista');
+    acoes.append(btAnalisar, btEncerrar, btParar, btCopiar, btLimpar);
+    const tabela = el('div', 'display:flex;flex-direction:column;gap:6px');
+    corpo.append(cfgBox, st, acoes, tabela);
+
+    /* ---- dados guardados (sobrevivem a recarregar a página; ficam só os de hoje) ---- */
+    const analises = () => { const a = GM_getValue('rdAnalises', null); return a && a.dia === rdHoje() ? a.itens : []; };
+    const guardarAnalises = itens => GM_setValue('rdAnalises', { dia: rdHoje(), itens });
+    const linhasHoje = () => { const l = GM_getValue('rdLinhas', null); return l && l.dia === rdHoje() ? l.linhas : []; };
+    const guardarLinha = cols => GM_setValue('rdLinhas', { dia: rdHoje(), linhas: [...linhasHoje(), cols] });
+
+    function desenhar() {
+      tabela.innerHTML = '';
+      const itens = analises();
+      if (!itens.length) { tabela.append(el('div', 'font-size:12px;color:#64748b', 'Nenhuma conversa analisada hoje. Clique em "1. Analisar".')); return; }
+      itens.forEach((it, i) => {
+        const lin = el('div', 'border:1px solid #e4e9f0;border-left:3px solid ' + (it.encerrado ? '#16a34a' : it.erro ? '#dc2626' : '#2563eb') + ';border-radius:10px;padding:8px 10px;font-size:12.5px');
+        const cab = el('div', 'display:flex;align-items:center;gap:8px');
+        const marca = el('input'); marca.type = 'checkbox'; marca.checked = !!it.marcado && !it.encerrado && !it.erro; marca.disabled = !!it.encerrado || !!it.erro;
+        marca.onchange = () => { const x = analises(); x[i].marcado = marca.checked; guardarAnalises(x); };
+        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', it.encerrado ? 'encerrado' : it.erro ? 'erro' : 'analisado'));
+        lin.append(cab);
+        if (it.erro) { lin.append(el('div', 'color:#b91c1c;margin-top:4px', it.erro)); tabela.append(lin); return; }
+        const sel = el('select', 'width:100%;margin-top:6px;padding:6px;border:1px solid #d3dbe6;border-radius:8px');
+        RD_CATEGORIAS.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+        sel.value = it.tabulacao; sel.disabled = !!it.encerrado;
+        sel.onchange = () => { const x = analises(); x[i].tabulacao = sel.value; guardarAnalises(x); };
+        lin.append(sel, el('div', 'margin-top:4px;color:#334155', 'Solicitação: ' + it.solicitacao + (it.observacoes && it.observacoes !== 'N/A' ? ' · Obs.: ' + it.observacoes : '') + ' · ' + it.tipo +
+          ' · CPF: ' + (it.cpf ? 'ok' : 'N/A') + ' · Proposta: ' + (it.proposta || 'N/A')));
+        if (it.aviso) lin.append(el('div', 'margin-top:4px;color:#b45309;font-weight:600', '⚠ ' + it.aviso));
+        tabela.append(lin);
+      });
+    }
+
+    /* ---- página do RD Atendimento ---- */
+    const lista = () => document.querySelector('[data-testid=calls-list]');
+    const itensComCadeado = () => {
+      const l = lista(); if (!l) return [];
+      return [...l.children].filter(it => [...it.querySelectorAll('svg title')].some(t => t.textContent.trim() === RD_CADEADO));
+    };
+    const nomeDoItem = it => rdNorm((it.querySelector('p') || {}).textContent);
+    const etiquetasDoItem = it => [...it.querySelectorAll('[class*="Tag__Display"]')].map(s => s.textContent.trim()).filter(t => !/^\+\d+$/.test(t));
+    function rdContar() {
+      pintarCfg(); desenhar();
+      const n = itensComCadeado().length;
+      status(lista() ? n + ' atendimento(s) com cadeado carregado(s) em "Meus atendimentos".' : 'Abra a tela de atendimentos (lista "Meus atendimentos").');
+    }
+    async function esperar(fn, s) {
+      const fim = Date.now() + (s || CONFIG.RD_ESPERA) * 1000;
+      while (Date.now() < fim) { try { const r = fn(); if (r) return r; } catch (_) {} await sleep(CONFIG.POLL_PRINCIPAL); }
+      return null;
+    }
+    const cabecalho = () => document.querySelector('[data-front-hub*="call-header"]');
+    const telefoneAberto = () => { const h = cabecalho(); const m = h && h.innerText.match(/\b\d{10,13}\b/); return m ? m[0] : ''; };
+    // a conversa aberta é a do contato quando uma das linhas do cabeçalho é exatamente o nome dele
+    const abertaE = nome => { const h = cabecalho(); return !!h && h.innerText.split('\n').some(x => rdNorm(x) === nome); };
+    // o item é procurado de novo a cada passo: a lista é redesenhada quando uma conversa abre ou é encerrada
+    const itemPorNome = nome => itensComCadeado().find(y => nomeDoItem(y) === nome) || null;
+    async function abrirConversa(it) {
+      const nome = nomeDoItem(it);
+      const antes = (document.querySelector('#chat-show-messages') || {}).innerText || '';
+      (it.querySelector('div') || it).click();
+      const ok = await esperar(() => abertaE(nome) && document.querySelector('#chat-show-messages .card'));
+      if (!ok) return false;
+      // espera as mensagens desta conversa (o texto muda e para de mudar)
+      let ult = null;
+      await esperar(() => { const t = document.querySelector('#chat-show-messages').innerText; const pronto = t !== antes && t === ult; ult = t; return pronto; }, 6);
+      return true;
+    }
+    function lerMensagens() {
+      const caixa = document.querySelector('#chat-show-messages');
+      if (!caixa) return [];
+      return [...caixa.querySelectorAll('.card')].map(card => {
+        const quem = card.querySelector('.bg-message-from-customer') ? 'Cliente' : card.querySelector('.bg-message-from-employee') ? 'Atendente' : 'Sistema';
+        const bloco = card.closest('.flex-column') || card;
+        const texto = card.innerText.replace(/\s+\n/g, '\n').trim();
+        const meta = bloco.innerText.replace(card.innerText, '').replace(/\s+/g, ' ').trim();   // "Arthur - 7 novembro, 2026 10:33"
+        return { quem, texto, meta };
+      }).filter(m => m.texto).slice(-CONFIG.RD_MAX_MENSAGENS);
+    }
+    // dados pessoais saem do texto antes de ir para o Gemini (o script os lê localmente para a planilha)
+    const mascarar = t => String(t)
+      .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[EMAIL]')
+      .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[CPF]')
+      .replace(/(?:\+?55\s?)?\(?\b\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b/g, '[TELEFONE]');
+    // Perfil do contato (painel à direita da conversa: Nome, Email, CPF...). Abre o painel se estiver fechado.
+    async function lerPerfil() {
+      const painelPerfil = () => document.querySelector('#chat-full-container-right-show');
+      if (!painelPerfil()) {
+        const aba = [...document.querySelectorAll('#chat-full-container-center-buttons span')].find(s => s.textContent.trim() === 'Perfil');
+        if (aba) { aba.click(); await esperar(painelPerfil, 4); }
+      }
+      const p = painelPerfil(); if (!p) return {};
+      await esperar(() => p.querySelector('[data-cy=cy-simple-form-name]'), 4);
+      const campo = cy => { const i = p.querySelector('[data-cy=cy-simple-form-' + cy + ']'); return i ? String(i.value || '').trim() : ''; };
+      return { nome: campo('name'), cpf: campo('cpf'), email: campo('email') };
+    }
+    const fmtCpf = t => { const d = String(t || '').replace(/\D/g, ''); return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : ''; };
+    const cpfDe = msgs => { for (const m of msgs) { const x = m.texto.match(/\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b/); if (x) return x[1] + '.' + x[2] + '.' + x[3] + '-' + x[4]; } return ''; };
+    const propostaDe = msgs => { for (const m of msgs) { const x = m.texto.match(/proposta\D{0,20}(\d{4,6})\b/i); if (x) return x[1]; } return ''; };
+    const dataDe = msgs => {
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const x = rdNorm(msgs[i].meta).match(/(\d{1,2})\s+([a-zç]+),?\s+(\d{4})/);
+        const mes = x ? RD_MESES.indexOf(x[2]) : -1;
+        if (mes >= 0) return String(x[1]).padStart(2, '0') + '/' + String(mes + 1).padStart(2, '0') + '/' + x[3];
+      }
+      return rdHoje();
+    };
+
+    /* ---- Gemini ---- */
+    function gemini(metodo, caminho, corpo) {
+      return new Promise(resolve => {
+        GM_xmlhttpRequest({
+          method: metodo, url: 'https://generativelanguage.googleapis.com/v1beta/' + caminho, timeout: CONFIG.RD_TIMEOUT_IA * 1000,
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GM_getValue('geminiChave', '') },
+          data: corpo ? JSON.stringify(corpo) : undefined,
+          onload: r => { let j = null; try { j = JSON.parse(r.responseText); } catch (_) {} resolve({ status: r.status, json: j }); },
+          onerror: () => resolve({ status: 0, json: null }), ontimeout: () => resolve({ status: -1, json: null }),
+        });
+      });
+    }
+    async function modeloGemini() {
+      const salvo = GM_getValue('geminiModelo', '');
+      if (salvo) return salvo;
+      const r = await gemini('GET', 'models?pageSize=200');
+      if (r.status !== 200 || !r.json) throw new Error(r.status === 400 || r.status === 403 ? 'chave do Gemini recusada (confira em Configuração do Gemini)' : 'não consegui listar os modelos do Gemini (HTTP ' + r.status + ')');
+      const nota = n => { const v = parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/) || [])[1] || 0); return v * 10 - (/preview|exp/.test(n) ? 5 : 0) - (/lite/.test(n) ? 1 : 0); };
+      const ok = (r.json.models || []).map(m => ({ n: String(m.name).replace(/^models\//, ''), g: m.supportedGenerationMethods || [] }))
+        .filter(m => m.g.includes('generateContent') && /^gemini-[\d.]+-flash/.test(m.n) && !/image|tts|audio|live|thinking/.test(m.n))
+        .sort((a, b) => nota(b.n) - nota(a.n));
+      if (!ok.length) throw new Error('nenhum modelo "flash" do Gemini disponível para esta chave');
+      GM_setValue('geminiModelo', ok[0].n);
+      return ok[0].n;
+    }
+    const INSTRUCOES = [
+      'Você classifica atendimentos de WhatsApp da PaymobiFin (financiamento de celulares com aparelho bloqueável) que vão ser encerrados.',
+      'Leia a conversa entre Cliente, Atendente e Sistema (mensagens automáticas, régua de cobrança e lembretes) e responda SÓ o JSON pedido.',
+      'tabulacao: exatamente uma destas categorias, escrita igual: ' + RD_CATEGORIAS.join(' | ') + '.',
+      'Use "PaymobiFin - Encerrado por Inatividade" quando o cliente não respondeu, só recebeu mensagens automáticas ou parou de responder antes de dizer o que queria.',
+      'Quando o cliente disse o que queria (mesmo sem resolver), use a categoria do assunto principal.',
+      'solicitacao: o pedido do cliente em 2 a 6 palavras, no estilo "Informou pagamento", "Desbloqueio por pagamento", "2º via de boleto", "Negociação", "Dúvida sobre bloqueio"; "N/A" se não houve pedido.',
+      'observacoes: no máximo uma frase curta com algo útil para o histórico (ex.: "Informado sobre o App"); "N/A" se não houver.',
+      'tipo_atendimento: "Lojista" se quem conversa é loja, vendedor ou parceiro; senão "Cliente".',
+      'nome_cliente: o nome completo do cliente se aparecer escrito na conversa; senão "".',
+      'Dados pessoais aparecem trocados por [CPF], [TELEFONE] e [EMAIL]: não tente adivinhá-los.',
+    ].join('\n');
+    async function analisarTexto(nomeContato, msgs) {
+      const conversa = mascarar(msgs.map(m => m.quem + ' (' + m.meta + '): ' + m.texto).join('\n')).slice(-CONFIG.RD_MAX_CARACTERES);
+      const corpoReq = {
+        systemInstruction: { parts: [{ text: INSTRUCOES }] },
+        contents: [{ role: 'user', parts: [{ text: 'Nome do contato no RD: ' + mascarar(nomeContato) + '\n\nConversa:\n' + conversa }] }],
+        generationConfig: {
+          temperature: 0, responseMimeType: 'application/json',
+          responseSchema: { type: 'OBJECT', required: ['tabulacao', 'solicitacao', 'observacoes', 'tipo_atendimento', 'nome_cliente'], properties: {
+            tabulacao: { type: 'STRING', enum: RD_CATEGORIAS }, solicitacao: { type: 'STRING' }, observacoes: { type: 'STRING' },
+            tipo_atendimento: { type: 'STRING', enum: ['Cliente', 'Lojista'] }, nome_cliente: { type: 'STRING' } } },
+        },
+      };
+      const mod = await modeloGemini();
+      for (let t = 1; t <= CONFIG.RD_TENTATIVAS_IA; t++) {
+        const r = await gemini('POST', 'models/' + encodeURIComponent(mod) + ':generateContent', corpoReq);
+        if (r.status === 429 && t < CONFIG.RD_TENTATIVAS_IA) { status('Limite de uso do Gemini: aguardando ' + CONFIG.RD_ESPERA_LIMITE + ' s...'); await sleep(CONFIG.RD_ESPERA_LIMITE * 1000); continue; }
+        if (r.status === 404) { GM_deleteValue('geminiModelo'); throw new Error('modelo ' + mod + ' indisponível; tente de novo (o painel escolhe outro)'); }
+        if (r.status !== 200) throw new Error(r.status === 400 || r.status === 403 ? 'chave do Gemini recusada' : r.status === 429 ? 'limite de uso do Gemini atingido; tente mais tarde' : 'Gemini não respondeu (HTTP ' + r.status + ')');
+        const txt = (((((r.json || {}).candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join('');
+        let j; try { j = JSON.parse(txt); } catch (_) { throw new Error('resposta do Gemini fora do formato'); }
+        if (!RD_CATEGORIAS.includes(j.tabulacao)) throw new Error('o Gemini devolveu uma categoria fora da lista PaymobiFin: ' + j.tabulacao);
+        return j;
+      }
+      throw new Error('limite de uso do Gemini atingido; tente mais tarde');
+    }
+
+    /* ---- etapa 1: analisar ---- */
+    btAnalisar.onclick = async () => {
+      if (rdRodando) return;
+      if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
+      const jaFeitos = new Set(analises().map(a => a.chave));
+      const fila = [...new Set(itensComCadeado().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
+      if (!fila.length) return status('Nenhum atendimento com cadeado novo para analisar (os já analisados hoje estão abaixo).');
+      rdRodando = true; rdParar = false;
+      let feitos = 0;
+      try {
+        for (const nome of fila) {
+          if (rdParar) break;
+          const it = itemPorNome(nome);
+          if (!it) continue;
+          status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + '...');
+          const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true };
+          try {
+            if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
+            reg.telefone = telefoneAberto();
+            const msgs = lerMensagens();
+            if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
+            const perfil = await lerPerfil();
+            const j = await analisarTexto(reg.nome, msgs);
+            // cruzamento: CPF e nome do Perfil do RD têm prioridade; o que o cliente escreveu na conversa confere
+            const cpfPerfil = fmtCpf(perfil.cpf), cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
+            const nomePerfil = /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
+            const avisos = [];
+            if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
+            Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
+              nomeCliente: nomePerfil || (j.nome_cliente || '').trim(), cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs), aviso: avisos.join(' · ') });
+          } catch (e) { reg.erro = e.message; reg.marcado = false; }
+          guardarAnalises([...analises(), reg]);
+          desenhar();
+          feitos++;
+          if (/chave do Gemini recusada|limite de uso/.test(reg.erro || '')) { rdParar = true; status('Parei: ' + reg.erro + '.'); break; }
+          await sleep(CONFIG.RD_PAUSA_IA);
+        }
+      } finally { rdRodando = false; }
+      const x = analises();
+      if (!/^Parei/.test(st.textContent)) status((rdParar ? 'Análise interrompida. ' : 'Análise concluída. ') + x.filter(a => !a.erro && !a.encerrado).length + ' prontos para encerrar, ' + x.filter(a => a.erro).length + ' com erro. Revise as categorias e clique em "2. Encerrar marcados".');
+    };
+
+    /* ---- etapa 2: encerrar (fluxo da própria tela) ---- */
+    const clicar = e => { ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => e.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))); };
+    const janela = () => [...document.querySelectorAll('[role=dialog][aria-modal=true]')].find(d => /Encerrar atendimento/.test(d.textContent));
+    async function encerrarAberto(categoria) {
+      const bt = document.querySelector('button[aria-label=Encerrar]');
+      if (!bt) throw new Error('botão Encerrar não encontrado');
+      bt.click();
+      const d = await esperar(janela); if (!d) throw new Error('a janela de encerrar não abriu');
+      const gatilho = d.querySelector('[aria-haspopup=listbox]');
+      if (gatilho && gatilho.getAttribute('aria-expanded') !== 'true') clicar(gatilho);
+      const op = await esperar(() => [...d.querySelectorAll('[role=option]')].find(o => rdNorm(o.textContent) === rdNorm(categoria)));
+      if (!op) { const x = d.querySelector('button[aria-label=close]'); if (x) x.click(); throw new Error('categoria não encontrada na lista do RD: ' + categoria); }
+      op.scrollIntoView({ block: 'nearest' }); clicar(op);
+      const conf = await esperar(() => [...d.querySelectorAll('button')].find(b => b.textContent.trim() === 'Encerrar' && b.getAttribute('aria-disabled') !== 'true'));
+      if (!conf) { const x = d.querySelector('button[aria-label=close]'); if (x) x.click(); throw new Error('o botão Encerrar da janela não liberou'); }
+      conf.click();
+      if (!(await esperar(() => !janela()))) throw new Error('a janela de encerrar não fechou');
+    }
+    const linhaPlanilha = a => {
+      const etiqueta = (a.etiquetas || []).find(t => /^(xpanse|mundo amarelo)/i.test(t)) || 'N/A';
+      const tel = String(a.telefone || '').replace(/^55(?=\d{10,11}$)/, '');
+      return [tel || 'N/A', a.data || rdHoje(), etiqueta, a.solicitacao || 'N/A', a.proposta || 'N/A', a.nomeCliente || 'N/A', a.cpf || 'N/A', 'N/A', 'N/A', 'RD', a.observacoes || 'N/A', a.tabulacao, a.tipo || 'Cliente'];
+    };
+    btEncerrar.onclick = async () => {
+      if (rdRodando) return;
+      const alvo = analises().filter(a => a.marcado && !a.erro && !a.encerrado);
+      if (!alvo.length) return status('Nenhum atendimento marcado para encerrar.');
+      const resumo = {}; alvo.forEach(a => { resumo[a.tabulacao] = (resumo[a.tabulacao] || 0) + 1; });
+      if (!confirm('Encerrar ' + alvo.length + ' atendimento(s)?\n\n' + Object.entries(resumo).map(([c, n]) => n + ' × ' + c).join('\n') + '\n\nNão dá para retomar um atendimento encerrado.')) return;
+      rdRodando = true; rdParar = false;
+      let ok = 0, falhas = 0;
+      try {
+        for (const a of alvo) {
+          if (rdParar) break;
+          status('Encerrando ' + (ok + falhas + 1) + ' de ' + alvo.length + ': ' + a.nome + '...');
+          const x = analises(), i = x.findIndex(y => y.chave === a.chave);
+          try {
+            const it = itemPorNome(a.chave);
+            if (!it) throw new Error('não está mais na lista com cadeado');
+            if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
+            if (a.telefone && telefoneAberto() !== a.telefone) throw new Error('a conversa aberta não é a analisada (telefone diferente)');
+            await encerrarAberto(a.tabulacao);
+            guardarLinha(linhaPlanilha(a));
+            x[i].encerrado = true; ok++;
+          } catch (e) { x[i].erro = 'Não encerrado: ' + e.message; falhas++; }
+          guardarAnalises(x); desenhar();
+          await sleep(CONFIG.PAUSA * 10);
+        }
+      } finally { rdRodando = false; }
+      status('Encerrados: ' + ok + (falhas ? ' · com erro: ' + falhas : '') + '. Clique em "Copiar linhas da planilha" e cole com Ctrl+Shift+V na planilha de encerramento.');
+    };
+    btParar.onclick = () => { rdParar = true; status('Parando depois da conversa atual...'); };
+    btCopiar.onclick = () => {
+      const l = linhasHoje();
+      if (!l.length) return status('Nenhum atendimento encerrado hoje por aqui.');
+      GM_setClipboard(l.map(c => c.map(v => String(v).replace(/[\t\n]+/g, ' ')).join('\t')).join('\n'), 'text');
+      status(l.length + ' linha(s) copiada(s) (colunas A a M da planilha de encerramento).');
+    };
+    btLimpar.onclick = () => {
+      if (rdRodando) return;
+      if (!confirm('Limpar a lista de conversas analisadas hoje? As linhas já encerradas continuam disponíveis em "Copiar linhas da planilha".')) return;
+      GM_deleteValue('rdAnalises'); desenhar(); rdContar();
+    };
+  }
+
   /* ================= INÍCIO ================= */
   if (location.hostname.endsWith('mobfacil.com.br')) iniciarMotor();
+  else if (location.hostname === 'app.tallos.com.br') { if (window.top === window) iniciarRD(); }
   else if (window.top === window) iniciarPainel();
 })();

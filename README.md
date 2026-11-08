@@ -18,6 +18,7 @@ A pasta [`docs/script/`](./docs/script/) contém a documentação detalhada de c
 | [08 - CCBs e Contas](./docs/script/08-ccbs-contas.md) | Download de CCBs em lote e troca rápida de conta |
 | [09 - Equipe e Compartilhamento](./docs/script/09-equipe.md) | Pusher, criptografia AES-GCM, sincronização e conflitos |
 | [10 - Navegação e Busca](./docs/script/10-navegacao-busca.md) | Navegação automática entre telas e busca de cliente |
+| [11 - RD Atendimento](./docs/script/11-rd-encerramento.md) | Encerramento dos atendimentos com cadeado com IA (Gemini) |
 
 ---
 

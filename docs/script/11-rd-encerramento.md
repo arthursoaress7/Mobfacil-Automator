@@ -50,7 +50,7 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 | `geminiChave` | Chave da API do Gemini (só neste navegador, sem criptografia) |
 | (modelo) | Sempre automático, sem campo no painel: primeiro os **Flash-Lite** estáveis, depois os Flash cheios estáveis, preview/experimental por último; troca sozinho quando um não responde ou fica sem cota. As chaves antigas `geminiModelo`/`geminiModeloManual` são apagadas ao abrir |
 | `rdAnalises` | `{ dia, itens: [...] }` — análises do dia |
-| `rdLinhas` | `{ dia, linhas: [[A..M], ...] }` — linhas da planilha dos encerrados do dia |
+| `rdLinhas` | `{ dia, linhas: [{ cols: [A..M], copiada }] }` — linhas da planilha dos encerrados do dia. "Copiar linhas da planilha" leva só as ainda não copiadas (o botão mostra quantas são novas); sem nenhuma nova, pergunta antes de copiar de novo as do dia. "Limpar lista" apaga as análises **e** as linhas, avisando se houver linha ainda não copiada. Linhas no formato antigo contam como já copiadas |
 | `erBase` | Endereço completo do ER, gravado pelo painel do ER ao abrir (e de novo após `ER_BASE_RECONFERIR` s), mesmo quando o campo do sistema vem relativo |
 
 ## Configuração (`CONFIG`)

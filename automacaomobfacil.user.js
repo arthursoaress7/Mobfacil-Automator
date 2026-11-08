@@ -6918,7 +6918,7 @@
     card.append(topo, corpo);
     raiz.append(card, abrir);
     document.body.appendChild(raiz);
-    abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); rdContar(); };
+    abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); pintarCopiar(); rdContar(); };
     fechar.onclick = () => { card.style.display = 'none'; abrir.style.display = ''; };
 
     // configuração: só a chave do Gemini (o modelo é sempre escolhido sozinho, ver modeloGemini)
@@ -6982,8 +6982,16 @@
       }
     } catch (_) {}
     const guardarAnalises = itens => GM_setValue('rdAnalises', { dia: rdHoje(), itens });
-    const linhasHoje = () => { const l = GM_getValue('rdLinhas', null); return l && l.dia === rdHoje() ? l.linhas : []; };
-    const guardarLinha = cols => GM_setValue('rdLinhas', { dia: rdHoje(), linhas: [...linhasHoje(), cols] });
+    // linhas da planilha dos encerrados do dia: { cols: [A..M], copiada }. "Copiar" leva só as ainda não copiadas
+    // (antes copiava todas a cada clique e repetia na planilha). Linhas no formato antigo (só a lista de colunas) contam
+    // como já copiadas.
+    const linhasHoje = () => {
+      const l = GM_getValue('rdLinhas', null);
+      return l && l.dia === rdHoje() ? (l.linhas || []).map(x => (Array.isArray(x) ? { cols: x, copiada: true } : x)) : [];
+    };
+    const gravarLinhas = linhas => GM_setValue('rdLinhas', { dia: rdHoje(), linhas });
+    const guardarLinha = cols => gravarLinhas([...linhasHoje(), { cols, copiada: false }]);
+    const pintarCopiar = () => { const n = linhasHoje().filter(x => !x.copiada).length; btCopiar.textContent = 'Copiar linhas da planilha' + (n ? ' (' + n + (n === 1 ? ' nova)' : ' novas)') : ''); };
 
     function desenhar() {
       tabela.innerHTML = '';
@@ -7580,7 +7588,7 @@
             if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
             if (a.telefone && telefoneAberto() !== a.telefone) throw new Error('a conversa aberta não é a analisada (telefone diferente)');
             await encerrarAberto(a.tabulacao);
-            guardarLinha(linhaPlanilha(a));
+            guardarLinha(linhaPlanilha(a)); pintarCopiar();
             x[i].encerrado = true; delete x[i].erroEncerrar; ok++;
           } catch (e) { x[i].erroEncerrar = e.message; falhas++; }   // continua analisada e marcada: dá para tentar encerrar de novo
           guardarAnalises(x); desenhar();
@@ -7590,16 +7598,29 @@
       status('Encerrados: ' + ok + (falhas ? ' · com erro: ' + falhas : '') + '. Clique em "Copiar linhas da planilha" e cole com Ctrl+Shift+V na planilha de encerramento.');
     };
     btParar.onclick = () => { rdParar = true; status('Parando depois da conversa atual...'); };
+    const tsv = linhas => linhas.map(x => x.cols.map(v => String(v).replace(/[\t\n]+/g, ' ')).join('\t')).join('\n');
     btCopiar.onclick = () => {
-      const l = linhasHoje();
-      if (!l.length) return status('Nenhum atendimento encerrado hoje por aqui.');
-      GM_setClipboard(l.map(c => c.map(v => String(v).replace(/[\t\n]+/g, ' ')).join('\t')).join('\n'), 'text');
-      status(l.length + ' linha(s) copiada(s) (colunas A a M da planilha de encerramento).');
+      const todas = linhasHoje();
+      if (!todas.length) return status('Nenhum atendimento encerrado hoje por aqui.');
+      const novas = todas.filter(x => !x.copiada);
+      if (!novas.length) {
+        // nada novo: só copia de novo se o funcionário pedir (ex.: perdeu a colagem)
+        if (!confirm('Nenhuma linha nova desde a última cópia (as ' + todas.length + ' de hoje já foram copiadas).\n\nCopiar de novo as ' + todas.length + ' linhas de hoje? Se já colou na planilha, elas vão ficar repetidas.')) return status('Nada copiado: as linhas de hoje já tinham sido copiadas.');
+        GM_setClipboard(tsv(todas), 'text');
+        return status(todas.length + ' linha(s) de hoje copiada(s) de novo (A a M). Atenção para não colar repetido.');
+      }
+      GM_setClipboard(tsv(novas), 'text');
+      gravarLinhas(todas.map(x => ({ ...x, copiada: true })));
+      pintarCopiar();
+      status(novas.length + ' linha(s) nova(s) copiada(s) (colunas A a M da planilha de encerramento). Cole com Ctrl+Shift+V abaixo da última linha.' +
+        (todas.length > novas.length ? ' As ' + (todas.length - novas.length) + ' que já tinham sido copiadas não foram de novo.' : ''));
     };
     btLimpar.onclick = () => {
       if (rdRodando) return;
-      if (!confirm('Limpar a lista de conversas analisadas hoje? As linhas já encerradas continuam disponíveis em "Copiar linhas da planilha".')) return;
-      GM_deleteValue('rdAnalises'); desenhar(); rdContar();
+      const pendentes = linhasHoje().filter(x => !x.copiada).length;
+      if (!confirm('Limpar a lista de conversas analisadas hoje e as linhas da planilha?' +
+        (pendentes ? '\n\nAtenção: ' + pendentes + ' linha(s) de atendimentos encerrados ainda NÃO foram copiadas e vão ser perdidas. Clique em Cancelar e use "Copiar linhas da planilha" antes.' : ''))) return;
+      GM_deleteValue('rdAnalises'); GM_deleteValue('rdLinhas'); desenhar(); pintarCopiar(); rdContar();
     };
   }
 

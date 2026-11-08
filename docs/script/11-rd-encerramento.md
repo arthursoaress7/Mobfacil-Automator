@@ -14,7 +14,13 @@ Encerra os atendimentos com cadeado da lista "Meus atendimentos" (ícone com tí
 
 1. **Analisar conversas com cadeado** — para cada item com cadeado: abre a conversa, lê as mensagens (`#chat-show-messages .card`, cliente = `.bg-message-from-customer`, atendente = `.bg-message-from-employee`), lê o Perfil do contato (`[data-cy=cy-simple-form-name|cpf|email]`) e pede ao Gemini a tabulação e os campos da planilha. **Nada é encerrado nesta etapa.**
 2. **Revisão** — cada conversa aparece com a categoria sugerida (pode ser trocada), solicitação, tipo, CPF/proposta e avisos (ex.: CPF da conversa diferente do Perfil). Dá para desmarcar.
-3. **Encerrar marcados** — confirma com um resumo por categoria e encerra uma a uma pelo fluxo da tela: botão `Encerrar` → janela "Encerrar atendimento" → opção da lista (`[role=option]`, texto exato) → botão `Encerrar` da janela. Antes de encerrar, confere que o telefone da conversa aberta é o da análise.
+3. **Encerrar marcados** — confirma com um resumo por categoria e encerra uma a uma pelo fluxo da tela: botão `Encerrar` → janela "Encerrar atendimento" → opção da lista (`[role=option]`, texto exato) → botão `Encerrar` da janela. Antes de encerrar, confere que o telefone da conversa aberta é o da análise (últimos 8 dígitos, só números ou formatado; topo sem telefone vale o nome).
+
+**Telefone do topo.** Ao trocar de conversa o RD mostra o nome novo antes do telefone: por alguns instantes o topo tem o telefone da conversa anterior. Por isso:
+- o topo é acompanhado o tempo todo (`vigiarTopo`, no ritmo `RD_BOTAO_MS`): quando o nome muda, os telefones vistos com o nome anterior ficam marcados como da conversa anterior;
+- na análise (`telefoneDaConversa`), o telefone só é aceito quando não é o da conversa anterior nem o de outra conversa já analisada (espera até `RD_ESPERA_TELEFONE` s; se não trocar, fica o do topo com aviso para conferir);
+- no encerramento, espera o telefone analisado aparecer no topo (até `RD_ESPERA`) antes de dizer que a conversa aberta não é a analisada. O erro mostra os 4 últimos dígitos dos dois.
+- Com mais de um topo montado na página, vale o visível que tem o botão Encerrar (`cabecalho`).
 4. **Copiar linhas da planilha** — copia (TSV) as linhas A–M dos encerrados do dia.
 
 ## Categorias permitidas
@@ -55,7 +61,7 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 
 ## Configuração (`CONFIG`)
 
-`RD_ESPERA`, `RD_PAUSA_IA`, `RD_TIMEOUT_IA`, `RD_ESPERA_LIMITE`, `RD_ESPERA_FALHA`, `RD_TENTATIVAS_IA`, `RD_FALHAS_SEGUIDAS`, `RD_MAX_MENSAGENS`, `RD_MAX_CARACTERES`.
+`RD_ESPERA`, `RD_ESPERA_TELEFONE`, `RD_PAUSA_IA`, `RD_TIMEOUT_IA`, `RD_ESPERA_LIMITE`, `RD_ESPERA_FALHA`, `RD_TENTATIVAS_IA`, `RD_FALHAS_SEGUIDAS`, `RD_MAX_MENSAGENS`, `RD_MAX_CARACTERES`.
 
 Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): até `RD_TENTATIVAS_IA` tentativas por conversa; no modelo automático, o painel passa para o próximo "flash" da lista e repete a mesma conversa (o modelo que falhou sai da vez até a página ser recarregada). Com `RD_FALHAS_SEGUIDAS` conversas seguidas sem resposta, ou nenhum modelo respondendo, a análise para e mostra o modelo. "Pensamento" reduzido: `thinkingBudget: 0` nos Gemini 2.5 Flash e `thinkingLevel: low` do Gemini 3 em diante; o modelo que recusar o ajuste é repetido sem ele. Ao clicar em Analisar, voltam para a fila as conversas que deram erro e as que ficaram sem os dados do ER (ER sem endereço, sessão expirada ou sem resposta). A chave e o modelo são salvos ao colar/digitar (sem depender do botão Salvar); "Limpar lista" só apaga as análises do dia, nunca a configuração.
 
@@ -73,6 +79,8 @@ Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xm
 4. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
 
 O CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil). Avisos na revisão: por qual caminho o cliente foi achado (e os que não deram), CPF do Perfil diferente do ER, cliente não confirmado, nome do ER diferente do RD, proposta da conversa diferente da do cliente, várias/nenhuma efetivada, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.
+
+A Mesa de Crédito só responde para usuário cadastrado como **aprovador**. Se a conta logada no ER não for (o ER devolve "Aprovador FULANO não cadastrado."), o aviso pede para entrar no ER com a conta da Mesa. Esse aviso, como o de ER indisponível, faz a conversa voltar para a fila no próximo "1. Analisar". Isso vale também para as conversas escolhidas antes das 24 h, que são refeitas pelo nome e mantêm o motivo. As que não puderem ser refeitas (parou antes ou saíram da lista) voltam como estavam.
 
 ## Limites do plano grátis do Gemini
 

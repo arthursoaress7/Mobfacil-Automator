@@ -64,6 +64,7 @@
     RD_BOTAO_MS: 700,       // ms entre conferências da posição do botão "Analisar (IA)" no topo do atendimento
     RD_HORAS_JANELA: 24,    // h sem mensagem para considerar vencida uma conversa SEM cadeado (janela do WhatsApp)
     RD_ESPERA: 15,         // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
+    RD_ESPERA_TELEFONE: 5,  // s máximos esperando o topo da conversa trocar o telefone da conversa anterior pelo desta
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
     RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
     RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
@@ -7107,16 +7108,70 @@
       while (Date.now() < fim) { try { const r = fn(); if (r) return r; } catch (_) {} await sleep(CONFIG.POLL_PRINCIPAL); }
       return null;
     }
-    const cabecalho = () => document.querySelector('[data-front-hub*="call-header"]');
-    const telefoneAberto = () => { const h = cabecalho(); const m = h && h.innerText.match(/\b\d{10,13}\b/); return m ? m[0] : ''; };
+    // topo da conversa aberta. O RD pode deixar mais de um montado (ex.: o de outra conversa, escondido): vale o visível,
+    // de preferência o que tem o botão Encerrar (e sempre o bloco de fora, não um pedaço de dentro dele)
+    const cabecalho = () => {
+      const todos = [...document.querySelectorAll('[data-front-hub*="call-header"]')];
+      const fora = todos.filter(h => !todos.some(o => o !== h && o.contains(h)));
+      const vis = fora.filter(h => h.getBoundingClientRect().height > 0);
+      const comEncerrar = h => [...h.querySelectorAll('button')].some(b => b.getAttribute('aria-label') === 'Encerrar' || /^encerrar$/i.test(b.textContent.trim()));
+      return vis.find(comEncerrar) || vis[0] || fora[0] || null;
+    };
+    // telefones escritos no topo, só números (5511945448365) ou formatados (+55 (11) 94544-8365)
+    const telefonesAbertos = () => {
+      const h = cabecalho(), t = h ? h.innerText : '';
+      const achados = [...(t.match(/\b\d{10,13}\b/g) || []), ...(t.match(/(?:\+?55[\s-]?)?\(?\b\d{2}\)?[\s-]?9?\d{4}[\s-]?\d{4}\b/g) || [])];
+      return [...new Set(achados.map(x => x.replace(/\D/g, '')).filter(x => x.length >= 10 && x.length <= 13))];
+    };
+    const telefoneAberto = () => telefonesAbertos()[0] || '';
+    // a conversa aberta tem o telefone analisado? (compara os 8 últimos dígitos: com ou sem 55/DDD/9)
+    // Sem telefone no topo vale o nome, que a abertura da conversa já conferiu.
+    const fim8Tel = t => String(t || '').replace(/\D/g, '').slice(-8);
+    const telefoneConfere = tel => { const abertos = telefonesAbertos(); return !tel || !abertos.length || abertos.some(x => fim8Tel(x) === fim8Tel(tel)); };
+    // Telefone da conversa que acabou de abrir. Ao trocar de conversa o RD mostra o nome novo antes do telefone (o da
+    // anterior fica alguns instantes no topo): espera sair o telefone que estava no topo antes da troca e o de outra
+    // conversa já analisada. Se não sair, fica o do topo, com aviso para conferir.
+    let telsAntesDaAbertura = [];
+    // o topo é acompanhado o tempo todo (no mesmo ritmo do botão "Analisar (IA)"): quando o nome no topo muda, os
+    // telefones vistos com o nome anterior são da conversa anterior. Cobre a conversa aberta pelo próprio funcionário.
+    let topoAtual = { nome: '', tels: [] }, topoAnterior = { nome: '', tels: [] };
+    const nomeNoTopo = () => {
+      const h = cabecalho(), l = lista();
+      if (!h || !l) return '';
+      const nomes = new Set([...l.children].map(nomeDoItem).filter(Boolean));
+      return h.innerText.split('\n').map(rdNorm).find(x => nomes.has(x)) || '';
+    };
+    const vigiarTopo = () => {
+      try {
+        const nome = nomeNoTopo();
+        if (!nome) return;
+        if (nome !== topoAtual.nome) { if (topoAtual.nome) topoAnterior = topoAtual; topoAtual = { nome, tels: [] }; }
+        // os que ainda são da conversa anterior não contam como desta
+        const novos = telefonesAbertos().filter(t => !topoAnterior.tels.includes(t));
+        if (novos.length) topoAtual.tels = novos;
+      } catch (_) {}
+    };
+    setInterval(vigiarTopo, CONFIG.RD_BOTAO_MS);
+    async function telefoneDaConversa(nome) {
+      vigiarTopo();
+      const daAnterior = () => (topoAnterior.nome && topoAnterior.nome !== nome ? topoAnterior.tels : []);
+      const outra = x => [...telsAntesDaAbertura, ...daAnterior()].some(t => fim8Tel(t) === fim8Tel(x)) ? 'a conversa aberta antes'
+        : ((analises().find(a => a.chave !== nome && a.telefone && fim8Tel(a.telefone) === fim8Tel(x)) || {}).nome || '');
+      const bom = await esperar(() => { vigiarTopo(); return telefonesAbertos().find(x => !outra(x)); }, CONFIG.RD_ESPERA_TELEFONE);
+      if (bom) return { telefone: bom };
+      const t = telefoneAberto();
+      return { telefone: t, aviso: t ? 'o telefone do topo (…' + t.slice(-4) + ') é o mesmo de ' + outra(t) + '; confira o número antes de encerrar' : '' };
+    }
     // a conversa aberta é a do contato quando uma das linhas do cabeçalho é exatamente o nome dele
     const abertaE = nome => { const h = cabecalho(); return !!h && h.innerText.split('\n').some(x => rdNorm(x) === nome); };
     // o item é procurado de novo a cada passo: a lista é redesenhada quando uma conversa abre ou é encerrada
     const itemPorNome = nome => { const l = lista(); return l ? [...l.children].find(y => nomeDoItem(y) === nome) || null : null; };
     async function abrirConversa(it) {
       const nome = nomeDoItem(it);
+      telsAntesDaAbertura = [];
       // já está aberta (ex.: conversa escolhida pelo funcionário): não clica de novo no item, que pode fechar a conversa
       if (abertaE(nome) && document.querySelector('#chat-show-messages .card')) return true;
+      telsAntesDaAbertura = telefonesAbertos();   // os da conversa que estava aberta (não são desta)
       const antes = (document.querySelector('#chat-show-messages') || {}).innerText || '';
       (it.querySelector('div') || it).click();
       const ok = await esperar(() => abertaE(nome) && document.querySelector('#chat-show-messages .card'));
@@ -7350,6 +7405,9 @@
       if (r.semBase) return { erro: 'abra o ER (Paymobi) uma vez neste navegador para o painel saber o endereço' };
       if (!r.ok) return { erro: 'o ER não respondeu (HTTP ' + r.status + ')' };
       if (erLogin(r.texto)) return { erro: 'sessão do ER expirada: entre no ER neste navegador' };
+      // a Mesa de Crédito só responde para usuário cadastrado como aprovador ("Aprovador FULANO não cadastrado.")
+      const semAprovador = erTxt(r.texto.replace(/<[^>]*>/g, ' ')).match(/Aprovador\s+(\S+)\s+n[ãa]o\s+cadastrad/i);
+      if (semAprovador) return { erro: 'a conta ' + semAprovador[1] + ', que está logada no ER deste navegador, não é aprovadora da Mesa de Crédito: entre no ER com a conta da Mesa (no painel do ER: Trocar de conta) e clique em "1. Analisar" de novo' };
       const t = erTabelaMesa(r.texto);
       if (!t) return { erro: 'resposta do ER sem a lista de propostas (' + erDiagnostico(r) + ')' };
       const ths = [...t.querySelectorAll('thead th')].map(th => erTxt(th.textContent).toLowerCase());
@@ -7458,7 +7516,8 @@
       const reg = { chave: nome, nome: (it.querySelector('p') || {}).textContent.trim(), etiquetas: etiquetasDoItem(it), marcado: true, motivo: motivo || motivoDoItem(it) };
       try {
         if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
-        reg.telefone = telefoneAberto();
+        const tel = await telefoneDaConversa(nome);
+        reg.telefone = tel.telefone;
         const msgs = lerMensagens();
         if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
         const perfil = await lerPerfil();
@@ -7474,7 +7533,7 @@
         const cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
         const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
         const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
-        const avisos = [];
+        const avisos = tel.aviso ? [tel.aviso] : [];
         if (cpfPerfil && cpfConversa && cpfPerfil !== cpfConversa) avisos.push('CPF da conversa (' + cpfConversa + ') é diferente do CPF do Perfil (' + cpfPerfil + ')');
         // Solicitação/Observações que culpam o atendimento: a observação vira a própria solicitação (o pedido do cliente)
         const sol = rdTextoNeutro((j.solicitacao || 'N/A').trim(), 'N/A');
@@ -7509,10 +7568,13 @@
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
       // as que deram erro voltam para a fila (as encerradas e as analisadas sem erro ficam como estão)
       // também voltam as que ficaram sem os dados do ER porque o ER não estava disponível (endereço, sessão ou rede)
-      const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu|resposta do ER sem a lista)/.test(a.aviso || ''));
-      if (analises().some(refazer)) guardarAnalises(analises().filter(a => !refazer(a)));
+      const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu|resposta do ER sem a lista|a conta \S+, que está logada no ER)/.test(a.aviso || ''));
+      // as escolhidas antes das 24 h não estão entre as vencidas: voltam para a fila pelo nome, com o mesmo motivo
+      const refeitas = analises().filter(refazer);
+      if (refeitas.length) guardarAnalises(analises().filter(a => !refazer(a)));
+      const motivoAntes = new Map(refeitas.map(a => [a.chave, a.motivo]));
       const jaFeitos = new Set(analises().map(a => a.chave));
-      const fila = [...new Set(itensExpirados().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
+      const fila = [...new Set([...itensExpirados().map(nomeDoItem), ...refeitas.map(a => a.chave)])].filter(n => n && !jaFeitos.has(n));
       if (!fila.length) return status('Nenhum atendimento vencido novo para analisar (os já analisados hoje estão abaixo).');
       rdRodando = true; rdParar = false;
       let feitos = 0, semResposta = 0;
@@ -7523,7 +7585,7 @@
           if (!it) continue;
           const mod = modeloAuto;
           status('Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome + '...' + (mod ? '\nModelo: ' + mod : ''));
-          const reg = await analisarItem(it, nome, 'Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome);
+          const reg = await analisarItem(it, nome, 'Analisando ' + (feitos + 1) + ' de ' + fila.length + ': ' + nome, motivoAntes.get(nome));
           guardarAnalises([...analises(), reg]);
           desenhar();
           feitos++;
@@ -7538,7 +7600,12 @@
           }
           await sleep(CONFIG.RD_PAUSA_IA);
         }
-      } finally { rdRodando = false; }
+      } finally {
+        rdRodando = false;
+        // as que iam ser refeitas e não foram (parou antes ou saíram da lista) voltam como estavam
+        const agora = new Set(analises().map(a => a.chave)), faltam = refeitas.filter(a => !agora.has(a.chave));
+        if (faltam.length) { guardarAnalises([...analises(), ...faltam]); desenhar(); }
+      }
       const x = analises();
       if (!/^Parei/.test(st.textContent)) status((rdParar ? 'Análise interrompida. ' : 'Análise concluída. ') + x.filter(a => !a.erro && !a.encerrado).length + ' prontos para encerrar, ' + x.filter(a => a.erro).length + ' com erro. Revise as categorias e clique em "2. Encerrar marcados".');
     };
@@ -7557,6 +7624,7 @@
       if (ja && !ja.erro) return status('Análise da conversa aberta: ' + (ja.encerrado ? 'esta conversa já foi encerrada hoje pelo painel.' : 'esta conversa já está na lista, pronta para revisar e encerrar.'));
       if (ja) guardarAnalises(analises().filter(a => a.chave !== nome));   // tinha dado erro: analisa de novo
       rdRodando = true;
+      status('Analisando a conversa aberta: ' + nome + '...');
       try {
         const reg = await analisarItem(it, nome, 'Analisando a conversa aberta: ' + nome, motivoDoItem(it) || 'escolhida antes das 24 h');
         guardarAnalises([...analises(), reg]);
@@ -7689,7 +7757,8 @@
             const it = itemPorNome(a.chave);
             if (!it) throw new Error('não está mais na lista de atendimentos');
             if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
-            if (a.telefone && telefoneAberto() !== a.telefone) throw new Error('a conversa aberta não é a analisada (telefone diferente)');
+            // o RD troca o nome no topo antes do telefone (o da conversa anterior fica alguns instantes): espera o telefone certo
+            if (!(await esperar(() => { vigiarTopo(); return telefoneConfere(a.telefone); }))) throw new Error('a conversa aberta não é a analisada (telefone no topo …' + telefonesAbertos().map(t => t.slice(-4)).join(', …') + '; analisada …' + String(a.telefone).slice(-4) + ')');
             await encerrarAberto(a.tabulacao);
             guardarLinha(linhaPlanilha(a)); pintarCopiar();
             x[i].encerrado = true; delete x[i].erroEncerrar; ok++;

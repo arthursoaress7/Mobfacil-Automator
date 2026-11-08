@@ -112,6 +112,24 @@ No **lojista**, o Perfil e o telefone do contato são da loja: o cruzamento com 
 
 Botão **"+ Analisar a conversa aberta"**: o funcionário abre no RD um atendimento já resolvido (mesmo sem cadeado e dentro da janela) e clica; a conversa é analisada como as outras (`analisarItem`), entra na lista **marcada** com o motivo "✋ escolhida antes das 24 h" e é encerrada pelo "2. Encerrar marcados". Clicar de novo na mesma conversa não duplica; se ela tinha dado erro, é analisada de novo.
 
+## Interface do painel
+
+Os estilos são aplicados pelo CSSOM (`el.style.cssText`), sem `<style>` na página do RD. Cada elemento fixo guarda a função que monta o estilo a partir das cores do tema (`estilo(e, c => …)`).
+
+- **Tema claro/escuro:** botão no topo, ao lado de — e ✕. O ícone mostra o modo atual: sol = claro, lua = escuro; o clique troca. A preferência fica em GM `rdTema` (padrão claro). Trocar reaplica as cores de todos os elementos (`repintar`), preservando o mostrar/esconder do painel, e redesenha a lista. As cores ficam em `RD_TEMAS` (claro e escuro desenhados separadamente). **O RD não muda.**
+- **Configuração do Gemini:** recolhível. O título mostra o estado da chave ("● Chave salva · …1234" ou "● Sem chave"). Campo mascarado e botão Salvar na mesma linha; o mecanismo de salvar não mudou.
+- **Ações:** "1. Analisar conversas vencidas" e "+ Analisar a conversa aberta" lado a lado; "2. Encerrar marcados" embaixo, na largura toda, em vermelho. A opção das paradas sem cadeado fica logo abaixo. As auxiliares ficam numa faixa menor: Copiar linhas da planilha, Parar e Limpar lista (texto vermelho).
+- **Lista:** título "Conversas de hoje" com contadores (analisadas, marcadas, encerradas, com erro).
+- **Cartão de cada conversa:**
+  - **Topo:** seleção, nome e telefone. À direita, a situação e o motivo (🔒 cadeado, ⏱ parada, ✋ escolhida).
+  - **Situação:** "Analisado · dados conferidos" (verde), "Revise antes de encerrar" (atenção), "Divergência: revise", "Erro na análise", "Não encerrado" ou "Encerrado". A situação **não autoriza o encerramento**: só entra no encerramento o que está marcado e for confirmado no "2. Encerrar marcados".
+  - **Conteúdo:** tabulação, tipo, solicitação e observação. No bloco do ER: "✓ Confirmado no ER", "⚠ Achado no ER, não confirmado" ou "— Sem dados do ER", com proposta, CPF (ok/N/A), vendedor, filial e situação.
+  - **Avisos:** cada aviso de `it.aviso` (separado no " · " de fora dos parênteses) aparece com o texto inteiro, nesta ordem e com estas cores:
+    1. divergência de identidade, em vermelho: CPF ou nome diferente, cliente não confirmado, telefone repetido;
+    2. ER indisponível e atenção, em amarelo, incluindo a proposta citada diferente da efetivada;
+    3. informação, em neutro.
+- **As regras não mudaram:** conversas com erro continuam desmarcadas e sem poder marcar, e as analisadas continuam marcadas por padrão.
+
 ## Minimizar e continuar
 
 O topo do painel tem **— (minimizar)** e **✕ (fechar)**: os dois só recolhem o painel no botão do canto; a análise e o encerramento continuam (só **Parar** interrompe). Recolhido, o botão do canto mostra o andamento ao vivo ("🔒 Analisando 3 de 20: …", depois o resultado) e o texto completo ao passar o mouse. Ao reabrir, o painel mantém o andamento/resultado em vez de trocar pela contagem da lista. Fechar ou recarregar a **aba** do RD para o script; o que já foi analisado/encerrado fica salvo e "Analisar"/"Encerrar marcados" continuam de onde pararam.

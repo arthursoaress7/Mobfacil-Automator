@@ -7155,24 +7155,80 @@
     let rdAbertas = 0, rdLendo = false;
     const emAnalise = new Set();
 
-    /* ---- interface (estilos pelo CSSOM: não depende de <style> liberado pelo site) ---- */
+    /* ---- interface (estilos pelo CSSOM: não depende de <style> liberado pelo site) ----
+       Tema claro/escuro só do painel (o RD não muda): cada elemento fixo guarda a função que monta o estilo a partir das
+       cores do tema (estilo()); trocar o tema reaplica tudo (repintar) e redesenha a lista. Preferência em GM 'rdTema'. */
     const el = (tag, css, txt) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (txt != null) e.textContent = txt; return e; };
-    const BT = 'border:1px solid #d3dbe6;background:#fff;color:#0f172a;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
-    const BT_PRI = 'border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
-    const BT_PERIGO = 'border:1px solid #dc2626;background:#dc2626;color:#fff;border-radius:8px;padding:7px 10px;font:600 12.5px/1.2 system-ui,Segoe UI,Arial;cursor:pointer';
-    const raiz = el('div', 'position:fixed;left:84px;bottom:16px;z-index:2147483646;font:13px/1.45 system-ui,Segoe UI,Arial;color:#0f172a');
+    const RD_TEMAS = {
+      claro: { fundo: '#f4f6fa', sup: '#ffffff', sup2: '#f8fafc', borda: '#e4e9f0', borda2: '#d3dbe6', txt: '#0f172a', txt2: '#334155', txt3: '#64748b', campo: '#ffffff',
+        pri: '#2563eb', priHover: '#1d4ed8', priSuave: '#eff6ff', priBorda: '#bfdbfe', priTxt: '#1d4ed8', ok: '#16a34a', okTxt: '#15803d', okSuave: '#f0fdf4', okBorda: '#bbf7d0',
+        alerta: '#d97706', alertaTxt: '#92400e', alertaSuave: '#fffbeb', alertaBorda: '#fde68a', perigo: '#dc2626', perigoHover: '#b91c1c', perigoTxt: '#b91c1c', perigoSuave: '#fef2f2', perigoBorda: '#fecaca',
+        topo: 'linear-gradient(180deg,#1e293b,#0f172a)', topoIcone: '#cbd5e1', sombra: '0 24px 48px -16px rgba(15,23,42,.35),0 4px 12px rgba(15,23,42,.08)', sombraBt: '0 1px 2px rgba(15,23,42,.06)' },
+      escuro: { fundo: '#0b1220', sup: '#111c33', sup2: '#16223b', borda: '#263349', borda2: '#334155', txt: '#e2e8f0', txt2: '#cbd5e1', txt3: '#94a3b8', campo: '#0f1a2e',
+        pri: '#3b82f6', priHover: '#2563eb', priSuave: '#172554', priBorda: '#1e3a8a', priTxt: '#93c5fd', ok: '#22c55e', okTxt: '#4ade80', okSuave: '#052e16', okBorda: '#166534',
+        alerta: '#f59e0b', alertaTxt: '#fbbf24', alertaSuave: '#2a1f0a', alertaBorda: '#78350f', perigo: '#ef4444', perigoHover: '#dc2626', perigoTxt: '#fca5a5', perigoSuave: '#2a1215', perigoBorda: '#7f1d1d',
+        topo: 'linear-gradient(180deg,#111c33,#0b1220)', topoIcone: '#94a3b8', sombra: '0 24px 48px -16px rgba(0,0,0,.75),0 4px 12px rgba(0,0,0,.35)', sombraBt: 'none' },
+    };
+    let rdTema = GM_getValue('rdTema', 'claro') === 'escuro' ? 'escuro' : 'claro';
+    const C = () => RD_TEMAS[rdTema];
+    const FONTE = 'system-ui,"Segoe UI",Roboto,Arial,sans-serif';
+    const TRANS = 'transition:background-color .2s,color .2s,border-color .2s,box-shadow .2s';
+    const fixos = [];
+    // estilo de um elemento fixo do painel (reaplicado ao trocar de tema; o display de mostrar/esconder é preservado)
+    const estilo = (e, f) => { fixos.push([e, f]); e.style.cssText = f(C()); return e; };
+    const hover = (e, f) => { e.addEventListener('mouseenter', () => { if (!e.disabled) Object.assign(e.style, f(C())); }); e.addEventListener('mouseleave', () => { const d = e.style.display; e.style.cssText = (e._mfCss || (() => ''))(C()); e.style.display = d; }); return e; };
+    // botões: principal (azul), perigo (vermelho), secundário (contorno), pequeno (ações auxiliares)
+    const btCss = (tipo, extra) => c => {
+      const base = 'box-sizing:border-box;border-radius:8px;padding:8px 10px;font:600 12.5px/1.2 ' + FONTE + ';cursor:pointer;white-space:nowrap;' + TRANS + ';';
+      const t = { pri: 'border:1px solid ' + c.pri + ';background:' + c.pri + ';color:#fff;box-shadow:' + c.sombraBt,
+        perigo: 'border:1px solid ' + c.perigo + ';background:' + c.perigo + ';color:#fff;box-shadow:' + c.sombraBt,
+        sec: 'border:1px solid ' + c.borda2 + ';background:' + c.sup + ';color:' + c.txt + ';box-shadow:' + c.sombraBt,
+        mini: 'border:1px solid ' + c.borda2 + ';background:' + c.sup + ';color:' + c.txt2 + ';padding:6px 10px;font-size:12px',
+        miniPerigo: 'border:1px solid ' + c.borda2 + ';background:' + c.sup + ';color:' + c.perigoTxt + ';padding:6px 10px;font-size:12px' }[tipo];
+      return base + t + (extra ? ';' + extra : '');
+    };
+    const botao = (tipo, txt, extra) => {
+      const b = el('button', null, txt); const f = btCss(tipo, extra); b._mfCss = f; estilo(b, f);
+      const sobre = { pri: c => ({ background: c.priHover, borderColor: c.priHover }), perigo: c => ({ background: c.perigoHover, borderColor: c.perigoHover }),
+        sec: c => ({ background: c.sup2, borderColor: c.txt3 }), mini: c => ({ background: c.sup2, color: c.txt }), miniPerigo: c => ({ background: c.perigoSuave, borderColor: c.perigoBorda }) }[tipo];
+      return hover(b, sobre);
+    };
+    const raiz = el('div', 'position:fixed;left:84px;bottom:16px;z-index:2147483646;font:13px/1.45 ' + FONTE + ';color:#0f172a');
     raiz.id = 'mf-rd';
-    const abrir = el('button', BT_PRI + ';box-shadow:0 6px 18px rgba(15,23,42,.25);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', '🔒 Encerrar com IA');
+    const abrir = el('button', null, '🔒 Encerrar com IA');
+    abrir._mfCss = c => btCss('pri', 'box-shadow:0 6px 18px rgba(15,23,42,.25);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')(c);
+    estilo(abrir, abrir._mfCss); hover(abrir, c => ({ background: c.priHover, borderColor: c.priHover }));
     const ROTULO_ABRIR = '🔒 Encerrar com IA', TITULO_ABRIR = 'PaymobiFin: encerrar os atendimentos vencidos (clique para abrir o painel)';
     abrir.title = TITULO_ABRIR;
-    const card = el('div', 'display:none;width:560px;max-width:calc(100vw - 100px);max-height:calc(100vh - 40px);overflow:auto;background:#fff;border:1px solid #d9e0ea;border-radius:14px;box-shadow:0 24px 48px -16px rgba(15,23,42,.35)');
-    const topo = el('div', 'display:flex;align-items:center;gap:8px;padding:10px 12px;background:linear-gradient(180deg,#1e293b,#0f172a);color:#f8fafc;border-radius:13px 13px 0 0;position:sticky;top:0');
-    topo.append(el('b', 'flex:1', 'PaymobiFin · Encerramento com IA'));
+    const card = estilo(el('div'), c => 'display:none;width:560px;max-width:calc(100vw - 100px);max-height:calc(100vh - 40px);overflow:auto;background:' + c.fundo + ';border:1px solid ' + c.borda + ';border-radius:14px;box-shadow:' + c.sombra + ';color:' + c.txt + ';color-scheme:' + (rdTema === 'escuro' ? 'dark' : 'light') + ';' + TRANS);
+    const topo = estilo(el('div'), c => 'display:flex;align-items:center;gap:6px;padding:9px 10px 9px 14px;background:' + c.topo + ';color:#f8fafc;border-radius:13px 13px 0 0;position:sticky;top:0;z-index:2');
+    const titulo = el('div', 'flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2');
+    titulo.append(el('b', 'font-size:13.5px;font-weight:650;letter-spacing:-.005em', 'PaymobiFin · Encerramento com IA'), el('span', 'font-size:11px;color:#94a3b8;font-weight:500', 'RD Atendimento · tabulação e planilha'));
+    topo.append(titulo);
+    // botões de ícone do topo (28×28, ícone desenhado em SVG)
+    const SVG = 'http://www.w3.org/2000/svg';
+    const icone = desenho => { const s = document.createElementNS(SVG, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', '16'); s.setAttribute('height', '16'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round');
+      desenho.forEach(([t, a]) => { const n = document.createElementNS(SVG, t); Object.entries(a).forEach(([k, v]) => n.setAttribute(k, v)); s.appendChild(n); }); return s; };
+    const ICONE_SOL = [['circle', { cx: 12, cy: 12, r: 4 }], ['path', { d: 'M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41' }]];
+    const ICONE_LUA = [['path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' }]];
+    const ICONE_MENOS = [['path', { d: 'M5 12h14' }]], ICONE_X = [['path', { d: 'M18 6 6 18M6 6l12 12' }]];
+    const btTopo = (desenho, dica) => {
+      const b = el('button'); b.title = dica; b.setAttribute('aria-label', dica); b.appendChild(icone(desenho));
+      b._mfCss = c => 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:' + c.topoIcone + ';cursor:pointer;flex:none;' + TRANS;
+      estilo(b, b._mfCss); return hover(b, () => ({ background: 'rgba(255,255,255,.1)', color: '#f8fafc' }));
+    };
+    // tema: sol = modo claro, lua = modo escuro (o ícone mostra o modo atual; o clique troca)
+    const btTema = btTopo(ICONE_SOL, '');
+    const pintarBotaoTema = () => {
+      btTema.replaceChildren(icone(rdTema === 'escuro' ? ICONE_LUA : ICONE_SOL));
+      btTema.title = rdTema === 'escuro' ? 'Modo escuro (clique para o modo claro)' : 'Modo claro (clique para o modo escuro)';
+      btTema.setAttribute('aria-label', btTema.title);
+    };
     // minimizar e fechar só escondem o painel: a análise e o encerramento continuam (só o botão Parar interrompe)
-    const minimizar = el('button', 'border:0;background:transparent;color:#cbd5e1;font-size:16px;cursor:pointer;padding:0 6px', '—'); minimizar.title = 'Minimizar (a automação continua; o andamento aparece no botão do canto)';
-    const fechar = el('button', 'border:0;background:transparent;color:#cbd5e1;font-size:16px;cursor:pointer', '✕'); fechar.title = 'Fechar (a automação continua; o andamento aparece no botão do canto)';
-    topo.append(minimizar, fechar);
-    const corpo = el('div', 'padding:12px;display:flex;flex-direction:column;gap:10px');
+    const minimizar = btTopo(ICONE_MENOS, 'Minimizar (a automação continua; o andamento aparece no botão do canto)');
+    const fechar = btTopo(ICONE_X, 'Fechar (a automação continua; o andamento aparece no botão do canto)');
+    topo.append(btTema, minimizar, fechar);
+    const corpo = estilo(el('div'), c => 'padding:12px;display:flex;flex-direction:column;gap:10px;background:' + c.fundo + ';' + TRANS);
     card.append(topo, corpo);
     raiz.append(card, abrir);
     document.body.appendChild(raiz);
@@ -7192,25 +7248,45 @@
     };
     minimizar.onclick = recolher;
     fechar.onclick = recolher;
+    // superfície (cartão) do painel: blocos de configuração, ações e cada conversa
+    const supCss = (extra) => c => 'background:' + c.sup + ';border:1px solid ' + c.borda + ';border-radius:12px;' + TRANS + (extra ? ';' + extra : '');
 
     // configuração: só a chave do Gemini (o modelo é sempre escolhido sozinho, ver modeloGemini)
-    const cfgBox = el('details', 'border:1px solid #e4e9f0;border-radius:10px;padding:8px 10px');
-    cfgBox.append(el('summary', 'cursor:pointer;font-weight:600', 'Configuração do Gemini'));
-    const chave = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:7px 9px;border:1px solid #d3dbe6;border-radius:8px'); chave.type = 'password'; chave.placeholder = 'Chave da API do Gemini (Google AI Studio)'; chave.autocomplete = 'new-password';
-    const salvar = el('button', BT + ';margin-top:6px', 'Salvar');
-    const aviso = el('div', 'font-size:12px;color:#64748b;margin-top:6px', 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O modelo do Gemini é escolhido sozinho (e trocado quando um não responde ou fica sem cota). O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.');
-    const chaveInfo = el('div', 'font-size:12px;margin-top:4px;font-weight:600');
-    cfgBox.append(chave, chaveInfo, salvar, aviso);
+    const cfgBox = estilo(el('details'), supCss('padding:0 12px'));
+    const cfgSum = estilo(el('summary'), c => 'cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:10px 0;font-weight:650;font-size:13px;color:' + c.txt);
+    const cfgSeta = el('span', 'display:inline-block;transition:transform .18s;font-size:11px', '▸');
+    const cfgChip = el('span');
+    cfgSum.append(cfgSeta, el('span', 'flex:1', 'Configuração do Gemini'), cfgChip);
+    cfgBox.appendChild(cfgSum);
+    cfgBox.addEventListener('toggle', () => { cfgSeta.style.transform = cfgBox.open ? 'rotate(90deg)' : ''; });
+    const cfgCorpo = el('div', 'padding:0 0 12px');
+    const rotChave = estilo(el('label', null, 'Chave da API do Gemini'), c => 'display:block;font-size:12px;font-weight:600;color:' + c.txt2 + ';margin-bottom:5px');
+    const chave = estilo(el('input'), c => 'flex:1;min-width:0;box-sizing:border-box;padding:8px 10px;border:1px solid ' + c.borda2 + ';border-radius:8px;background:' + c.campo + ';color:' + c.txt + ';font:13px ' + FONTE + ';outline:none;' + TRANS);
+    chave.type = 'password'; chave.placeholder = 'Chave da API do Gemini (Google AI Studio)'; chave.autocomplete = 'new-password';
+    chave.addEventListener('focus', () => { chave.style.borderColor = C().pri; chave.style.boxShadow = '0 0 0 3px ' + (rdTema === 'escuro' ? 'rgba(59,130,246,.35)' : 'rgba(37,99,235,.18)'); });
+    chave.addEventListener('blur', () => { chave.style.borderColor = C().borda2; chave.style.boxShadow = 'none'; });
+    const salvar = botao('sec', 'Salvar');
+    const linhaChave = el('div', 'display:flex;gap:6px;align-items:center');
+    linhaChave.append(chave, salvar);
+    const aviso = estilo(el('div', null, 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O modelo do Gemini é escolhido sozinho (e trocado quando um não responde ou fica sem cota). O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.'),
+      c => 'font-size:11.5px;line-height:1.5;color:' + c.txt3 + ';margin-top:8px');
+    const chaveInfo = el('div', 'font-size:12px;margin-top:6px;font-weight:600');
+    cfgCorpo.append(rotChave, linhaChave, chaveInfo, aviso);
+    cfgBox.append(cfgCorpo);
     // modelo: sempre automático (escolhido nesta página). Modelo salvo por versões anteriores (13.4–13.10) é descartado.
     let modeloAuto = '';
     GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual');
     // A chave é salva ao colar/digitar (ao sair do campo ou com Enter), sem depender do botão Salvar.
     // Só esta parte mexe na configuração: limpar a lista ou recontar os atendimentos nunca apaga nem esconde a chave.
+    const chipCss = (cor, fundo, borda) => 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:650;white-space:nowrap;color:' + cor + ';background:' + fundo + ';border:1px solid ' + borda;
     const pintarChave = () => {
-      const k = GM_getValue('geminiChave', '');
+      const k = GM_getValue('geminiChave', ''), c = C();
       if (document.activeElement !== chave) chave.value = k ? '••••••••' : '';
       chaveInfo.textContent = k ? 'Chave salva ✓ (termina em …' + k.slice(-4) + ')' : 'Nenhuma chave salva: cole a chave da API do Gemini acima.';
-      chaveInfo.style.color = k ? '#15803d' : '#b45309';
+      chaveInfo.style.color = k ? c.okTxt : c.alertaTxt;
+      // o mesmo estado no título (dá para ver sem abrir a configuração)
+      cfgChip.textContent = k ? '● Chave salva · …' + k.slice(-4) : '● Sem chave';
+      cfgChip.style.cssText = k ? chipCss(c.okTxt, c.okSuave, c.okBorda) : chipCss(c.alertaTxt, c.alertaSuave, c.alertaBorda);
     };
     const salvarChave = () => { const k = chave.value.trim(); if (k && k !== '••••••••') GM_setValue('geminiChave', k); chave.blur(); pintarChave(); };
     let cfgPintada = false;
@@ -7224,7 +7300,7 @@
       status(GM_getValue('geminiChave', '') ? 'Chave salva.' : 'Informe a chave do Gemini.');
     };
 
-    const st = el('div', 'padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;white-space:pre-wrap');
+    const st = estilo(el('div'), c => 'padding:9px 12px;background:' + c.priSuave + ';border:1px solid ' + c.priBorda + ';border-radius:10px;font-size:12.5px;line-height:1.5;color:' + c.txt + ';white-space:pre-wrap;' + TRANS);
     // com o painel recolhido, o andamento aparece no botão do canto (e o texto completo ao passar o mouse)
     const status = t => {
       st.textContent = t;
@@ -7233,22 +7309,41 @@
         abrir.title = t + '\n\n(clique para abrir o painel' + (rdRodando || rdAbertas ? '; a automação continua)' : ')');
       }
     };
-    const acoes = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
-    const btAnalisar = el('button', BT_PRI, '1. Analisar conversas vencidas');
-    const btAberta = el('button', BT, '+ Analisar a conversa aberta');
+    // ações: as principais (analisar, analisar a aberta, encerrar) em cima; as auxiliares (copiar, parar, limpar) embaixo
+    const acoes = estilo(el('div'), supCss('padding:10px 12px;display:flex;flex-direction:column;gap:9px'));
+    // etapa 1 (analisar) lado a lado; etapa 2 (encerrar) embaixo, na largura toda, em vermelho
+    const linhaPrincipal = el('div', 'display:grid;grid-template-columns:1fr 1fr;gap:6px');
+    const btAnalisar = botao('pri', '1. Analisar conversas vencidas', 'width:100%');
+    const btAberta = botao('sec', '+ Analisar a conversa aberta', 'width:100%');
     btAberta.title = 'Para encerrar antes das 24 h um atendimento já resolvido: abra a conversa no RD e clique aqui (entra na lista abaixo para revisar e encerrar)';
-    const btEncerrar = el('button', BT_PERIGO, '2. Encerrar marcados');
-    const btParar = el('button', BT, 'Parar');
-    const btCopiar = el('button', BT, 'Copiar linhas da planilha');
-    const btLimpar = el('button', BT, 'Limpar lista');
-    acoes.append(btAnalisar, btAberta, btEncerrar, btParar, btCopiar, btLimpar);
+    const btEncerrar = botao('perigo', '2. Encerrar marcados', 'grid-column:1/-1;width:100%;padding:9px 12px;font-size:13px');
+    btEncerrar.title = 'Encerra no RD as conversas marcadas, uma a uma, com a categoria escolhida (pede confirmação antes)';
+    linhaPrincipal.append(btAnalisar, btAberta, btEncerrar);
     // incluir as conversas SEM cadeado que estão paradas há mais de RD_HORAS_JANELA (ligado por padrão)
-    const opParadas = el('label', 'display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer');
+    const opParadas = estilo(el('label'), c => 'display:flex;align-items:center;gap:7px;font-size:12px;color:' + c.txt2 + ';cursor:pointer');
     const chkParadas = el('input'); chkParadas.type = 'checkbox'; chkParadas.checked = GM_getValue('rdIncluirParadas', true);
     chkParadas.onchange = () => { GM_setValue('rdIncluirParadas', chkParadas.checked); rdContar(); };
     opParadas.append(chkParadas, el('span', '', 'Incluir conversas sem cadeado paradas há mais de ' + CONFIG.RD_HORAS_JANELA + ' h (pela data da última mensagem na lista)'));
-    const tabela = el('div', 'display:flex;flex-direction:column;gap:6px');
-    corpo.append(cfgBox, st, acoes, opParadas, tabela);
+    const linhaAux = estilo(el('div'), c => 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:9px;border-top:1px solid ' + c.borda);
+    const btCopiar = botao('mini', 'Copiar linhas da planilha');
+    btCopiar.title = 'Copia as linhas (colunas A a M) dos atendimentos encerrados hoje que ainda não foram copiados';
+    const btParar = botao('mini', 'Parar');
+    btParar.title = 'Para a análise ou o encerramento depois da conversa atual';
+    const btLimpar = botao('miniPerigo', 'Limpar lista', 'margin-left:auto');
+    btLimpar.title = 'Apaga a lista de conversas analisadas hoje e as linhas da planilha (pede confirmação)';
+    linhaAux.append(btCopiar, btParar, btLimpar);
+    acoes.append(linhaPrincipal, opParadas, linhaAux);
+    // lista: título com os contadores do dia e os cartões das conversas
+    const cabLista = el('div', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:2px 2px 0');
+    const tabela = el('div', 'display:flex;flex-direction:column;gap:8px');
+    corpo.append(cfgBox, st, acoes, cabLista, tabela);
+    // troca de tema (só o painel): reaplica as cores de todos os elementos e redesenha a lista
+    const repintar = () => {
+      fixos.forEach(([e, f]) => { const d = e.style.display; e.style.cssText = f(C()); if (d) e.style.display = d; });
+      pintarBotaoTema(); pintarChave(); desenhar();
+    };
+    btTema.onclick = () => { rdTema = rdTema === 'escuro' ? 'claro' : 'escuro'; GM_setValue('rdTema', rdTema); repintar(); };
+    pintarBotaoTema();
 
     /* ---- dados guardados (sobrevivem a recarregar a página; ficam só os de hoje) ---- */
     const analises = () => { const a = GM_getValue('rdAnalises', null); return a && a.dia === rdHoje() ? a.itens : []; };
@@ -7272,35 +7367,119 @@
     const guardarLinha = cols => gravarLinhas([...linhasHoje(), { cols, copiada: false }]);
     const pintarCopiar = () => { const n = linhasHoje().filter(x => !x.copiada).length; btCopiar.textContent = 'Copiar linhas da planilha' + (n ? ' (' + n + (n === 1 ? ' nova)' : ' novas)') : ''); };
 
+    // avisos da análise (juntos por " · " em it.aviso) separados e classificados para o cartão. Nada é escondido:
+    // cada aviso continua com o texto inteiro, só ganha cor e ordem (divergências primeiro).
+    const avisosDe = texto => {
+      const partes = [], s = String(texto || '');
+      let atual = '', nivel = 0;   // separa no " · " de fora dos parênteses (o diagnóstico do ER tem " · " dentro deles)
+      for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (ch === '(') nivel++; else if (ch === ')') nivel = Math.max(0, nivel - 1);
+        if (!nivel && s.startsWith(' · ', i)) { partes.push(atual); atual = ''; i += 2; continue; }
+        atual += ch;
+      }
+      if (atual.trim()) partes.push(atual);
+      return partes.map(t => t.trim()).filter(Boolean).map(t => ({ texto: t,
+        // divergência = identidade (CPF, nome, cliente não confirmado, telefone repetido); proposta diferente da citada = atenção
+        tipo: /não consegui confirmar|^CPF d.* é diferente|^o CPF do Perfil|^nome no ER .* é diferente|diferente do cadastro|não bate|é o mesmo de/i.test(t) ? 'divergencia'
+          : /^ER: (abra o ER|sessão do ER|o ER não respondeu|resposta do ER sem|a conta )/.test(t) ? 'er'
+          : /^ER: \d+ propostas|^ER: não deu pelo|usei a mais recente/.test(t) ? 'info'
+          : 'atencao' }))
+        .sort((a, b) => ['divergencia', 'er', 'atencao', 'info'].indexOf(a.tipo) - ['divergencia', 'er', 'atencao', 'info'].indexOf(b.tipo));
+    };
+    const corAviso = (tipo, c) => ({ divergencia: [c.perigoTxt, c.perigoSuave, c.perigoBorda, '⛔', 'Divergência'], er: [c.alertaTxt, c.alertaSuave, c.alertaBorda, '⚠', 'ER'],
+      atencao: [c.alertaTxt, c.alertaSuave, c.alertaBorda, '⚠', 'Atenção'], info: [c.txt2, c.sup2, c.borda, 'ℹ', 'Info'] }[tipo]);
+    // situação do cartão: o resultado da análise não é autorização para encerrar (quem encerra é o "2. Encerrar marcados")
+    const situacaoDe = (it, avs) => {
+      if (it.encerrado) return ['ok', 'Encerrado'];
+      if (it.erro) return ['perigo', 'Erro na análise'];
+      if (it.erroEncerrar) return ['perigo', 'Não encerrado'];
+      if (avs.some(a => a.tipo === 'divergencia')) return ['perigo', 'Divergência: revise'];
+      if (avs.some(a => a.tipo === 'er' || a.tipo === 'atencao') || !it.erConfirmado) return ['alerta', 'Revise antes de encerrar'];
+      return ['ok', 'Analisado · dados conferidos'];
+    };
+    const corSit = (tipo, c) => ({ ok: [c.okTxt, c.okSuave, c.okBorda], perigo: [c.perigoTxt, c.perigoSuave, c.perigoBorda], alerta: [c.alertaTxt, c.alertaSuave, c.alertaBorda], pri: [c.priTxt, c.priSuave, c.priBorda] }[tipo]);
+    const motivoTxt = it => (it.motivo ? (it.motivo === 'cadeado' ? '🔒 cadeado' : /^escolhida/.test(it.motivo) ? '✋ ' + it.motivo : '⏱ ' + it.motivo) : '');
+
     function desenhar() {
+      const c = C();
       tabela.innerHTML = '';
+      cabLista.innerHTML = '';
       const itens = analises();
-      if (!itens.length) { tabela.append(el('div', 'font-size:12px;color:#64748b', 'Nenhuma conversa analisada hoje. Clique em "1. Analisar".')); return; }
+      // título da lista com os números do dia
+      const n = { tot: itens.length, marc: itens.filter(x => x.marcado && !x.encerrado && !x.erro).length, enc: itens.filter(x => x.encerrado).length, erro: itens.filter(x => x.erro || (x.erroEncerrar && !x.encerrado)).length };
+      cabLista.append(el('span', 'font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:' + c.txt3 + ';margin-right:4px', 'Conversas de hoje'));
+      if (n.tot) {
+        cabLista.append(el('span', chipCss(c.txt2, c.sup, c.borda2), n.tot + ' analisada' + (n.tot > 1 ? 's' : '')), el('span', chipCss(c.priTxt, c.priSuave, c.priBorda), n.marc + ' marcada' + (n.marc === 1 ? '' : 's')));
+        if (n.enc) cabLista.append(el('span', chipCss(c.okTxt, c.okSuave, c.okBorda), n.enc + ' encerrada' + (n.enc > 1 ? 's' : '')));
+        if (n.erro) cabLista.append(el('span', chipCss(c.perigoTxt, c.perigoSuave, c.perigoBorda), n.erro + ' com erro'));
+      }
+      if (!itens.length) { tabela.append(el('div', 'font-size:12px;color:' + c.txt3 + ';padding:14px;text-align:center;border:1px dashed ' + c.borda2 + ';border-radius:12px', 'Nenhuma conversa analisada hoje. Clique em "1. Analisar".')); return; }
+      const rot = t => el('span', 'flex:none;width:84px;font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.03em;color:' + c.txt3 + ';padding-top:1px', t);
+      const linhaInfo = (titulo, valor) => { const d = el('div', 'display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:' + c.txt); d.append(rot(titulo), el('span', 'flex:1;min-width:0;word-break:break-word', valor)); return d; };
+      const campoCss = 'box-sizing:border-box;padding:7px 9px;border:1px solid ' + c.borda2 + ';border-radius:8px;background:' + c.campo + ';color:' + c.txt + ';font:12.5px ' + FONTE;
       itens.forEach((it, i) => {
-        const lin = el('div', 'border:1px solid #e4e9f0;border-left:3px solid ' + (it.encerrado ? '#16a34a' : it.erro ? '#dc2626' : '#2563eb') + ';border-radius:10px;padding:8px 10px;font-size:12.5px');
-        const cab = el('div', 'display:flex;align-items:center;gap:8px');
-        const marca = el('input'); marca.type = 'checkbox'; marca.checked = !!it.marcado && !it.encerrado && !it.erro; marca.disabled = !!it.encerrado || !!it.erro;
-        marca.onchange = () => { const x = analises(); x[i].marcado = marca.checked; guardarAnalises(x); };
-        cab.append(marca, el('b', 'flex:1', it.nome + ' · ' + it.telefone), el('span', 'color:#64748b', (it.motivo ? (it.motivo === 'cadeado' ? '🔒 ' : /^escolhida/.test(it.motivo) ? '✋ ' + it.motivo + ' · ' : '⏱ ' + it.motivo + ' · ') : '') + (it.encerrado ? 'encerrado' : it.erro ? 'erro' : it.erroEncerrar ? 'não encerrado' : 'analisado')));
+        const avs = avisosDe(it.aviso);
+        const [sitTipo, sitTxt] = situacaoDe(it, avs);
+        const [sc, sf, sb] = corSit(sitTipo, c);
+        const lin = el('div', 'background:' + c.sup + ';border:1px solid ' + c.borda + ';border-left:3px solid ' + sc + ';border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:7px;' + TRANS + (it.encerrado ? ';opacity:.82' : ''));
+        // cabeçalho: seleção, nome e telefone; à direita o motivo (cadeado, parada, escolhida) e a situação
+        const cab = el('div', 'display:flex;align-items:flex-start;gap:9px');
+        const marca = el('input', 'margin:3px 0 0;width:15px;height:15px;flex:none;accent-color:' + c.pri + ';cursor:pointer'); marca.type = 'checkbox'; marca.checked = !!it.marcado && !it.encerrado && !it.erro; marca.disabled = !!it.encerrado || !!it.erro;
+        marca.title = marca.disabled ? (it.encerrado ? 'Já encerrada' : 'Com erro na análise: não entra no encerramento') : 'Marcada = entra no "2. Encerrar marcados"';
+        marca.onchange = () => { const x = analises(); x[i].marcado = marca.checked; guardarAnalises(x); desenhar(); };
+        const quem = el('div', 'flex:1;min-width:0');
+        quem.append(el('div', 'font-weight:650;font-size:13px;color:' + c.txt + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap', it.nome),
+          el('div', 'font-size:11.5px;color:' + c.txt3 + ';font-variant-numeric:tabular-nums', it.telefone || 'sem telefone'));
+        const lado = el('div', 'display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;max-width:52%');
+        lado.append(el('span', chipCss(sc, sf, sb), sitTxt));
+        if (motivoTxt(it)) lado.append(el('span', 'font-size:11px;color:' + c.txt3 + ';text-align:right', motivoTxt(it)));
+        cab.append(marca, quem, lado);
         lin.append(cab);
-        if (it.erro) { lin.append(el('div', 'color:#b91c1c;margin-top:4px', it.erro)); tabela.append(lin); return; }
-        const sel = el('select', 'width:100%;margin-top:6px;padding:6px;border:1px solid #d3dbe6;border-radius:8px');
-        RD_CATEGORIAS.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
-        sel.value = it.tabulacao; sel.disabled = !!it.encerrado;
+        if (it.erro) { lin.append(el('div', 'font-size:12.5px;color:' + c.perigoTxt + ';background:' + c.perigoSuave + ';border:1px solid ' + c.perigoBorda + ';border-radius:8px;padding:7px 9px', it.erro)); tabela.append(lin); return; }
+        // tabulação e tipo (dá para corrigir antes de encerrar)
+        const sel = el('select', 'width:100%;' + campoCss);
+        RD_CATEGORIAS.forEach(cat => { const o = document.createElement('option'); o.value = cat; o.textContent = cat; sel.appendChild(o); });
+        sel.value = it.tabulacao; sel.disabled = !!it.encerrado; sel.title = 'Tabulação (categoria de encerramento no RD)';
         sel.onchange = () => { const x = analises(); x[i].tabulacao = sel.value; guardarAnalises(x); };
         // tipo do atendimento (coluna M): dá para corrigir antes de encerrar
-        const selTipo = el('select', 'margin-top:6px;padding:5px;border:1px solid #d3dbe6;border-radius:8px');
+        const selTipo = el('select', campoCss + ';padding:5px 8px');
         ['Cliente', 'Lojista'].forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; selTipo.appendChild(o); });
-        selTipo.value = it.tipo || 'Cliente'; selTipo.disabled = !!it.encerrado;
+        selTipo.value = it.tipo || 'Cliente'; selTipo.disabled = !!it.encerrado; selTipo.title = 'Tipo do atendimento (coluna M da planilha)';
         selTipo.onchange = () => { const x = analises(); x[i].tipo = selTipo.value; x[i].tipoPor = 'escolhido na revisão'; guardarAnalises(x); desenhar(); };
-        const linTipo = el('div', 'display:flex;align-items:center;gap:6px;font-size:12px;color:#64748b');
-        linTipo.append(selTipo, el('span', '', it.tipoPor || ''));
-        lin.append(sel, linTipo, el('div', 'margin-top:4px;color:#334155', 'Solicitação: ' + it.solicitacao + (it.observacoes && it.observacoes !== 'N/A' ? ' · Obs.: ' + it.observacoes : '') +
-          ' · CPF: ' + (it.cpf ? 'ok' : 'N/A') + ' · Proposta: ' + (it.proposta || 'N/A') +
-          (it.vendedor || it.filial ? ' · ER: ' + [it.vendedor, it.filial].filter(Boolean).join(' · ') : '') +
-          (it.erAchadoPor ? ' · achado pelo ' + it.erAchadoPor + (it.erConfirmado ? ' ✓' : ' (não confirmado)') : '')));
-        if (it.aviso) lin.append(el('div', 'margin-top:4px;color:#b45309;font-weight:600', '⚠ ' + it.aviso));
-        if (it.erroEncerrar && !it.encerrado) lin.append(el('div', 'margin-top:4px;color:#b91c1c;font-weight:600', 'Não encerrado: ' + it.erroEncerrar + ' (continua marcado: clique em "2. Encerrar marcados" para tentar de novo)'));
+        const linTipo = el('div', 'display:flex;align-items:center;gap:8px;font-size:11.5px;color:' + c.txt3);
+        linTipo.append(selTipo, el('span', '', it.tipoPor ? 'tipo ' + it.tipoPor : ''));
+        lin.append(sel, linTipo);
+        // resultado da IA
+        const ia = el('div', 'display:flex;flex-direction:column;gap:3px');
+        ia.append(linhaInfo('Solicitação', it.solicitacao || 'N/A'));
+        if (it.observacoes && it.observacoes !== 'N/A') ia.append(linhaInfo('Observação', it.observacoes));
+        lin.append(ia);
+        // dados do ER: confirmado (verde), achado sem confirmar (atenção) ou sem dados do ER
+        const er = el('div', 'border-radius:9px;padding:7px 9px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:' + c.sup2 + ';border:1px solid ' + c.borda);
+        const [ec, ef, eb, et] = it.erConfirmado ? [c.okTxt, c.okSuave, c.okBorda, '✓ Confirmado no ER'] : it.erAchadoPor ? [c.alertaTxt, c.alertaSuave, c.alertaBorda, '⚠ Achado no ER, não confirmado'] : [c.txt3, c.sup, c.borda2, '— Sem dados do ER'];
+        const erCab = el('div', 'display:flex;align-items:center;gap:6px;flex-wrap:wrap');
+        erCab.append(el('span', chipCss(ec, ef, eb), et));
+        if (it.erAchadoPor) erCab.append(el('span', 'font-size:11.5px;color:' + c.txt3, 'achado pelo ' + it.erAchadoPor));
+        const dados = el('div', 'display:flex;flex-wrap:wrap;gap:4px 14px;color:' + c.txt2);
+        const dado = (r, v) => { const s = el('span'); s.append(el('span', 'color:' + c.txt3, r + ' '), el('b', 'font-weight:600;color:' + (v ? c.txt : c.txt3), v || 'N/A')); return s; };
+        dados.append(dado('Proposta', it.proposta), dado('CPF', it.cpf ? 'ok' : ''), dado('Vendedor', it.vendedor), dado('Filial', it.filial));
+        if (it.situacaoER) dados.append(dado('Situação', it.situacaoER.replace(/^\d+\s*-\s*/, '')));
+        er.append(erCab, dados);
+        lin.append(er);
+        // avisos (todos, com o texto inteiro), das divergências para as informações
+        if (avs.length) {
+          const lista = el('div', 'display:flex;flex-direction:column;gap:4px');
+          avs.forEach(a => {
+            const [ac, af, ab, aic, art] = corAviso(a.tipo, c);
+            const d = el('div', 'display:flex;gap:7px;align-items:flex-start;font-size:12px;line-height:1.45;color:' + ac + ';background:' + af + ';border:1px solid ' + ab + ';border-radius:8px;padding:6px 9px' + (a.tipo === 'divergencia' ? ';font-weight:600' : ''));
+            d.append(el('span', 'flex:none', aic), el('span', 'flex:1;min-width:0;word-break:break-word', a.texto));
+            d.title = art; lista.append(d);
+          });
+          lin.append(lista);
+        }
+        if (it.erroEncerrar && !it.encerrado) lin.append(el('div', 'font-size:12px;font-weight:600;color:' + c.perigoTxt + ';background:' + c.perigoSuave + ';border:1px solid ' + c.perigoBorda + ';border-radius:8px;padding:6px 9px',
+          'Não encerrado: ' + it.erroEncerrar + ' (continua marcado: clique em "2. Encerrar marcados" para tentar de novo)'));
         tabela.append(lin);
       });
     }

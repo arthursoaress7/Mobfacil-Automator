@@ -7204,7 +7204,7 @@
         GM_xmlhttpRequest({
           method: 'GET', url: base + caminho + '?' + new URLSearchParams(params).toString(), timeout: CONFIG.TIMEOUT_REDE * 1000,
           headers: { 'X-Requested-With': 'XMLHttpRequest' },
-          onload: r => resolve({ ok: r.status >= 200 && r.status < 300, status: r.status, texto: r.responseText || '' }),
+          onload: r => resolve({ ok: r.status >= 200 && r.status < 300, status: r.status, texto: r.responseText || '', urlFinal: r.finalUrl || '' }),
           onerror: () => resolve({ ok: false, status: 0, texto: '' }), ontimeout: () => resolve({ ok: false, status: -1, texto: '' }),
         });
       });
@@ -7225,6 +7225,28 @@
       }
       return '';
     };
+    // tabela da Mesa: no HTML da resposta, ou dentro de um JSON (algumas telas do sistema devolvem o HTML num campo do JSON)
+    function erTabelaMesa(texto) {
+      const doc = erDoc(texto), t = doc.querySelector('#tabMesaCreditoLista');
+      if (t) return t;
+      if (!/^\s*[{[]/.test(texto || '')) return null;
+      try {
+        const achar = v => { if (typeof v === 'string') return /tabMesaCreditoLista/.test(v) ? v : null; if (v && typeof v === 'object') for (const k in v) { const x = achar(v[k]); if (x) return x; } return null; };
+        const html = achar(JSON.parse(texto));
+        return html ? erDoc(html).querySelector('#tabMesaCreditoLista') : null;
+      } catch (_) { return null; }
+    }
+    // o que o ER devolveu quando não veio a lista (para o aviso; números trocados por # para não expor CPF/telefone)
+    function erDiagnostico(r) {
+      const doc = erDoc(r.texto);
+      const titulo = erTxt((doc.querySelector('title') || {}).textContent).slice(0, 60);
+      const cab = erTxt((doc.querySelector('h1, h2, h3, h4, .modal-title, .alert, .error, .erro') || {}).textContent).slice(0, 80);
+      const tabelas = [...doc.querySelectorAll('table[id], form[id]')].map(e => e.tagName.toLowerCase() + '#' + e.id).slice(0, 4);
+      const texto = erTxt(doc.body ? doc.body.textContent : r.texto).replace(/\d/g, '#').slice(0, 140);
+      let caminho = ''; try { caminho = r.urlFinal ? new URL(r.urlFinal).pathname : ''; } catch (_) {}
+      return ['HTTP ' + r.status, (r.texto || '').length + ' caracteres', /^\s*[{[]/.test(r.texto || '') ? 'JSON' : '', caminho && !/MesaCreditoLista/i.test(caminho) ? 'redirecionou para ' + caminho : '',
+        titulo ? 'título "' + titulo + '"' : '', cab ? 'aviso "' + cab + '"' : '', tabelas.length ? tabelas.join(', ') : 'sem tabelas', texto ? 'texto "' + texto + '"' : 'resposta vazia'].filter(Boolean).join(' · ');
+    }
     const erData = s => { const m = String(s || '').match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/); return m ? +new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)) : 0; };
     async function erMesa(termo) {
       const dados = {
@@ -7236,8 +7258,8 @@
       if (r.semBase) return { erro: 'abra o ER (Paymobi) uma vez neste navegador para o painel saber o endereço' };
       if (!r.ok) return { erro: 'o ER não respondeu (HTTP ' + r.status + ')' };
       if (erLogin(r.texto)) return { erro: 'sessão do ER expirada: entre no ER neste navegador' };
-      const t = erDoc(r.texto).querySelector('#tabMesaCreditoLista');
-      if (!t) return { erro: 'resposta do ER sem a lista de propostas' };
+      const t = erTabelaMesa(r.texto);
+      if (!t) return { erro: 'resposta do ER sem a lista de propostas (' + erDiagnostico(r) + ')' };
       const ths = [...t.querySelectorAll('thead th')].map(th => erTxt(th.textContent).toLowerCase());
       const col = n => ths.findIndex(x => x.startsWith(n));
       const ci = { id: col('proposta'), sit: col('situa'), dh: col('data/hora'), cli: col('cliente'), loja: col('pto') };
@@ -7342,7 +7364,7 @@
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
       // as que deram erro voltam para a fila (as encerradas e as analisadas sem erro ficam como estão)
       // também voltam as que ficaram sem os dados do ER porque o ER não estava disponível (endereço, sessão ou rede)
-      const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu)/.test(a.aviso || ''));
+      const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu|resposta do ER sem a lista)/.test(a.aviso || ''));
       if (analises().some(refazer)) guardarAnalises(analises().filter(a => !refazer(a)));
       const jaFeitos = new Set(analises().map(a => a.chave));
       const fila = [...new Set(itensComCadeado().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));

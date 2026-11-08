@@ -56,3 +56,15 @@ O módulo de CAC usa este módulo para:
 ### Conta ativa
 
 `contaAtiva()` — retorna os dados da conta em uso no momento (apelido, ID). Usado por outros módulos para identificar o funcionário logado.
+
+### Login automático (sessão expirada)
+
+Opção `loginAuto` (padrão ligado; Configurações > Contas, "Entrar sozinho quando a sessão expirar").
+
+- **Última conta:** cada página do ER com usuário logado grava a conta em `ultimaContaER` (`lembrarConta`).
+- **Tela de login:** sem troca de conta em andamento, `loginAutomatico()` cria um `trocaConta` com `auto: true` para essa conta. Quem preenche e envia é `processarTroca()`, o mesmo caminho da troca de conta. Ele só envia com a senha salva na lista de contas, sem captcha visível (o `#txtCaptcha` do ER é oculto) e numa única tentativa.
+- **Senha recusada:** grava `loginAutoBloqueado = conta` e o login automático para, mesmo depois dos 15 min da troca. Volta a funcionar quando o funcionário entra à mão (`lembrarConta` limpa) ou salva outra senha para a conta (`guardarSenha` limpa).
+- **Várias abas:** o id da aba fica em `sessionStorage` (`mfAbaId`, igual depois de recarregar a própria aba). Só a aba que começou o login entra; as outras avisam e recarregam a cada `LOGIN_AUTO_OUTRA_ABA_MS`. Se a aba que começou sumir, outra assume depois de `LOGIN_AUTO_OUTRA_ABA_LIMITE_S`.
+- **Janela de sessão expirada** (`#dlgRelogin`) por cima de uma página aberta: conferida a cada `LOGIN_AUTO_CONFERE_MS`. Quando dá para entrar sozinho, vai para a tela de login (`cacBase() + '/'`) depois de `LOGIN_AUTO_ESPERA_MS`.
+- **"Sair" clicado pelo funcionário:** grava `erSaiuManual`, e o login automático não entra de novo (em nenhuma aba) até um novo login. A troca de conta do painel não conta, porque ela já tem um `trocaConta` antes de clicar em Sair.
+- **Depois de entrar:** aviso "Sessão do ER tinha expirado: entrei de novo com …". O `trocaConta` automático nunca vira o aviso de conta diferente da troca normal.

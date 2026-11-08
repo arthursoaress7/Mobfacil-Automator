@@ -67,6 +67,8 @@ Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): a
 
 ## Cruzamento com o ER
 
+**Sem o ER não analisa.** Antes de "1. Analisar" e de cada "Analisar (IA)", `erConferir()` busca na Mesa um nome que não existe. A resposta "nenhuma proposta" significa que o ER está respondendo, e esse ok vale `RD_ER_OK_S`. Sem endereço do ER, sessão expirada, conta que não é aprovadora da Mesa ou ER fora do ar: não analisa nada e diz o motivo, porque a planilha sairia sem proposta, vendedor e filial. Se o ER cair no meio da análise das vencidas (`erForaDoAr`), a análise para, a conversa que ficou sem o ER é desmarcada, e o próximo "1. Analisar" refaz todas as que ficaram sem o ER.
+
 Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
 
 1. **Caminhos, em ordem** (`MesaCreditoLista`), porque o CPF do Perfil pode estar errado ou ser de outra pessoa:

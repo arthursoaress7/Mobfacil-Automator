@@ -65,6 +65,11 @@
     RD_HORAS_JANELA: 24,    // h sem mensagem para considerar vencida uma conversa SEM cadeado (janela do WhatsApp)
     RD_ESPERA: 15,         // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
     RD_ESPERA_TELEFONE: 5,  // s máximos esperando o topo da conversa trocar o telefone da conversa anterior pelo desta
+    RD_ER_OK_S: 60,         // s em que a conferência "o ER está respondendo" vale antes de analisar de novo (RD Atendimento)
+    LOGIN_AUTO_CONFERE_MS: 3000,  // ms entre conferências da janela de sessão expirada do ER (login automático)
+    LOGIN_AUTO_ESPERA_MS: 1500,   // ms antes de ir para a tela de login quando a sessão expira com a página aberta
+    LOGIN_AUTO_OUTRA_ABA_MS: 8000, // ms que uma aba espera (e recarrega) enquanto outra aba faz o login automático
+    LOGIN_AUTO_OUTRA_ABA_LIMITE_S: 30, // s depois dos quais o login de outra aba é dado como abandonado e esta aba assume
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
     RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
     RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
@@ -89,6 +94,7 @@
     tema: 'claro',                   // 'claro' (padrão) ou 'escuro' (só cores)
     copiarAoConcluir: true,          // copia o resultado sozinho quando a fila termina
     trocaSemConfirmacao: true,
+    loginAuto: true,                 // sessão do ER expirada: entra sozinho na última conta usada (só com a senha salva em Contas)
     lerAbaCliente: true, 
     tmExpedienteAuto: true,          // Timers: inicia os agendamentos "próximo expediente" ao entrar no ER
     cacTrocaAuto: true,              // Consulta CAC: troca sozinho para a conta master quando a atual não tem acesso
@@ -2046,6 +2052,7 @@
           </details>
           <details class="mf-grupo" data-grupo="contas"><summary>Contas</summary>
             <label class="mf-opc" title="Desligado: pede confirmação antes de sair da conta atual."><input type="checkbox" id="mf-troca-direta"><span><b>Trocar de conta sem confirmação</b></span></label>
+            <label class="mf-opc" title="Na tela de login do ER, entra com a última conta usada. Precisa da senha salva na lista de contas (aba Contas)."><input type="checkbox" id="mf-login-auto"><span><b>Entrar sozinho quando a sessão expirar</b><small>Na tela de login, entra com a última conta usada (precisa da senha salva em Contas). Uma tentativa só: se a senha for recusada, não tenta de novo até você entrar manualmente ou salvar outra senha.</small></span></label>
           </details>
           <details class="mf-grupo" data-grupo="cac"><summary>Consulta CAC</summary>
             <label class="mf-lb-rot">Conta master (acessa o CAC)<select id="mf-cac-master"></select></label>
@@ -2550,6 +2557,7 @@
     ligarOpcao('#mf-formato-auto', 'formatoAuto');
     ligarOpcao('#mf-formatos-antigos', 'formatosAntigos');
     ligarOpcao('#mf-troca-direta', 'trocaSemConfirmacao');
+    ligarOpcao('#mf-login-auto', 'loginAuto');
     ligarOpcao('#mf-aba-cliente', 'lerAbaCliente');
     // saída do Relatório Diário: preferência só deste modo
     $('#mf-diario-saida').addEventListener('change', () => { GM_setValue('diarioSaida', $('#mf-diario-saida').value); atualizarConfigUI(); });
@@ -3748,9 +3756,13 @@
 
     // senhas: chave separada das contas, nunca exibidas nem incluídas no diagnóstico
     const senhas = () => GM_getValue('senhasContas', {}) || {};
+    // id desta aba (sessionStorage: continua igual quando a própria aba recarrega; outra aba tem outro)
+    const ABA_ID = (() => { try { let v = sessionStorage.getItem('mfAbaId'); if (!v) { v = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('mfAbaId', v); } return v; } catch (_) { return Math.random().toString(36).slice(2, 10); } })();
     const guardarSenha = (usuario, senha) => {
       const sx = senhas();
       if (senha) sx[usuario.toLowerCase()] = senha; else delete sx[usuario.toLowerCase()];
+      // senha nova para a conta cujo login automático foi recusado: libera uma nova tentativa
+      if (senha && String(GM_getValue('loginAutoBloqueado', '')).toLowerCase() === usuario.toLowerCase()) GM_deleteValue('loginAutoBloqueado');
       if (Object.keys(sx).length) GM_setValue('senhasContas', sx); else GM_deleteValue('senhasContas');
     };
     $('#mf-conta-ver').onclick = () => { const i = $('#mf-conta-senha'); i.type = i.type === 'password' ? 'text' : 'password'; };
@@ -3850,6 +3862,16 @@
       if (Date.now() - t.quando > 15 * 60 * 1000) { GM_deleteValue('trocaConta'); return; }
       const senha = campoSenha();
       if (senha) {
+        // login automático (sessão expirada) começado por OUTRA aba: só uma aba entra; esta espera e recarrega
+        if (t.auto && t.aba !== ABA_ID && t.etapa !== 'falhou') {
+          if (Date.now() - t.quando < CONFIG.LOGIN_AUTO_OUTRA_ABA_LIMITE_S * 1000) {
+            msg('Sessão expirada: outra aba do ER está entrando com ' + t.usuario + '. Esta aba recarrega em seguida.');
+            setTimeout(() => location.reload(), CONFIG.LOGIN_AUTO_OUTRA_ABA_MS);
+            return;
+          }
+          GM_setValue('trocaConta', { ...t, aba: ABA_ID, etapa: 'login', quando: Date.now() });   // a outra aba sumiu: esta assume
+          return processarTroca();
+        }
         const u = campoUsuario(senha);
         if (u && u.value !== t.usuario) {
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(u, t.usuario);
@@ -3876,11 +3898,13 @@
           setTimeout(() => {
             if (!campoSenha()) return;
             GM_setValue('trocaConta', { ...(GM_getValue('trocaConta', null) || t), etapa: 'falhou' });
+            if (t.auto) GM_setValue('loginAutoBloqueado', t.usuario);   // senha recusada: o login automático para até entrar à mão
             msg('O login automático de ' + t.usuario + ' não foi concluído. Confira a mensagem do sistema e a senha salva (aba Contas) e entre manualmente.');
           }, 10000);
           return;
         }
         if (t.etapa === 'enviado') GM_setValue('trocaConta', { ...t, etapa: 'falhou' });
+        if (t.auto && (t.etapa === 'enviado' || t.etapa === 'falhou')) GM_setValue('loginAutoBloqueado', t.usuario);
         msg(!u ? 'Tela de login: não achei o campo de usuário. Entre com ' + t.usuario + '.'
           : t.etapa === 'enviado' || t.etapa === 'falhou' ? 'O login automático de ' + t.usuario + ' não foi aceito. Confira a senha salva na aba Contas e entre manualmente (não tento de novo para não bloquear a conta).'
           : temCaptcha && pw ? 'Tela de login com verificação (captcha): usuário ' + t.usuario + ' preenchido; complete a verificação e entre.'
@@ -3889,6 +3913,11 @@
       }
       if (t.etapa === 'saindo' && Date.now() - t.quando < 3000) return;   // ainda é a página de onde saiu
       const a = contaAtiva();
+      if (t.auto) {   // login automático: já está logado (por ele ou à mão); não é uma troca de conta para conferir
+        GM_deleteValue('trocaConta');
+        if (a && a.usuario.toLowerCase() === t.usuario.toLowerCase() && t.etapa === 'enviado') msg('Sessão do ER tinha expirado: entrei de novo com ' + rotuloConta(a) + '.');
+        return;
+      }
       if (a && a.usuario.toLowerCase() === t.usuario.toLowerCase()) {
         GM_deleteValue('trocaConta');
         msg('Troca concluída: conta ativa ' + rotuloConta(a) + '.');
@@ -3908,6 +3937,52 @@
       GM_deleteValue('trocaConta');
       return true;
     };
+    /* ---- login automático quando a sessão do ER expira ----
+       Cada página logada guarda a conta em uso (GM 'ultimaContaER'). Na tela de login, sem troca de conta em andamento,
+       o painel entra com essa conta pelo mesmo caminho da troca (processarTroca): só com a senha salva em Contas, sem
+       captcha visível e UMA tentativa. Senha recusada = 'loginAutoBloqueado' até entrar à mão ou salvar outra senha.
+       Com várias abas, só a aba que começou entra; as outras esperam e recarregam. A janela de sessão expirada que o
+       sistema abre por cima da página (#dlgRelogin) leva para a tela de login. Desliga em Configurações > Contas. */
+    function lembrarConta() {
+      const u = usuarioLogado();
+      if (!u) return;
+      if (GM_getValue('ultimaContaER', '') !== u.codigo) GM_setValue('ultimaContaER', u.codigo);
+      if (String(GM_getValue('loginAutoBloqueado', '')).toLowerCase() === u.codigo.toLowerCase()) GM_deleteValue('loginAutoBloqueado');   // entrou: libera
+      GM_deleteValue('erSaiuManual');
+    }
+    // "Sair" clicado pelo funcionário (não é sessão expirada): não entra sozinho de novo até um novo login (vale para todas as abas)
+    document.addEventListener('click', e => {
+      const a = e.target.closest && e.target.closest('a, button, [onclick]');
+      if (!a || painel.contains(a) || GM_getValue('trocaConta', null)) return;   // a troca de conta do painel também passa pelo Sair
+      if (/\bSair\s*\(/.test(a.getAttribute('onclick') || '') || /^sair$/i.test((a.textContent || '').trim())) GM_setValue('erSaiuManual', Date.now());
+    }, true);
+    // conta e motivo para não entrar sozinho ('' = pode entrar)
+    const loginAutoConta = () => {
+      const usuario = String(GM_getValue('ultimaContaER', '') || '');
+      if (!cfg('loginAuto') || !usuario) return { usuario, motivo: 'desligado' };
+      if (GM_getValue('erSaiuManual', 0)) return { usuario, motivo: 'desligado' };   // saiu pelo "Sair": entra quem o funcionário quiser
+      if (!senhas()[usuario.toLowerCase()]) return { usuario, motivo: 'Sessão do ER expirada: salve a senha de ' + usuario + ' na lista de contas (aba Contas) para o painel entrar sozinho.' };
+      if (String(GM_getValue('loginAutoBloqueado', '')).toLowerCase() === usuario.toLowerCase())
+        return { usuario, motivo: 'Login automático parado: a senha salva de ' + usuario + ' foi recusada. Entre à mão ou salve a senha certa na aba Contas.' };
+      return { usuario, motivo: '' };
+    };
+    function loginAutomatico() {
+      if (GM_getValue('trocaConta', null) || !campoSenha() || usuarioLogado()) return;
+      const { usuario, motivo } = loginAutoConta();
+      if (motivo) { if (motivo !== 'desligado') msg(motivo); return; }
+      GM_setValue('trocaConta', { usuario, quando: Date.now(), etapa: 'login', auto: true, aba: ABA_ID });
+    }
+    let reloginIndo = false;
+    setInterval(() => {
+      const d = document.querySelector('#dlgRelogin');
+      if (reloginIndo || !d || !(d.classList.contains('in') || getComputedStyle(d).display === 'block')) return;
+      if (GM_getValue('trocaConta', null) || loginAutoConta().motivo) return;
+      reloginIndo = true;
+      msg('Sessão do ER expirada: indo para a tela de login para entrar de novo com ' + loginAutoConta().usuario + '...');
+      setTimeout(() => { location.href = cacBase() + '/'; }, CONFIG.LOGIN_AUTO_ESPERA_MS);
+    }, CONFIG.LOGIN_AUTO_CONFERE_MS);
+    lembrarConta();
+    loginAutomatico();
     desenharContas();
     processarTroca();
     desenharContas();
@@ -7546,6 +7621,19 @@
       }).filter(Boolean);
       return { linhas };
     }
+    // Antes de analisar: o ER está respondendo com uma sessão que consulta a Mesa? (busca por um nome que não existe:
+    // "nenhuma proposta" = ok). Sem isso a análise segue sem proposta, vendedor e filial, por isso não analisa.
+    // O ok vale CONFIG.RD_ER_OK_S segundos (o "Analisar (IA)" de várias conversas seguidas não repete a conferência).
+    let erOkAte = 0;
+    async function erConferir() {
+      if (Date.now() < erOkAte) return '';
+      const r = await erMesa('ZZZZ PAYMOBIFIN CONFERENCIA');
+      if (r.erro) { erOkAte = 0; return 'o ER não está disponível (' + r.erro + '). Sem o ER a planilha fica sem proposta, vendedor e filial; abra o ER, entre com a conta da Mesa e analise de novo.'; }
+      erOkAte = Date.now() + CONFIG.RD_ER_OK_S * 1000;
+      return '';
+    }
+    // aviso de uma análise que ficou sem o ER por ele estar fora (não por não achar o cliente)
+    const erForaDoAr = a => /ER: (abra o ER|sessão do ER expirada|o ER não respondeu|resposta do ER sem a lista|a conta \S+, que está logada no ER)/.test((a && a.aviso) || '');
     async function erVendedor(proposta) {
       for (const a of ['/MesaCredito/DetalheProposta', '/MesaCredito/MesaAnaliseProposta']) {
         const r = await erReq(a, { lngProposta: proposta });
@@ -7701,6 +7789,10 @@
       if (rdRodando) return;
       if (rdAbertas) return status('Aguarde: ' + rdAbertas + ' análise(s) do botão "Analisar (IA)" ainda em andamento.');
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
+      // sem o ER respondendo, a planilha sairia sem proposta, vendedor e filial: não começa
+      rdRodando = true; status('Conferindo se o ER está disponível...');
+      let erFora = ''; try { erFora = await erConferir(); } finally { rdRodando = false; }
+      if (erFora) return status('Não analisei: ' + erFora);
       // as que deram erro voltam para a fila (as encerradas e as analisadas sem erro ficam como estão)
       // também voltam as que ficaram sem os dados do ER porque o ER não estava disponível (endereço, sessão ou rede)
       const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu|resposta do ER sem a lista|a conta \S+, que está logada no ER)/.test(a.aviso || ''));
@@ -7724,6 +7816,8 @@
           guardarAnalises([...analises(), reg]);
           desenhar();
           feitos++;
+          // o ER caiu no meio (sessão expirou, conta trocada...): para em vez de seguir sem proposta, vendedor e filial
+          if (erForaDoAr(reg)) { erOkAte = 0; rdParar = true; guardarAnalises(analises().map(a => (a.chave === reg.chave ? { ...a, marcado: false } : a))); desenhar(); status('Parei: o ER deixou de responder no meio da análise. Entre no ER com a conta da Mesa e clique em "1. Analisar" de novo (as conversas que ficaram sem o ER são refeitas).'); break; }
           if (/chave do Gemini recusada|limite de uso|limite diário|recusou o pedido|nenhum modelo do Gemini/.test(reg.erro || '')) { rdParar = true; status('Parei: ' + reg.erro + '.'); break; }
           // o Gemini não está respondendo: para em vez de esperar em cada uma das próximas conversas
           semResposta = /não respondeu/.test(reg.erro || '') ? semResposta + 1 : 0;
@@ -7755,6 +7849,9 @@
       if (rdRodando) return status('Análise: já tem uma análise das vencidas ou um encerramento em andamento; aguarde terminar.');
       if (rdLendo) return status('Análise: ainda estou lendo a conversa anterior; aguarde um instante e clique de novo.');
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Análise: informe a chave do Gemini em "Configuração do Gemini".'); }
+      // sem o ER respondendo não analisa (a linha sairia sem proposta, vendedor e filial); a conferência vale alguns segundos
+      rdLendo = true; let erFora = ''; try { erFora = await erConferir(); } finally { rdLendo = false; }
+      if (erFora) return status('Análise: não analisei, ' + erFora);
       const l = lista();
       const it = l && [...l.children].find(y => { const n = nomeDoItem(y); return n && abertaE(n); });
       if (!it) return status('Análise: abra no RD a conversa que quer encerrar (ela precisa estar na lista "Meus atendimentos") e clique de novo.');

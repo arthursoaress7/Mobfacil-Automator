@@ -48,7 +48,7 @@ CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); ess
 | Chave | Conteúdo |
 |---|---|
 | `geminiChave` | Chave da API do Gemini (só neste navegador, sem criptografia) |
-| `geminiModelo` + `geminiModeloManual` | Modelo digitado no painel (fica salvo). Vazio: o painel escolhe sozinho, a cada vez que a página abre, o "flash" estável mais novo (preview/experimental só se não houver outro) |
+| `geminiModelo` + `geminiModeloManual` | Modelo digitado no painel (fica salvo). Vazio: o painel escolhe sozinho, a cada vez que a página abre: primeiro os **Flash-Lite** estáveis (no plano grátis têm bem mais pedidos por dia e respondem mais rápido), depois os Flash cheios estáveis, preview/experimental por último; em cada grupo, o mais novo |
 | `rdAnalises` | `{ dia, itens: [...] }` — análises do dia |
 | `rdLinhas` | `{ dia, linhas: [[A..M], ...] }` — linhas da planilha dos encerrados do dia |
 | `erBase` | Endereço completo do ER, gravado pelo painel do ER ao abrir (e de novo após `ER_BASE_RECONFERIR` s), mesmo quando o campo do sistema vem relativo |
@@ -73,3 +73,9 @@ Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xm
 4. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
 
 O CPF da planilha passa a ser o do cadastro no ER (corrige o CPF errado do Perfil). Avisos na revisão: por qual caminho o cliente foi achado (e os que não deram), CPF do Perfil diferente do ER, cliente não confirmado, nome do ER diferente do RD, proposta da conversa diferente da do cliente, várias/nenhuma efetivada, ER sem endereço salvo ("abra o ER uma vez neste navegador") ou sessão expirada.
+
+## Limites do plano grátis do Gemini
+
+Os limites mudam com frequência e valem **por projeto do Google** (não por chave) e **por modelo**; a cota diária volta à meia-noite do horário do Pacífico (por volta das 4 h–5 h de Brasília). Os modelos Flash cheios mais novos chegam a ter só cerca de 20 pedidos por dia no grátis, enquanto os Flash-Lite têm centenas — por isso o painel começa pelos Lite. Cada conversa analisada usa 1 pedido (mais as tentativas, se o modelo falhar).
+
+Limite por minuto (HTTP 429): espera `RD_ESPERA_LIMITE` s e tenta de novo. Limite do dia esgotado: passa direto para o próximo modelo (cada modelo tem a sua cota); sem nenhum modelo com cota, a análise para com o aviso.

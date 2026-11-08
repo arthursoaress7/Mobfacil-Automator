@@ -60,7 +60,8 @@
     CORTE_QTD: 10,          // reprova se quantidade de restrições > 10
     VAZIAS_APOS_ID: 3,      // colunas entre a Proposta e a Qtd Restritivos (Nome, CPF, IMEI)
     TIMEOUT_CCB: 20,        // s máximos esperando cada resposta do sistema no download de CCB
-    RD_ESPERA: 15,          // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
+    ER_BASE_RECONFERIR: 5,  // s depois de abrir o ER para gravar de novo o endereço do ER (usado pelo RD Atendimento)
+    RD_ESPERA: 15,         // s máximos esperando a conversa, a janela de encerrar ou a lista do RD Atendimento responderem
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
     RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
     RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
@@ -4729,7 +4730,19 @@
       return location.origin + (m ? m[1] : '');
     };
     // endereço do ER guardado para o módulo do RD Atendimento consultar a Mesa (só o endereço; nenhum dado de cliente)
-    try { const b = cacBase(); if (/^https:\/\/paymobi\.ercard\.com\.br/i.test(b) && GM_getValue('erBase', '') !== b) GM_setValue('erBase', b); } catch (_) {}
+    // O campo do sistema (txtCaminhoSistema) pode vir relativo ("/ErCardWeb"): vira endereço completo antes de gravar.
+    // Confere de novo depois que a página termina de montar (o campo pode aparecer depois do login).
+    const erGuardarBase = () => {
+      try {
+        // resolve exatamente como as consultas do painel (cacBase() + '/MesaCredito/...', relativo à página) e tira o caminho
+        const u = new URL(cacBase() + '/MesaCredito/MesaCreditoLista', location.href);
+        if (!/(^|\.)paymobi\.ercard\.com\.br$/i.test(u.hostname)) return;
+        const b = (u.origin + u.pathname.replace(/\/MesaCredito\/MesaCreditoLista$/, '')).replace(/\/+$/, '');
+        if (GM_getValue('erBase', '') !== b) GM_setValue('erBase', b);
+      } catch (_) {}
+    };
+    erGuardarBase();
+    setTimeout(erGuardarBase, CONFIG.ER_BASE_RECONFERIR * 1000);
     let cacOcupado = false;
     const cacStatus = t => { $('#mf-cac-st').textContent = t; };
     const limpoTxt = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
@@ -6903,7 +6916,7 @@
     card.append(topo, corpo);
     raiz.append(card, abrir);
     document.body.appendChild(raiz);
-    abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; rdContar(); };
+    abrir.onclick = () => { card.style.display = 'block'; abrir.style.display = 'none'; pintarCfg(); rdContar(); };
     fechar.onclick = () => { card.style.display = 'none'; abrir.style.display = ''; };
 
     // configuração: chave e modelo do Gemini
@@ -6913,21 +6926,38 @@
     const modelo = el('input', 'width:100%;box-sizing:border-box;margin-top:6px;padding:7px 9px;border:1px solid #d3dbe6;border-radius:8px'); modelo.placeholder = 'Modelo (vazio = escolher sozinho um "flash")';
     const salvar = el('button', BT + ';margin-top:6px', 'Salvar');
     const aviso = el('div', 'font-size:12px;color:#64748b;margin-top:6px', 'A chave fica só neste navegador (armazenamento do Tampermonkey, sem criptografia); nunca vai para o código, o GitHub ou outros funcionários. O texto das conversas vai para o Google sem CPF, telefone e e-mail; no plano grátis o Google pode usar esse texto para melhorar os produtos dele.');
-    cfgBox.append(chave, modelo, salvar, aviso);
+    const chaveInfo = el('div', 'font-size:12px;margin-top:4px;font-weight:600');
+    cfgBox.append(chave, chaveInfo, modelo, salvar, aviso);
     // modelo: o digitado em Configuração fica salvo (geminiModelo + geminiModeloManual); o automático só vale nesta página.
     // A 13.4 salvava a escolha automática em geminiModelo sem a marca: ela é ignorada e apagada.
     let modeloAuto = '';
     if (GM_getValue('geminiModelo', '') && !GM_getValue('geminiModeloManual', false)) GM_deleteValue('geminiModelo');
     const modeloManual = () => (GM_getValue('geminiModeloManual', false) && GM_getValue('geminiModelo', '')) || '';
-    const pintarCfg = () => { chave.value = GM_getValue('geminiChave', '') ? '••••••••' : ''; modelo.value = modeloManual(); cfgBox.open = !GM_getValue('geminiChave', ''); };
-    chave.addEventListener('focus', () => { if (chave.value === '••••••••') chave.value = ''; });
-    salvar.onclick = () => {
-      const k = chave.value.trim();
-      if (k && k !== '••••••••') GM_setValue('geminiChave', k);
+    // A chave e o modelo são salvos ao colar/digitar (ao sair do campo ou com Enter), sem depender do botão Salvar.
+    // Só esta parte mexe na configuração: limpar a lista ou recontar os atendimentos nunca apaga nem esconde a chave.
+    const pintarChave = () => {
+      const k = GM_getValue('geminiChave', '');
+      if (document.activeElement !== chave) chave.value = k ? '••••••••' : '';
+      chaveInfo.textContent = k ? 'Chave salva ✓ (termina em …' + k.slice(-4) + ')' : 'Nenhuma chave salva: cole a chave da API do Gemini acima.';
+      chaveInfo.style.color = k ? '#15803d' : '#b45309';
+    };
+    const salvarChave = () => { const k = chave.value.trim(); if (k && k !== '••••••••') GM_setValue('geminiChave', k); chave.blur(); pintarChave(); };
+    const salvarModelo = () => {
       const m = modelo.value.trim().replace(/^models\//, '');
       if (m) { GM_setValue('geminiModelo', m); GM_setValue('geminiModeloManual', true); } else { GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual'); }
-      modeloAuto = '';
-      pintarCfg(); status(GM_getValue('geminiChave', '') ? 'Configuração salva.' : 'Informe a chave do Gemini.');
+      modeloAuto = ''; modelo.value = modeloManual();
+    };
+    let cfgPintada = false;
+    const pintarCfg = () => { pintarChave(); modelo.value = modeloManual(); if (!cfgPintada) cfgBox.open = !GM_getValue('geminiChave', ''); cfgPintada = true; };
+    chave.addEventListener('focus', () => { if (chave.value === '••••••••') chave.value = ''; });
+    chave.addEventListener('change', salvarChave);
+    chave.addEventListener('blur', () => { if (!chave.value.trim()) pintarChave(); });   // saiu sem digitar: a chave salva continua lá
+    chave.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); salvarChave(); } });
+    modelo.addEventListener('change', salvarModelo);
+    modelo.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); salvarModelo(); modelo.blur(); } });
+    salvar.onclick = () => {
+      salvarChave(); salvarModelo();
+      status(GM_getValue('geminiChave', '') ? 'Configuração salva.' : 'Informe a chave do Gemini.');
     };
 
     const st = el('div', 'padding:8px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;white-space:pre-wrap');
@@ -6982,7 +7012,7 @@
     const nomeDoItem = it => rdNorm((it.querySelector('p') || {}).textContent);
     const etiquetasDoItem = it => [...it.querySelectorAll('[class*="Tag__Display"]')].map(s => s.textContent.trim()).filter(t => !/^\+\d+$/.test(t));
     function rdContar() {
-      pintarCfg(); desenhar();
+      desenhar();
       const n = itensComCadeado().length;
       status(lista() ? n + ' atendimento(s) com cadeado carregado(s) em "Meus atendimentos".' : 'Abra a tela de atendimentos (lista "Meus atendimentos").');
     }
@@ -7304,8 +7334,9 @@
       if (rdRodando) return;
       if (!GM_getValue('geminiChave', '')) { cfgBox.open = true; return status('Informe a chave do Gemini em "Configuração do Gemini".'); }
       // as que deram erro voltam para a fila (as encerradas e as analisadas sem erro ficam como estão)
-      const comErro = analises().filter(a => a.erro && !a.encerrado);
-      if (comErro.length) guardarAnalises(analises().filter(a => !(a.erro && !a.encerrado)));
+      // também voltam as que ficaram sem os dados do ER porque o ER não estava disponível (endereço, sessão ou rede)
+      const refazer = a => !a.encerrado && (a.erro || /ER: (abra o ER|sessão do ER expirada|o ER não respondeu)/.test(a.aviso || ''));
+      if (analises().some(refazer)) guardarAnalises(analises().filter(a => !refazer(a)));
       const jaFeitos = new Set(analises().map(a => a.chave));
       const fila = [...new Set(itensComCadeado().map(nomeDoItem))].filter(n => n && !jaFeitos.has(n));
       if (!fila.length) return status('Nenhum atendimento com cadeado novo para analisar (os já analisados hoje estão abaixo).');

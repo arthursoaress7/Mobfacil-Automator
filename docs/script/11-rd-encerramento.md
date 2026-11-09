@@ -54,7 +54,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 
 ## Privacidade
 
-CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); esses dados são lidos localmente para a planilha. No plano grátis o Google pode usar o texto enviado para melhorar os produtos dele.
+CPF (nos mesmos formatos aceitos na busca do CPF), telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); esses dados são lidos localmente para a planilha. No plano grátis o Google pode usar o texto enviado para melhorar os produtos dele.
 
 ## Armazenamento
 
@@ -79,8 +79,8 @@ Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): a
 Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
 
 1. **Caminhos, em ordem** (`MesaCreditoLista`), porque o CPF do Perfil pode estar errado ou ser de outra pessoa:
-   1. CPF do Perfil do RD
-   2. CPF que o cliente escreveu na conversa
+   1. CPF do Perfil do RD (CPF com dígito verificador errado é pulado)
+   2. CPF que o cliente escreveu na conversa (procurado na conversa **inteira**, não só nas últimas `RD_MAX_MENSAGENS`; aceita 123.456.789-09, 12345678909, "123 456 789 09", "123.456.789.09", colado na palavra; só vale com os **dígitos verificadores** certos, para um telefone de 11 dígitos não virar CPF; sem nenhum do cliente, vale o que o atendente escreveu)
    3. Nº da proposta citado na conversa
    4. Nome completo (Perfil, Gemini ou nome do contato com 2+ palavras) — só propostas com o **nome igual**
 2. Em cada caminho, várias propostas: a **efetivada** (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa; senão a mais recente que não está cancelada (`escolherProposta`).

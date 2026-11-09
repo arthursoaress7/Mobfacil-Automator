@@ -7717,7 +7717,9 @@
       await esperar(() => { const t = document.querySelector('#chat-show-messages').innerText; const pronto = t !== antes && t === ult; ult = t; return pronto; }, 6);
       return true;
     }
-    function lerMensagens() {
+    // todas = sem o corte das últimas RD_MAX_MENSAGENS (o corte é só para o texto que vai à IA; o CPF e a proposta são
+    // procurados na conversa inteira, porque o cliente costuma mandar o CPF no começo, antes dos menus do robô)
+    function lerMensagens(todas) {
       const caixa = document.querySelector('#chat-show-messages');
       if (!caixa) return [];
       return [...caixa.querySelectorAll('.card')].map(card => {
@@ -7726,12 +7728,12 @@
         const texto = card.innerText.replace(/\s+\n/g, '\n').trim();
         const meta = bloco.innerText.replace(card.innerText, '').replace(/\s+/g, ' ').trim();   // "Arthur - 7 novembro, 2026 10:33"
         return { quem, texto, meta };
-      }).filter(m => m.texto).slice(-CONFIG.RD_MAX_MENSAGENS);
+      }).filter(m => m.texto).slice(todas ? 0 : -CONFIG.RD_MAX_MENSAGENS);
     }
     // dados pessoais saem do texto antes de ir para o Gemini (o script os lê localmente para a planilha)
     const mascarar = t => String(t)
       .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[EMAIL]')
-      .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[CPF]')
+      .replace(/(?<!\d)\d{3}[\s.\-_/]{0,3}\d{3}[\s.\-_/]{0,3}\d{3}[\s.\-_/]{0,3}\d{2}(?!\d)/g, '[CPF]')   // os mesmos formatos que cpfDe aceita
       .replace(/(?:\+?55\s?)?\(?\b\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b/g, '[TELEFONE]');
     // Perfil do contato (painel à direita da conversa: Nome, Email, CPF...). Abre o painel se estiver fechado.
     async function lerPerfil() {
@@ -7746,7 +7748,24 @@
       return { nome: campo('name'), cpf: campo('cpf'), email: campo('email') };
     }
     const fmtCpf = t => { const d = String(t || '').replace(/\D/g, ''); return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : ''; };
-    const cpfDe = msgs => { for (const m of msgs) { const x = m.texto.match(/\b(\d{3})\.?(\d{3})\.?(\d{3})-?(\d{2})\b/); if (x) return x[1] + '.' + x[2] + '.' + x[3] + '-' + x[4]; } return ''; };
+    // CPF válido (dígitos verificadores): evita pegar um telefone de 11 dígitos ("11987654321") como CPF
+    const cpfValido = d => {
+      d = String(d || '').replace(/\D/g, '');
+      if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+      const dv = n => { let s = 0; for (let i = 0; i < n; i++) s += +d[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+      return dv(9) === +d[9] && dv(10) === +d[10];
+    };
+    // CPF escrito na conversa: aceita 123.456.789-09, 12345678909, "123 456 789 09", "123.456.789.09", "cpf12345678909"
+    // (separadores ponto, traço, barra, espaço ou sublinhado entre os grupos). Só vale se os dígitos verificadores
+    // baterem; o primeiro CPF válido das mensagens passadas (na ordem da conversa).
+    const RX_CPF = /(?<!\d)(\d{3})[\s.\-_/]{0,3}(\d{3})[\s.\-_/]{0,3}(\d{3})[\s.\-_/]{0,3}(\d{2})(?!\d)/g;
+    const cpfDe = msgs => {
+      for (const m of msgs) for (const x of String(m.texto || '').matchAll(RX_CPF)) {
+        const d = x[1] + x[2] + x[3] + x[4];
+        if (cpfValido(d)) return x[1] + '.' + x[2] + '.' + x[3] + '-' + x[4];
+      }
+      return '';
+    };
     const propostaDe = msgs => { for (const m of msgs) { const x = m.texto.match(/proposta\D{0,20}(\d{4,6})\b/i); if (x) return x[1]; } return ''; };
     const dataDe = msgs => {
       for (let i = msgs.length - 1; i >= 0; i--) {
@@ -8024,7 +8043,7 @@
       add('cpf', String(d.cpfConversa || '').replace(/\D/g, ''), 'CPF escrito na conversa');
       add('proposta', d.propostaConversa, 'proposta citada na conversa');
       (d.nomes || []).filter(n => /\S+\s+\S+/.test(n || '')).forEach(n => add('nome', n.trim(), 'nome ' + n.trim()));
-      tentativas.forEach(t => { if (t.tipo === 'cpf' && t.valor.length !== 11) t.invalida = true; });
+      tentativas.forEach(t => { if (t.tipo === 'cpf' && !cpfValido(t.valor)) t.invalida = true; });   // inclui o dígito verificador
       const validas = tentativas.filter(t => !t.invalida);
       if (!validas.length) return { avisos: [d.lojista ? 'lojista: a conversa não cita CPF, proposta nem nome completo do cliente para consultar o ER' : 'sem CPF, proposta ou nome completo para consultar o ER'] };
       const nomesConhecidos = (d.nomes || []).filter(Boolean).map(semAcento);
@@ -8074,6 +8093,7 @@
         // para em vez de misturar dados de dois contatos
         const trocou = () => !abertaE(nome);
         const msgs = lerMensagens();
+        const todasMsgs = lerMensagens(true);   // a conversa inteira, só para achar o CPF e a proposta citados
         if (!msgs.length) throw new Error('não encontrei mensagens na conversa');
         const tel = await telefoneDaConversa(nome);
         if (trocou()) throw new Error('a conversa foi trocada antes de terminar a leitura; abra de novo e clique em Analisar (IA)');
@@ -8090,7 +8110,8 @@
         reg.tipoPor = peloRD ? 'pelo ' + peloRD.por : 'pela conversa (IA)';
         // cruzamento: CPF e nome do Perfil do RD têm prioridade; o que o cliente escreveu na conversa confere.
         // Lojista: o Perfil e o telefone são da LOJA; o cliente sai do CPF/proposta que o lojista citou na conversa.
-        const cpfConversa = cpfDe(msgs.filter(m => m.quem === 'Cliente'));
+        // CPF da conversa inteira: primeiro o que o cliente escreveu; sem nenhum, o que o atendente escreveu (ex.: confirmando)
+        const cpfConversa = cpfDe(todasMsgs.filter(m => m.quem === 'Cliente')) || cpfDe(todasMsgs.filter(m => m.quem === 'Atendente'));
         const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
         const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
         // Nome do cliente na planilha: o do ER quando o cruzamento acha o cliente (logo abaixo); senão é SEMPRE o nome do
@@ -8104,7 +8125,7 @@
         if (sol.trocado || obs.trocado) avisos.push('a IA escreveu que o atendimento não respondeu; troquei pelo assunto da conversa (confira a solicitação e a observação)');
         j.solicitacao = sol.texto; j.observacoes = obs.texto;
         Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
-          nomeCliente: nomeContato, cpf: cpfPerfil || cpfConversa, proposta: propostaDe(msgs), data: dataDe(msgs) });
+          nomeCliente: nomeContato, cpf: cpfPerfil || cpfConversa, proposta: propostaDe(todasMsgs), data: dataDe(msgs) });
         // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
         status(rotulo + ' (consultando o ER)...');
         const nomeIA = (j.nome_cliente || '').trim();

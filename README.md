@@ -1,6 +1,6 @@
 # PaymobiFin — Assistente
 
-v13.26.1
+v13.26.2
 
 ---
 

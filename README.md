@@ -1,6 +1,6 @@
 # PaymobiFin — Assistente
 
-Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymobi, automatizando tarefas operacionais da equipe de cobrança e crédito.
+v13.25
 
 **Versão atual:** 13.22
 

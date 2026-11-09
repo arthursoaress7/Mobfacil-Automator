@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.22
+// @version      13.25
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.22');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.25');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -7211,7 +7211,7 @@
       desenho.forEach(([t, a]) => { const n = document.createElementNS(SVG, t); Object.entries(a).forEach(([k, v]) => n.setAttribute(k, v)); s.appendChild(n); }); return s; };
     const ICONE_SOL = [['circle', { cx: 12, cy: 12, r: 4 }], ['path', { d: 'M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41' }]];
     const ICONE_LUA = [['path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' }]];
-    const ICONE_MENOS = [['path', { d: 'M5 12h14' }]], ICONE_X = [['path', { d: 'M18 6 6 18M6 6l12 12' }]];
+    const ICONE_X = [['path', { d: 'M18 6 6 18M6 6l12 12' }]];
     const btTopo = (desenho, dica) => {
       const b = el('button'); b.title = dica; b.setAttribute('aria-label', dica); b.appendChild(icone(desenho));
       b._mfCss = c => 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:' + c.topoIcone + ';cursor:pointer;flex:none;' + TRANS;
@@ -7224,10 +7224,10 @@
       btTema.title = rdTema === 'escuro' ? 'Modo escuro (clique para o modo claro)' : 'Modo claro (clique para o modo escuro)';
       btTema.setAttribute('aria-label', btTema.title);
     };
-    // minimizar e fechar só escondem o painel: a análise e o encerramento continuam (só o botão Parar interrompe)
-    const minimizar = btTopo(ICONE_MENOS, 'Minimizar (a automação continua; o andamento aparece no botão do canto)');
+    // fechar só esconde o painel no botão do canto: a análise e o encerramento continuam (só o botão Parar interrompe).
+    // (havia também um "minimizar", que fazia exatamente o mesmo; ficou só o fechar)
     const fechar = btTopo(ICONE_X, 'Fechar (a automação continua; o andamento aparece no botão do canto)');
-    topo.append(btTema, minimizar, fechar);
+    topo.append(btTema, fechar);
     const corpo = estilo(el('div'), c => 'padding:12px;display:flex;flex-direction:column;gap:10px;background:' + c.fundo + ';' + TRANS);
     card.append(topo, corpo);
     raiz.append(card, abrir);
@@ -7246,7 +7246,6 @@
       abrir.textContent = (rdRodando || rdAbertas) && t ? '🔒 ' + t.split('\n')[0] : ROTULO_ABRIR;
       abrir.title = (rdRodando || rdAbertas) && t ? t + '\n\n(clique para abrir o painel; a automação continua)' : TITULO_ABRIR;
     };
-    minimizar.onclick = recolher;
     fechar.onclick = recolher;
     // superfície (cartão) do painel: blocos de configuração, ações e cada conversa
     const supCss = (extra) => c => 'background:' + c.sup + ';border:1px solid ' + c.borda + ';border-radius:12px;' + TRANS + (extra ? ';' + extra : '');
@@ -7276,6 +7275,7 @@
     // modelo: sempre automático (escolhido nesta página). Modelo salvo por versões anteriores (13.4–13.10) é descartado.
     let modeloAuto = '';
     GM_deleteValue('geminiModelo'); GM_deleteValue('geminiModeloManual');
+    GM_deleteValue('rdEscurecerPagina');   // opção de escurecer a página do RD (13.23–13.24), que saiu: limpa o que ficou salvo
     // A chave é salva ao colar/digitar (ao sair do campo ou com Enter), sem depender do botão Salvar.
     // Só esta parte mexe na configuração: limpar a lista ou recontar os atendimentos nunca apaga nem esconde a chave.
     const chipCss = (cor, fundo, borda) => 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:650;white-space:nowrap;color:' + cor + ';background:' + fundo + ';border:1px solid ' + borda;

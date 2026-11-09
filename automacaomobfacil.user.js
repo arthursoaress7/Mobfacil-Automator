@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.26.3
+// @version      13.26.4
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.26.3');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.26.4');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -2555,7 +2555,10 @@
       $('#mf-cop').style.display = diario ? 'none' : '';
       $('#mf-cid').style.display = diario || m === 'rendas' ? 'none' : '';
       $('#mf-cfull').style.display = coleta && cfg('auditoriaCompleta') ? '' : 'none';
-      $('#mf-filtro').textContent = cfg('ignorarCanceladasTestes') ? 'Ignorando canceladas e testes' : 'Incluindo canceladas e testes';
+      // Relatório Diário com a visão geral do dia: canceladas e em digitação entram; só os testes ficam fora (ver motivoFora)
+      const ign = cfg('ignorarCanceladasTestes');
+      $('#mf-filtro').textContent = !ign ? 'Incluindo canceladas e testes' : diarioTudo() ? 'Incluindo canceladas (sem testes)' : 'Ignorando canceladas e testes';
+      $('#mf-filtro').title = ign && diarioTudo() ? 'Relatório Diário: visão geral do dia (Configurações). Entram canceladas e em digitação (CONF CAD); propostas de teste continuam fora.' : '';
     }
     $('#mf-modo').addEventListener('change', () => { GM_setValue('modo', modo()); atualizarConfigUI(); });
     const ligarOpcao = (sel, chave) => {

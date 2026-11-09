@@ -1,8 +1,8 @@
 # PaymobiFin — Assistente
 
-v13.25
+Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymobi, automatizando tarefas operacionais da equipe de cobrança e crédito.
 
-**Versão atual:** 13.22
+**Versão atual:** 13.25
 
 ---
 
@@ -49,10 +49,16 @@ v13.25
 
 ```
 Mobfacil-Automator/
-├── automacaomobfacil.user.js   ← código-fonte (monólito)
-├── README.md                   ← este arquivo
-├── instructions.md             ← manual operacional para IAs e desenvolvedores
-├── CLAUDE.md                   ← entrada rápida para o Claude Code
+├── automacaomobfacil.user.js       ← código-fonte (monólito)
+├── README.md                       ← este arquivo
+├── instructions.md                 ← manual operacional para IAs e desenvolvedores
+├── CLAUDE.md                       ← entrada rápida para o Claude Code
+├── .github/
+│   ├── SETUP.md                    ← configurações necessárias pelo proprietário
+│   └── workflows/
+│       ├── validate-pr.yml         ← valida todo PR antes do merge
+│       ├── auto-merge.yml          ← merge automático para alterações rotineiras
+│       └── release.yml             ← cria versão e CHANGELOG automaticamente
 └── docs/
     └── script/
         ├── 01-visao-geral.md
@@ -74,59 +80,69 @@ Documentação técnica de cada módulo em [`docs/script/`](./docs/script/).
 
 ## Desenvolvimento
 
-### Pré-requisitos
+### Fluxo de trabalho
 
-- Git
-- Acesso ao repositório no GitHub
-- Navegador com Tampermonkey instalado (para testar)
+O projeto usa duas branches permanentes:
+
+```
+main         ←  produção — distribuída aos usuários via @updateURL
+  ↑ PR após testes aprovados
+development  ←  integração — todo trabalho é testado aqui primeiro
+  ↑ PR de branch temporária
+  └── tipo/descricao-curta  (temporária, uma por tarefa)
+```
+
+**Todo desenvolvimento começa em `development`.** Só vai para `main` depois de testado.
 
 ### Iniciando o trabalho
 
 ```bash
-# 1. Garanta que está com a main atualizada
-git checkout main
+# 1. Atualizar development
+git checkout development
 git pull
 
-# 2. Crie uma branch para a sua tarefa
+# 2. Criar branch para a tarefa
 git checkout -b tipo/descricao-curta
 
-# 3. Desenvolva e faça commits seguindo o padrão
+# 3. Desenvolver e commitar
 git add arquivo
 git commit -m "tipo: descrição objetiva"
 
-# 4. Envie a branch
+# 4. Enviar a branch
 git push -u origin tipo/descricao-curta
 
-# 5. Abra um Pull Request para a main no GitHub
+# 5. Abrir PR → development (não main)
+```
+
+### Subindo para produção
+
+Quando o trabalho em `development` estiver testado e estável:
+
+```bash
+# Abrir PR: development → main
+# Título: tipo: descrição (Conventional Commits)
+# O merge é manual — requer validação final
 ```
 
 ---
 
 ## Padrão de branches
 
-Adotamos **GitHub Flow** — a `main` é sempre estável e toda alteração chega por Pull Request.
-
-| Prefixo | Uso |
-|---|---|
-| `feature/` | Nova funcionalidade |
-| `fix/` | Correção de erro |
-| `docs/` | Documentação |
-| `refactor/` | Refatoração autorizada |
-| `chore/` | Manutenção e configurações |
-| `hotfix/` | Correção urgente em produção |
-
-**Exemplos:**
-```
-feature/exportar-relatorios
-fix/erro-na-coleta-de-score
-docs/atualizar-instrucoes
-hotfix/falha-critica-ccb
-```
+| Branch/Prefixo | Tipo | Base | Destino |
+|---|---|---|---|
+| `main` | Permanente | — | Produção |
+| `development` | Permanente | — | Integração/testes |
+| `feature/` | Temporária | `development` | `development` |
+| `fix/` | Temporária | `development` | `development` |
+| `docs/` | Temporária | `development` | `development` |
+| `refactor/` | Temporária | `development` | `development` |
+| `chore/` | Temporária | `development` | `development` |
+| `hotfix/` | Temporária | `main` | `main` + `development` |
 
 Regras:
-- Cada branch representa uma tarefa específica
-- **Nunca commitar diretamente na `main`**
-- Branches são temporárias: criadas para a tarefa e removidas após o merge
+- Nunca commitar diretamente em `main` ou `development`
+- Uma branch por tarefa
+- Branches temporárias são removidas após o merge
 
 ---
 
@@ -138,65 +154,51 @@ Todo commit deve seguir o formato:
 tipo: descrição objetiva em minúsculas
 ```
 
-| Tipo | Quando usar |
-|---|---|
-| `feat` | Nova funcionalidade para o usuário |
-| `fix` | Correção de bug |
-| `docs` | Apenas documentação |
-| `refactor` | Refatoração sem mudança de comportamento |
-| `chore` | Atualização de versão, configs, manutenção |
-| `perf` | Melhoria de desempenho |
-| `test` | Testes |
-| `build` | Build, dependências |
-| `ci` | GitHub Actions, automação |
+| Tipo | Impacto SemVer | Quando usar |
+|---|---|---|
+| `feat` | MINOR | Nova funcionalidade |
+| `fix` | PATCH | Correção de bug |
+| `docs` | — | Apenas documentação |
+| `refactor` | — | Refatoração |
+| `chore` | — | Versão, configs, manutenção |
+| `perf` | PATCH | Melhoria de desempenho |
+| `test` | — | Testes |
+| `ci` | — | GitHub Actions |
 
-**Mudança incompatível:** adicionar `BREAKING CHANGE:` no rodapé ou `!` após o tipo:
-```
-feat!: remover campo legado do módulo de contas
-```
+Mudança incompatível: `feat!:` ou `BREAKING CHANGE:` no rodapé.
 
-**Exemplos reais do projeto:**
-```
-feat: RD analisa a conversa aberta para encerrar antes das 24h
-fix: RD encerra conversas escolhidas antes das 24h
-chore: versão 13.13
-docs: adicionar instructions.md e CLAUDE.md
-```
+**O título do PR deve seguir o mesmo formato.**
 
 ---
 
 ## Pull Requests
 
-- O título do PR deve seguir o padrão de Conventional Commits
-- Descreva o que muda, o que foi testado e se há impacto em outros módulos
-- Use **Squash Merge** para manter o histórico da `main` organizado
-- **Nunca fazer merge sem revisar o diff**
+- PR de branch temporária → `development` (rotina, pode ter auto-merge)
+- PR de `development` → `main` (produção, requer validação manual)
+- Usar **Squash Merge** para manter histórico limpo
 
 ---
 
 ## Versionamento (SemVer)
 
-O projeto usa `MAJOR.MINOR.PATCH` no campo `@version` do cabeçalho do script.
+O campo `@version` no cabeçalho do script é a única fonte da versão.
 
-| Situação | Incremento |
-|---|---|
-| `feat` | MINOR |
-| `fix`, `perf` | PATCH |
-| `BREAKING CHANGE` | MAJOR |
-| `docs`, `chore`, `test`, `ci` | nenhum (por padrão) |
-| `refactor` com impacto funcional | MINOR ou PATCH, conforme o caso |
+O workflow `release.yml` calcula e cria a release automaticamente a cada merge na `main`:
+- `feat` → MINOR · `fix`/`perf` → PATCH · `BREAKING CHANGE` → MAJOR
 
-A versão é atualizada manualmente no `@version` do cabeçalho do script a cada release. Um commit de `chore: versão X.Y.Z` acompanha essa atualização.
-
-> **Automação futura:** há plano de avaliar `semantic-release` com GitHub Actions para calcular e aplicar o SemVer automaticamente. Enquanto isso não estiver implementado, a versão é gerenciada manualmente.
+Acompanha um commit manual `chore: versão X.Y.Z` para atualizar o `@version` no script.
 
 ---
 
-## Releases
+## GitHub Actions
 
-Não há processo automatizado de release ainda. Cada integração na `main` com incremento de versão constitui um release implícito, distribuído aos usuários pelo mecanismo de atualização automática do Tampermonkey.
+| Workflow | Quando executa | O que faz |
+|---|---|---|
+| `validate-pr.yml` | Todo PR aberto | Valida título, detecta alterações críticas (Categoria B), verifica integridade do script |
+| `auto-merge.yml` | Após validação passar | Ativa Squash Merge automático para PRs rotineiros |
+| `release.yml` | Push na `main` | Calcula SemVer, atualiza CHANGELOG, cria tag e GitHub Release |
 
-> **Atenção:** qualquer push na `main` atualiza o script para todos os usuários com atualização automática habilitada. Teste antes de integrar.
+> **Configuração necessária:** ver [`.github/SETUP.md`](./.github/SETUP.md) para as configurações que o proprietário do repositório precisa aplicar.
 
 ---
 
@@ -204,4 +206,4 @@ Não há processo automatizado de release ainda. Cada integração na `main` com
 
 Para desenvolver ou manter o projeto — especialmente com o apoio de uma IA — leia o [`instructions.md`](./instructions.md).
 
-Ele contém a arquitetura interna, padrões de código, regras de autonomia para IAs, política de versionamento detalhada e checklists obrigatórios.
+Ele contém a arquitetura interna, padrões de código, política de autonomia para IAs, fluxo Git completo e checklists obrigatórios.

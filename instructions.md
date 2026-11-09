@@ -67,7 +67,7 @@ O código-fonte é sempre a fonte de verdade sobre **como o sistema funciona hoj
 
 A IA pode executar o ciclo completo sem aguardar aprovação:
 
-- Criar branch → implementar → commitar → push → abrir Pull Request → merge automático
+- Criar branch → implementar → commitar → push → abrir Pull Request
 
 **Exemplos:**
 - Atualização de documentação
@@ -91,12 +91,11 @@ A IA pode fazer diagnóstico e preparar proposta, mas **deve aguardar aprovaçã
 - Modificações em mecanismos de segurança (criptografia, Pusher)
 - Alterações no `@downloadURL` ou `@updateURL` (impacta todos os usuários)
 - Mudanças em permissões ou configurações administrativas do GitHub
-- Alterações em arquivos de workflows (`.github/workflows/`)
 - Qualquer alteração que afete todos os usuários do script imediatamente
 
 **A criação de uma tarefa por uma IA não constitui autorização para execução de alterações críticas.**
 
----
+**Limite:** a autonomia não autoriza ultrapassar o escopo solicitado.
 
 ## 6. Regras de Git
 
@@ -109,7 +108,7 @@ A IA pode fazer diagnóstico e preparar proposta, mas **deve aguardar aprovaçã
 - Apagar branches ou histórico sem autorização
 - Executar `git reset --hard` sem autorização
 - Modificar permissões do repositório
-- Criar tags de release manualmente (o workflow `release.yml` faz isso)
+- Criar tags de release manualmente
 - Ignorar conflitos sem investigar a origem
 
 ### Obrigatório sempre
@@ -118,7 +117,6 @@ A IA pode fazer diagnóstico e preparar proposta, mas **deve aguardar aprovaçã
 - Verificar os arquivos alterados antes do commit (`git diff --stat`)
 - Trabalhar em branches temporárias
 - Resolver conflitos compreendendo a causa antes de aceitar qualquer lado
-- Criar branch a partir da `main` atualizada: `git checkout main && git pull`
 
 ### Sobre autenticação
 
@@ -145,12 +143,11 @@ main  ←  única branch permanente, sempre estável
 | `hotfix/` | Correção urgente |
 
 **Regras:**
-- Criar sempre a partir da `main` atualizada
-- Uma branch por tarefa
-- **Nunca commitar diretamente na `main`**
-- Branches são temporárias: criadas para a tarefa e removidas após o merge
+- Criar sempre a partir da `main` atualizada: `git checkout main && git pull`
+- Uma branch por tarefa — não acumular múltiplas tarefas na mesma branch
+- Remover após o merge
 
-> **Nota:** a branch `development` existe no repositório mas não é o fluxo adotado. Novas tarefas devem usar branches temporárias com os prefixos acima.
+> **Nota:** a branch `development` existe no repositório mas não é o fluxo adotado. O `@updateURL` do script aponta para `main`. Novas tarefas devem usar o padrão acima.
 
 ---
 
@@ -195,10 +192,7 @@ feat!: remover suporte ao formato antigo de exportação
 3. Revisar o diff antes de commitar
 4. Push da branch
 5. Abrir PR com título no formato Conventional Commits
-6. Workflows executam automaticamente:
-   - validate-pr.yml → valida o PR
-   - auto-merge.yml → ativa auto-merge (Squash)
-7. Merge automático após todas as verificações passarem
+6. Integrar via Squash Merge após verificações
 ```
 
 ### Alterações críticas (Categoria B)
@@ -208,14 +202,16 @@ feat!: remover suporte ao formato antigo de exportação
 2. Apresentar ao responsável e aguardar autorização explícita
 3. Executar somente após aprovação
 4. Abrir PR
-5. Aguardar aprovação manual do responsável para o merge
+5. Integrar somente após nova confirmação do responsável
 ```
 
-**Squash Merge é o padrão** — um commit por PR na `main`.
+**Squash Merge é o padrão** — mantém histórico da `main` organizado (um commit por feature/fix).
 
 ---
 
-## 10. Verificações obrigatórias (checklist pré-commit)
+## 10. Verificações obrigatórias antes de commitar
+
+Checklist que a IA deve executar antes de qualquer commit:
 
 - [ ] O diff contém apenas alterações do escopo solicitado?
 - [ ] Nenhuma funcionalidade existente foi removida sem autorização?
@@ -227,7 +223,6 @@ feat!: remover suporte ao formato antigo de exportação
 - [ ] O arquivo `docs/script/` correspondente foi atualizado se necessário?
 - [ ] `@downloadURL` e `@updateURL` não foram alterados?
 - [ ] `'use strict'` não foi removido?
-- [ ] Arquivos de workflows (`.github/workflows/`) não foram alterados? (Categoria B)
 
 ---
 
@@ -247,7 +242,7 @@ Quando uma verificação ou teste falhar:
 
 **Nunca:**
 - Ignorar falhas para facilitar o merge
-- Desabilitar verificações sem autorização
+- Desabilitar verificações temporariamente sem autorização
 - Assumir que uma falha pré-existente justifica deixar outra passar
 
 ---
@@ -256,80 +251,48 @@ Quando uma verificação ou teste falhar:
 
 O campo `@version` no cabeçalho do script é a única fonte da versão. Não duplicar em nenhum outro lugar.
 
-**Regras de incremento (aplicadas automaticamente pelo `release.yml`):**
+**Regras de incremento:**
 
 | Tipo de commit | Incremento |
 |---|---|
-| `feat` | MINOR (ex.: 13.22 → 13.23.0) |
+| `feat` | MINOR (ex.: 13.22 → 13.23) |
 | `fix`, `perf` | PATCH (ex.: 13.22 → 13.22.1) |
 | `BREAKING CHANGE` | MAJOR (ex.: 13.22 → 14.0.0) |
 | `docs`, `chore`, `test`, `ci`, `refactor` sem impacto funcional | nenhum |
 
-Atualizar o `@version` manualmente acompanhado de `chore: versão X.Y.Z` a cada release.
-
-> **Pendência:** sincronização automática do `@version` com o SemVer calculado pelo workflow ainda não implementada.
+Atualizar o `@version` acompanhado de um commit `chore: versão X.Y.Z`.
 
 ---
 
-## 13. GitHub Actions e fluxo automatizado
+## 13. GitHub Actions e releases (situação atual e planejada)
 
-### Workflows disponíveis
+**Estado atual:** não há workflows ou Actions configurados. Não há tags de release no repositório.
 
-| Arquivo | Trigger | Responsabilidade |
-|---|---|---|
-| `.github/workflows/validate-pr.yml` | `pull_request` → `main` | Valida título, arquivos protegidos, integridade do script, conflitos. Bloqueia Categoria B. |
-| `.github/workflows/auto-merge.yml` | Após `Validate PR` ter sucesso | Ativa auto-merge Squash via API. |
-| `.github/workflows/release.yml` | `push` → `main` | Calcula SemVer, atualiza `CHANGELOG.md`, cria tag e GitHub Release. |
+**Planejado:** avaliar `semantic-release` para:
+1. Detectar commits desde a última versão
+2. Calcular o incremento SemVer automaticamente
+3. Atualizar `CHANGELOG.md`
+4. Criar tag Git e GitHub Release
+5. Sincronizar o campo `@version` do script sem quebrar o código funcional
 
-### Fluxo completo
+**Antes de implementar Actions:**
+- Confirmar permissões disponíveis com o proprietário do repositório (arthursoaress7)
+- Verificar proteção existente da `main`
+- Confirmar se a conta tem permissão para criar releases e tags
+- Não presumir acesso administrativo
 
-```
-branch → commit → push → PR aberto
-  ↓
-validate-pr.yml:
-  ✅ título Conventional Commits
-  ✅ nenhum arquivo de infraestrutura alterado
-  ✅ @downloadURL/@updateURL intactos
-  ✅ 'use strict' e IIFE presentes
-  ✅ sem conflitos
-  ↓
-auto-merge.yml ativa Squash Merge
-  ↓ (após branch protection)
-Squash Merge na main
-  ↓
-release.yml: feat→MINOR | fix/perf→PATCH | BREAKING→MAJOR
-  → CHANGELOG.md atualizado
-  → tag vX.Y.Z criada
-  → GitHub Release publicada
-```
-
-### O que os workflows NÃO fazem
-
-- Não modificam o `@version` do script automaticamente
-- Não publicam em serviços externos
-- Não geram release para `docs`, `chore`, `test`, `ci`, `refactor`
-
-### Configurações necessárias pelo proprietário
-
-Ver `.github/SETUP.md` para o passo a passo. Resumo:
-
-| Configuração | Status |
-|---|---|
-| "Allow auto-merge" em Settings > General | ⏳ Pendente |
-| Branch protection da `main` com status check `Validar alterações` | ⏳ Pendente |
-| "Read and write permissions" para o GITHUB_TOKEN | ⏳ Pendente |
-| "Allow GitHub Actions to create and approve pull requests" | ⏳ Pendente |
-| Squash Merge como único método | ⏳ Pendente |
+**Não implementar** publicação automática do script em serviços externos sem autorização.  
+**Não presumir** que criar uma GitHub Release atualiza automaticamente os usuários — isso é feito pelo `@updateURL` do Tampermonkey, que aponta para a `main`.
 
 ---
 
 ## 14. Segurança e proteção de dados
 
-- **`senhasContas`** — armazena senhas no Tampermonkey, que não é criptografado. Nunca expor em logs.
-- **`equipeSecret` e `equipeChave`** — idem. Nunca exibir valores.
-- **`@updateURL` aponta para `main`** — qualquer merge na `main` distribui para todos os usuários.
-- **`PAGINA.eval()`** — usado no módulo CCBs. Frágil se o site adicionar CSP restritivo.
-- **Diagnósticos (`debug`)** — nunca incluem valores pessoais.
+- **`senhasContas`** — armazena senhas no Tampermonkey, que não é criptografado. Quem acessa o perfil do navegador pode ler. Não expor em logs ou diagnósticos.
+- **`equipeSecret` e `equipeChave`** — idem. Nunca exibir valores, apenas confirmar existência.
+- **`@updateURL` aponta para `main`** — qualquer push na `main` atualiza todos os usuários com auto-update ativo. Testar antes de integrar.
+- **`PAGINA.eval()`** — usado no módulo de CCBs para acessar `DetalhePropostaDocumentos`. Frágil se o site adicionar CSP restritivo.
+- **Diagnósticos (`debug`)** — nunca incluem valores pessoais; apenas nomes de campos e valores numéricos de interesse.
 
 ---
 
@@ -338,9 +301,13 @@ Ver `.github/SETUP.md` para o passo a passo. Resumo:
 ### Ponto de entrada
 
 ```javascript
+// Últimas linhas do arquivo
 if (location.hostname.endsWith('mobfacil.com.br')) iniciarMotor();
 else if (window.top === window) iniciarPainel();
 ```
+
+- `enviamotor.mobfacil.com.br` → `iniciarMotor()` (coleta dados da árvore)
+- `paymobi.ercard.com.br` → `iniciarPainel()` apenas na janela principal (não em iframes)
 
 ### Mapa de seções internas
 
@@ -365,16 +332,16 @@ else if (window.top === window) iniciarPainel();
 | → Navegação automática | Troca de tela automática no ER |
 | → RD Atendimento (`rd`) | Análise com Gemini e encerramento do dia |
 
-### Variáveis globais compartilhadas
+### Variáveis globais compartilhadas (impacto em todo o script)
 
 | Nome | Tipo | Descrição |
 |---|---|---|
-| `VERSAO` | string | Versão lida via `GM_info` |
-| `CONFIG` | objeto | Todos os timeouts e limites |
+| `VERSAO` | string | Versão do script lida via `GM_info` |
+| `CONFIG` | objeto | Todos os timeouts e limites — nunca hard-code fora daqui |
 | `PAGINA` | objeto | `unsafeWindow` — acesso ao JS do site |
 | `PADRAO` | objeto | Valores padrão das preferências |
 | `cfg(k)` | função | Lê preferência com fallback para `PADRAO` |
-| `sleep(ms)` | função | Aguarda N ms via Web Worker |
+| `sleep(ms)` | função | Aguarda N ms via Web Worker — usar sempre em loops |
 
 ### Prefixos de funções por módulo
 
@@ -394,143 +361,171 @@ else if (window.top === window) iniciarPainel();
 ### Seletor interno do painel
 
 ```javascript
-const $ = s => painel.querySelector(s);  // dentro de iniciarPainel()
+const $ = s => painel.querySelector(s);  // definido dentro de iniciarPainel()
 ```
 
-**Nunca usar `document.querySelector` dentro do painel.**
+`$('#mf-id')` busca dentro do painel. **Nunca usar `document.querySelector` dentro do painel** — pode capturar elementos do próprio site.
 
-### Chaves de armazenamento
+### Chaves de armazenamento (`GM_setValue/getValue`)
 
-Documentar novas chaves aqui antes de usar. Renomear sem migração quebra dados de usuários reais.
+Adicionar novas chaves a esta tabela antes de usar. Modificar chaves existentes sem migração quebra dados de usuários reais.
 
 | Chave | Conteúdo | Módulo |
 |---|---|---|
 | `dados` | `{ [id]: { qtd, val, score, consultas, cpf, reprov } }` | Motor/Coleta |
-| `debug` | Snapshots de diagnóstico | Motor |
-| `fila` / `feitas` / `ignoradas` / `verificadas` | Controle da fila | Coleta |
-| `rodando` / `batida` / `atualId` / `fim` | Estado da coleta | Coleta |
+| `debug` | Snapshots de diagnóstico por proposta | Motor |
+| `fila` | `[id, ...]` propostas a coletar | Coleta |
+| `feitas` | `[id, ...]` já coletadas | Coleta |
+| `ignoradas` | `{ id: 'teste' \| 'cancelada' }` | Coleta |
+| `verificadas` | `[id, ...]` conferidas na tabela | Coleta |
+| `rodando` | boolean — coleta ativa | Coleta |
+| `batida` | timestamp — heartbeat da aba | Coleta |
+| `atualId` | ID da proposta em coleta | Coleta |
+| `fim` | sinal de fim do motor | Motor→Painel |
 | `modo` | `'coleta' \| 'aprovadas' \| 'reprovadas'` | Coleta |
-| `mfLembretes` | `{ versao: 2, itens: [...] }` | Lembretes |
-| `mfLembretesAviso` | Estado do pop-up | Lembretes |
+| `mfLembretes` | `{ versao: 2, itens: [...], invalidos: [...] }` | Lembretes |
+| `mfLembretesAviso` | estado do pop-up de lembretes | Lembretes |
 | `mfAcordos` | `{ versao: 1, itens: [...] }` | Histórico |
-| `equipeNome/Secret/Chave/Ativa/Id` | Config da equipe | Equipe |
-| `equipeOnline/Versao/Avisos/AvisosVistos` | Estado da equipe | Equipe |
-| `senhasContas` | Senhas das contas | Contas |
-| `negModelos/negModalidade/negModeloAtual/negPagamento` | Negociação | Negociação |
-| `atModelo` | Modelo ativo | Atendimento |
-| `abaPainel/posPainel/tamPainel/tamAmpliado/min` | Interface | Interface |
-| `navAuto` | Navegação automática | Navegação |
-| `tmExpediente/tmVolume` | Config de timers | Timers |
-| `geminiChave/geminiModelo` | Chave e modelo Gemini | RD |
-| `rdAnalises/rdLinhas/erBase` | Dados do RD | RD |
-| `gruposCfg/buscaAberta/buscaComCac` | Config e busca | Config/Busca |
+| `equipeNome/Secret/Chave/Ativa/Id` | config da equipe | Equipe |
+| `equipeOnline/Versao/Avisos/AvisosVistos/Lider/Limpeza` | estado da equipe | Equipe |
+| `senhasContas` | senhas das contas (não criptografado) | Contas |
+| `negModelos/negModalidade/negModeloAtual/negPagamento` | negociação | Negociação |
+| `atModelo` | modelo ativo no Atendimento | Atendimento |
+| `abaPainel` | aba ativa no painel | Interface |
+| `posPainel/tamPainel/tamAmpliado/min` | posição e tamanho | Interface |
+| `navAuto` | navegação automática | Navegação |
+| `tmExpediente/tmVolume` | config de timers | Timers |
+| `geminiChave/geminiModelo` | chave e modelo Gemini | RD Atendimento |
+| `rdAnalises/rdLinhas` | análises e planilha do RD | RD Atendimento |
+| `erBase` | endereço do ER (gravado pelo painel) | RD Atendimento |
+| `gruposCfg` | grupos abertos/fechados na config | Config |
+| `buscaAberta/buscaComCac` | estado da busca de cliente | Busca |
 
 ---
 
 ## 16. Padrões de código obrigatórios
 
+### Estrutura
+
 - IIFE única: `(function () { 'use strict'; ... })();`
 - Indentação: 2 espaços
-- Seções: `/* ================= NOME ================= */`
-- Logs: prefixo `[PaymobiFin]` em todos
-- Erros esperados: `catch (_) {}` (silencioso)
-- Erros críticos: `catch (e) { console.warn('[PaymobiFin] módulo', e && e.message); }`
-- Esperas em loops: `sleep(ms)` (nunca `setTimeout` direto)
-- Timeouts: sempre em `CONFIG`
-- Acessos ao site: sempre em `try/catch`
-- Seletor do painel: `$()` (não `document.querySelector`)
+- Seções delimitadas: `/* ================= NOME ================= */`
+
+### Tratamento de erros
+
+- `catch (_) {}` — silencioso, quando o erro é esperado (site pode mudar)
+- `catch (e) { console.warn('[PaymobiFin] módulo', e && e.message); }` — para loops críticos
+- `class ErroXXX extends Error` — para módulos com fluxo de erro estruturado (ex.: `ErroCCB`)
+- Prefixo obrigatório em todos os logs: `[PaymobiFin]`
+
+### Assincronicidade
+
+- Usar `sleep(ms)` (não `setTimeout`) em todos os loops de espera — resolve problema de abas em segundo plano
+- Funções com espera devem ser `async/await`
+- Timeouts de rede: usar `AbortController` + `clearTimeout`
+
+### Interação com o site
+
+- Sempre envolver acessos a `PAGINA.*` em `try/catch`
+- Verificar existência antes de chamar: `if (typeof PAGINA.MostraConsulta === 'function')`
+
+### Armazenamento
+
+- Nunca sobrescrever dado existente sem verificar — seguir o padrão de `salvar()`
+- Estruturas versionadas: incrementar `VERSAO` interno e implementar migração automática
 
 ---
 
 ## 17. Comportamento diante de conflitos de merge
 
-1. Nunca aceitar um lado automaticamente sem entender o contexto
-2. Identificar a origem de cada conflito (qual branch, qual commit)
-3. Resolver mantendo a funcionalidade mais recente e completa
-4. Conflitos envolvendo armazenamento ou criptografia: **interromper e consultar** o responsável
+1. **Nunca aceitar um lado automaticamente** sem entender o que cada versão faz
+2. Identificar a origem de cada conflito (qual commit criou cada versão)
+3. Resolver mantendo a funcionalidade mais recente e mais completa
+4. Se o conflito envolver armazenamento ou criptografia, **interromper e consultar** o responsável
+5. Testar o comportamento após a resolução
 
 ---
 
-## 18. Documentação — quando atualizar
+## 18. Documentação — quando e o que atualizar
 
 | Arquivo | Atualizar quando |
 |---|---|
-| `instructions.md` | Novo módulo, novo prefixo, nova chave, nova regra |
-| `README.md` | Mudança visível ao usuário, nova dependência |
-| `docs/script/<módulo>.md` | Mudança de comportamento, nova função |
-| `CHANGELOG.md` | Gerado automaticamente pelo `release.yml` |
-| `.github/SETUP.md` | Mudança nos workflows ou requisitos de configuração |
+| `instructions.md` | Novo módulo, novo prefixo, nova chave de armazenamento, mudança de padrão, nova regra de governança |
+| `README.md` | Mudança de comportamento visível ao usuário, nova dependência, mudança no processo de instalação |
+| `docs/script/01-visao-geral.md` | Novo módulo adicionado ao script |
+| `docs/script/<módulo>.md` | Mudança de comportamento, nova função, nova chave de armazenamento no módulo |
+
+Regras:
+- Não duplicar informações — referenciar com link
+- Atualizar documentação **na mesma sessão** que a alteração de código
+- Usar exemplos reais do código, não exemplos inventados
+- O `README.md` é para o usuário/desenvolvedor humano — este arquivo é para IAs e mantenedores técnicos
 
 ---
 
-## 19. Comportamento diante de falha no auto-merge
+## 19. Checklist obrigatório antes de finalizar uma tarefa
 
-Se o auto-merge não funcionar (workflow de validação falhou, branch protection não configurada,
-permissões insuficientes):
-
-1. **Não forçar o merge manualmente** — investigar a causa
-2. Verificar o log do workflow no GitHub Actions
-3. Se for falha de configuração (pendência do proprietário): documentar e aguardar
-4. Se for falha no código: corrigir na branch e fazer novo push
-5. O merge só acontece quando **todas** as verificações passam
-
----
-
-## 20. Checklist obrigatório antes de finalizar uma tarefa
+Execute este checklist antes de todo push e antes de abrir todo PR:
 
 **Escopo**
-- [ ] Implementação dentro do escopo solicitado?
-- [ ] Nenhuma funcionalidade fora do escopo alterada?
+- [ ] A implementação está dentro do escopo solicitado?
+- [ ] Nenhuma funcionalidade fora do escopo foi alterada?
+- [ ] Nenhum bug fora do escopo foi "corrigido" silenciosamente?
 
 **Código**
-- [ ] `'use strict'` presente?
-- [ ] `@downloadURL` e `@updateURL` não alterados?
-- [ ] Novos timeouts em `CONFIG`?
-- [ ] Funções com prefixo correto?
-- [ ] `$()` usado dentro do painel?
-- [ ] Acessos a `PAGINA.*` em `try/catch`?
-- [ ] `sleep()` em loops de espera?
-- [ ] Nenhum arquivo de workflow alterado sem autorização?
+- [ ] `'use strict'` está presente?
+- [ ] `@downloadURL` e `@updateURL` não foram alterados?
+- [ ] Novos timeouts usam `CONFIG`?
+- [ ] Novas funções de módulo usam o prefixo correto?
+- [ ] `$()` é usado dentro do painel (não `document.querySelector`)?
+- [ ] Novos acessos a `PAGINA.*` estão em `try/catch`?
+- [ ] `sleep()` é usado em loops de espera (não `setTimeout` direto)?
 
 **Armazenamento**
-- [ ] Novas chaves documentadas na tabela do item 15?
-- [ ] Nenhuma chave renomeada sem migração?
-- [ ] Dados existentes não sobrescritos?
+- [ ] Novas chaves de armazenamento foram documentadas na tabela do item 15?
+- [ ] Nenhuma chave existente foi renomeada sem migração?
+- [ ] Dados existentes não são sobrescritos pela nova lógica?
 
 **Git**
-- [ ] Em branch temporária (não na `main`)?
-- [ ] Commit segue Conventional Commits?
-- [ ] Diff revisado antes do commit?
-- [ ] Nenhum arquivo fora do escopo incluído?
+- [ ] Está em uma branch temporária (não na `main`)?
+- [ ] O commit segue o formato Conventional Commits?
+- [ ] O diff foi revisado antes do commit?
+- [ ] Nenhum arquivo fora do escopo foi incluído no commit?
 
 **Documentação**
-- [ ] `docs/script/<módulo>.md` atualizado?
-- [ ] `instructions.md` atualizado se novo prefixo/chave criado?
-- [ ] `README.md` atualizado se comportamento visível mudou?
+- [ ] `docs/script/<módulo>.md` foi atualizado se necessário?
+- [ ] `instructions.md` foi atualizado se novo prefixo ou chave foi criado?
+- [ ] O `README.md` foi atualizado se o comportamento visível mudou?
 
-**Ao finalizar, apresentar:**
+**Ao finalizar a tarefa, apresentar:**
 1. Arquivos alterados
 2. Chaves de armazenamento afetadas
-3. Módulos com impacto indireto
+3. Outros módulos que podem ter sido impactados indiretamente
 4. Documentação atualizada
-5. Pendências (bugs fora do escopo, configurações do proprietário)
+5. Pendências identificadas (bugs fora do escopo, riscos, configurações que dependem do proprietário)
 
 ---
 
-## 21. Configurações pendentes do proprietário (arthursoaress7)
+## 20. Pendências técnicas e configurações que dependem do proprietário
 
-Ver `.github/SETUP.md` para o passo a passo completo.
+As seguintes configurações **não podem ser feitas sem o proprietário do repositório (arthursoaress7)**:
 
-| Item | Por que é necessário |
+| Item | Motivo |
 |---|---|
-| Habilitar "Allow auto-merge" | O `auto-merge.yml` não consegue ativar sem isso |
-| Proteção da `main` com status check obrigatório | Garante que o merge só ocorre após validação |
-| Permissões do GITHUB_TOKEN (read/write) | `release.yml` precisa criar tags e releases |
-| "Allow Actions to create PRs" | `auto-merge.yml` precisa chamar a mutation GraphQL |
-| Squash Merge como único método | Mantém histórico limpo |
-| Definir destino da branch `development` | Evitar confusão no fluxo |
+| Proteção da branch `main` (exigir PR, bloquear push direto) | Requer permissão de admin no repositório |
+| Configuração de GitHub Actions (semantic-release) | Requer permissão para criar workflows e secrets |
+| Criação de secrets do repositório (ex.: `GITHUB_TOKEN` para releases) | Requer acesso às configurações do repositório |
+| Configuração de Squash Merge como padrão no GitHub | Requer permissão de admin |
+| Remover ou arquivar a branch `development` | Decisão do proprietário |
 
-**Riscos sem essas configurações:**
-1. Push direto na `main` distribui para todos os usuários imediatamente (sem validação)
-2. Auto-merge não funciona sem "Allow auto-merge" habilitado
-3. Releases não são criadas automaticamente sem permissões de escrita
+**Riscos identificados:**
+1. `@updateURL` aponta para `main` — push direto (acidental ou não) distribui imediatamente para todos os usuários
+2. Sem proteção de branch, qualquer colaborador com acesso pode pushar direto na `main`
+3. Não há processo de rollback documentado — uma versão com bug distribuída automaticamente exige push corretivo urgente
+4. `senhasContas` armazena credenciais sem criptografia adicional no Tampermonkey
+
+**Próximos passos sugeridos:**
+1. Solicitar ao proprietário que proteja a branch `main` (exigir PR, impedir push direto)
+2. Definir se a branch `development` será mantida ou removida
+3. Avaliar implementação de `semantic-release` após proteção da `main`
+4. Documentar processo de rollback de emergência

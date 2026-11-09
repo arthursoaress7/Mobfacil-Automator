@@ -16,6 +16,13 @@ Encerra os atendimentos com cadeado da lista "Meus atendimentos" (ícone com tí
 2. **Revisão** — cada conversa aparece com a categoria sugerida (pode ser trocada), solicitação, tipo, CPF/proposta e avisos (ex.: CPF da conversa diferente do Perfil). Dá para desmarcar.
 3. **Encerrar marcados** — confirma com um resumo por categoria e encerra uma a uma pelo fluxo da tela: botão `Encerrar` → janela "Encerrar atendimento" → opção da lista (`[role=option]`, texto exato) → botão `Encerrar` da janela. Antes de encerrar, confere que o telefone da conversa aberta é o da análise (últimos 8 dígitos, só números ou formatado; topo sem telefone vale o nome).
 
+**Quando a conversa sai da lista "Meus atendimentos":**
+- **Encerramento confirmado:** depois de clicar em confirmar, a conversa conta como encerrada quando a janela fecha **ou** quando ela sai da lista (`saiuDaLista`). Antes, só a janela contava: se o RD encerrava, mas a janela demorava a sumir (animação, aba em segundo plano), a conversa ficava "não encerrado", sem a linha da planilha. Na tentativa seguinte, aparecia "não está mais na lista". Se a janela continuar na tela depois disso, o script a fecha. Se a espera estourar com a conversa fora da lista, também conta como encerrada (`e.depoisDeConfirmar`).
+- **A conversa já não está na lista ao começar** (encerrada por fora, transferida ou escondida por busca ou filtro do RD): não adianta tentar de novo sozinho. Ela fica com `sumiu: true` e desmarcada, e o cartão mostra "Saiu da lista do RD" com dois botões:
+  - **"Já foi encerrada: incluir na planilha"** pede confirmação, grava a linha e marca `encerrado` e `encerradoFora`;
+  - **"Tentar de novo"** marca de novo, para quando ela só estava escondida.
+- **Registros antigos** (de antes desta versão), gravados só com o aviso "não está mais na lista de atendimentos", aparecem do mesmo jeito.
+
 **Telefone do topo.** Ao trocar de conversa o RD mostra o nome novo antes do telefone: por alguns instantes o topo tem o telefone da conversa anterior. Por isso:
 - o topo é acompanhado o tempo todo (`vigiarTopo`, no ritmo `RD_BOTAO_MS`): quando o nome muda, os telefones vistos com o nome anterior ficam marcados como da conversa anterior;
 - na análise (`telefoneDaConversa`), o telefone só é aceito quando não é o da conversa anterior nem o de outra conversa já analisada (espera até `RD_ESPERA_TELEFONE` s; se não trocar, fica o do topo com aviso para conferir);

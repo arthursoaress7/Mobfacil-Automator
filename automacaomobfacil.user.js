@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.26.1
+// @version      13.26.2
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.26.1');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.26.2');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -7461,9 +7461,12 @@
     const corAviso = (tipo, c) => ({ divergencia: [c.perigoTxt, c.perigoSuave, c.perigoBorda, '⛔', 'Divergência'], er: [c.alertaTxt, c.alertaSuave, c.alertaBorda, '⚠', 'ER'],
       atencao: [c.alertaTxt, c.alertaSuave, c.alertaBorda, '⚠', 'Atenção'], info: [c.txt2, c.sup2, c.borda, 'ℹ', 'Info'] }[tipo]);
     // situação do cartão: o resultado da análise não é autorização para encerrar (quem encerra é o "2. Encerrar marcados")
+    // conversa que não estava mais na lista do RD na hora de encerrar (inclui as gravadas antes desta versão só com o aviso)
+    const saiuDoRD = it => !it.encerrado && (it.sumiu || /não está mais na lista de atendimentos/.test(it.erroEncerrar || ''));
     const situacaoDe = (it, avs) => {
       if (it.encerrado) return ['ok', 'Encerrado'];
       if (it.erro) return ['perigo', 'Erro na análise'];
+      if (saiuDoRD(it)) return ['alerta', 'Saiu da lista do RD'];
       if (it.erroEncerrar) return ['perigo', 'Não encerrado'];
       if (avs.some(a => a.tipo === 'divergencia')) return ['perigo', 'Divergência: revise'];
       if (avs.some(a => a.tipo === 'er' || a.tipo === 'atencao') || !it.erConfirmado) return ['alerta', 'Revise antes de encerrar'];
@@ -7549,7 +7552,35 @@
           });
           lin.append(lista);
         }
-        if (it.erroEncerrar && !it.encerrado) lin.append(el('div', 'font-size:12px;font-weight:600;color:' + c.perigoTxt + ';background:' + c.perigoSuave + ';border:1px solid ' + c.perigoBorda + ';border-radius:8px;padding:6px 9px',
+        if (saiuDoRD(it)) {
+          // não está mais na lista "Meus atendimentos": o funcionário decide (nada é gerado sozinho)
+          const caixa = el('div', 'display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:1.45;color:' + c.alertaTxt + ';background:' + c.alertaSuave + ';border:1px solid ' + c.alertaBorda + ';border-radius:8px;padding:8px 10px');
+          caixa.append(el('div', 'font-weight:600', 'Esta conversa não está mais na lista "Meus atendimentos" do RD.'),
+            el('div', '', 'Pode ter sido encerrada (por fora ou numa tentativa anterior em que a janela demorou a fechar), transferida, ou só estar escondida por uma busca ou filtro do RD. Ela saiu do "2. Encerrar marcados".'));
+          const bts = el('div', 'display:flex;flex-wrap:wrap;gap:6px');
+          const btPlanilha = botao('mini', 'Já foi encerrada: incluir na planilha');
+          btPlanilha.title = 'Grava a linha desta conversa na planilha (com a categoria e os dados acima) e marca como encerrada. Use só se ela foi encerrada no RD.';
+          btPlanilha.onclick = () => {
+            if (!confirm('Incluir a linha de ' + it.nome + ' na planilha de encerramento como encerrada?\n\nCategoria: ' + it.tabulacao + '\n\nUse só se a conversa foi mesmo encerrada no RD.')) return;
+            const x = analises(), j = x.findIndex(y => y.chave === it.chave);
+            if (j < 0) return;
+            guardarLinha(linhaPlanilha(x[j])); pintarCopiar();
+            x[j].encerrado = true; x[j].encerradoFora = true; x[j].marcado = false; delete x[j].sumiu; delete x[j].erroEncerrar;
+            guardarAnalises(x); desenhar();
+            status('Linha de ' + it.nome + ' incluída na planilha. Clique em "Copiar linhas da planilha" para levar à planilha.');
+          };
+          const btDeNovo = botao('mini', 'Tentar de novo');
+          btDeNovo.title = 'Marca de novo para o "2. Encerrar marcados" (use se ela estava só escondida por uma busca ou filtro do RD)';
+          btDeNovo.onclick = () => {
+            const x = analises(), j = x.findIndex(y => y.chave === it.chave);
+            if (j < 0) return;
+            x[j].marcado = true; delete x[j].sumiu; delete x[j].erroEncerrar;
+            guardarAnalises(x); desenhar();
+          };
+          bts.append(btPlanilha, btDeNovo);
+          caixa.append(bts);
+          lin.append(caixa);
+        } else if (it.erroEncerrar && !it.encerrado) lin.append(el('div', 'font-size:12px;font-weight:600;color:' + c.perigoTxt + ';background:' + c.perigoSuave + ';border:1px solid ' + c.perigoBorda + ';border-radius:8px;padding:6px 9px',
           'Não encerrado: ' + it.erroEncerrar + ' (continua marcado: clique em "2. Encerrar marcados" para tentar de novo)'));
         tabela.append(lin);
       });
@@ -8257,8 +8288,9 @@
       return 'janela "' + tit + '" · botões: ' + (bts.join(', ') || 'nenhum') + (campos.length ? ' · campos: ' + campos.join(', ') : '') + (obrig ? ' · ' + obrig + ' campo(s) obrigatório(s) vazio(s)' : '');
     };
     // qualquer falha no meio do caminho fecha a janela (nada fica aberto por cima da próxima conversa) e diz o que ela tinha
-    async function encerrarAberto(categoria) {
-      try { await encerrarPassos(categoria); }
+    // nome: a conversa que está sendo encerrada (a lista do RD tirar o item dela também confirma o encerramento)
+    async function encerrarAberto(categoria, nome) {
+      try { await encerrarPassos(categoria, nome); }
       catch (e) {
         const d = janela();
         if (!/\(janela "/.test(e.message)) e.message += ' (' + resumoJanela(d) + ')';
@@ -8266,7 +8298,7 @@
         throw e;
       }
     }
-    async function encerrarPassos(categoria) {
+    async function encerrarPassos(categoria, nome) {
       const bt = document.querySelector('button[aria-label=Encerrar]') || [...((cabecalho() || document).querySelectorAll('button'))].find(b => /^encerrar$/i.test(b.textContent.trim()));
       if (!bt) throw new Error('botão Encerrar não encontrado');
       const antes = new Set(dialogos());
@@ -8294,15 +8326,20 @@
       conf.click();
       // segunda confirmação ("Tem certeza?"), se o RD pedir: confirma uma vez
       let confirmouDeNovo = false;
+      // encerrou = a janela fechou OU a conversa saiu da lista "Meus atendimentos" (o RD encerrou; a janela é que demora a
+      // sumir, ex.: animação ou aba em segundo plano). Antes só a janela contava, e uma conversa já encerrada no RD ficava
+      // como "não encerrado" e sem a linha da planilha.
+      const saiuDaLista = () => !!nome && !!lista() && !itemPorNome(nome);
       const fechou = await esperar(() => {
         if (!confirmouDeNovo) {
           const nova = dialogos().find(x => !abertasAntes.has(x) && x !== d);
           const b2 = nova && botaoConfirmar(nova);
           if (habilitado(b2)) { b2.click(); confirmouDeNovo = true; }
         }
-        return !visivelRD(d) || !d.isConnected;
+        return !visivelRD(d) || !d.isConnected || saiuDaLista();
       });
-      if (!fechou) throw new Error('a janela de encerrar não fechou');
+      if (!fechou) { const e = new Error('a janela de encerrar não fechou'); e.depoisDeConfirmar = true; throw e; }
+      if (visivelRD(d) && d.isConnected) await fecharJanela(d);   // encerrou com a janela ainda na tela: fecha a que sobrou
     }
     const linhaPlanilha = a => {
       const etiqueta = (a.etiquetas || []).find(t => /^(xpanse|mundo amarelo)/i.test(t)) || 'N/A';
@@ -8325,14 +8362,23 @@
           const x = analises(), i = x.findIndex(y => y.chave === a.chave);
           try {
             const it = itemPorNome(a.chave);
-            if (!it) throw new Error('não está mais na lista de atendimentos');
+            // já não está na lista (encerrada por fora ou numa tentativa anterior, transferida, ou escondida por busca/filtro
+            // do RD): não adianta tentar de novo sozinho. Desmarca e o cartão oferece "incluir na planilha" ou "tentar de novo".
+            if (!it) { const e = new Error('não está mais na lista de atendimentos'); e.sumiu = true; throw e; }
             if (!(await abrirConversa(it))) throw new Error('a conversa não abriu');
             // o RD troca o nome no topo antes do telefone (o da conversa anterior fica alguns instantes): espera o telefone certo
             if (!(await esperar(() => { vigiarTopo(); return telefoneConfere(a.telefone); }))) throw new Error('a conversa aberta não é a analisada (telefone no topo …' + telefonesAbertos().map(t => t.slice(-4)).join(', …') + '; analisada …' + String(a.telefone).slice(-4) + ')');
-            await encerrarAberto(a.tabulacao);
+            await encerrarAberto(a.tabulacao, a.chave);
             guardarLinha(linhaPlanilha(a)); pintarCopiar();
-            x[i].encerrado = true; delete x[i].erroEncerrar; ok++;
-          } catch (e) { x[i].erroEncerrar = e.message; falhas++; }   // continua analisada e marcada: dá para tentar encerrar de novo
+            x[i].encerrado = true; delete x[i].erroEncerrar; delete x[i].sumiu; ok++;
+          } catch (e) {
+            if (e.depoisDeConfirmar && !itemPorNome(a.chave)) {
+              // confirmou e a conversa saiu da lista: o RD encerrou (só a janela demorou a fechar) — conta e vai para a planilha
+              guardarLinha(linhaPlanilha(a)); pintarCopiar();
+              x[i].encerrado = true; delete x[i].erroEncerrar; delete x[i].sumiu; ok++;
+            } else if (e.sumiu) { x[i].sumiu = true; x[i].marcado = false; x[i].erroEncerrar = e.message; falhas++; }
+            else { x[i].erroEncerrar = e.message; falhas++; }   // continua analisada e marcada: dá para tentar encerrar de novo
+          }
           guardarAnalises(x); desenhar();
           await sleep(CONFIG.PAUSA * 10);
         }

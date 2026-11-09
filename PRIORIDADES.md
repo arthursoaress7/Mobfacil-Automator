@@ -48,22 +48,29 @@ O módulo de lembretes (`lb*`) já possui:
 
 ---
 
-- [ ] **P0.1 — Notificações para toda a equipe**
+- [x] **P0.1 — Notificações para toda a equipe**
 
-  **Status:** Pendente  
+  **Status:** Concluído (já implementado; validado no código em 09/11/2026, v13.26.4). Decisão do responsável: o pop-up local no dia do acompanhamento é suficiente, sem push pelo Pusher.  
   **Objetivo:** garantir que todos os integrantes da equipe sejam notificados sobre lembretes, não somente quem criou.
 
   **Comportamento esperado:** quando um lembrete está vencido ou chega no dia de acompanhamento, todos os membros da equipe conectados devem ver a notificação — não apenas quem criou o lembrete.
 
-  **O que já existe:** `eqAvisarLembrete()` já notifica toda a equipe sobre mudanças em lembretes compartilhados (novo, pagamento, status, atualização, exclusão). O popup de lembretes do dia (`lbVerificarPopup`) já verifica todos os lembretes — inclusive compartilhados — e mostra o popup para o usuário local.
+  **Como funciona (analisado no código):**
+  - **Mudanças:** `eqAvisarLembrete()` avisa toda a equipe (menos quem alterou) sobre novo lembrete, pagamento, mudança de situação, atualização e exclusão de lembretes compartilhados, no card `#mf-eq-avisos`.
+  - **Dia do acompanhamento:** um lembrete compartilhado fica no navegador de **todos** os membros. `eqAplicar()` grava o que chega pelo Pusher em `mfLembretes`, e quem estava offline recebe ao reconectar, pela troca de resumos (`eqEnviarResumo` / `eqResumoRecebido`). A cada minuto, cada navegador procura em todos os lembretes, inclusive os criados por outra pessoa, os que vencem hoje ou estão atrasados (`lbVerificarPopup` → `lbAtencao`). Mostra o pop-up `#mf-lb-popup` e, se a permissão foi dada, uma notificação do navegador (no máximo a cada 30 min). Não precisa haver nenhuma alteração no lembrete para o aviso aparecer.
+  - **Correção do texto anterior:** não é verdade que os outros membros "só recebem o aviso quando algo muda". Isso vale só para o card da equipe; o pop-up do dia aparece para todos que têm o lembrete compartilhado.
 
-  **O que falta esclarecer:**
-  - O popup de lembretes do dia já aparece para quem tem o lembrete compartilhado. A necessidade é que ele apareça para **todos** os membros, ou que a notificação seja mais ativa (som, destaque, notificação do navegador para todos)?
-  - Hoje a notificação do navegador só dispara para a aba que detecta o lembrete (uma vez a cada 30 min). Outros membros da equipe só recebem o aviso via `equipeAvisos` quando **algo muda** — não quando um lembrete simplesmente chega no dia. Querem que todos sejam notificados no dia do vencimento, mesmo sem nenhuma alteração?
+  **Critérios de aceite (atendidos):**
+  - Um lembrete compartilhado criado pelo membro A aparece no pop-up do dia do membro B na data de acompanhamento ou depois dela, sem nenhuma alteração no lembrete.
+  - Isso vale também quando B estava offline no momento da criação: ele recebe o lembrete ao reconectar.
+  - Mudanças em lembretes compartilhados (novo, pagamento, situação, atualização, exclusão) avisam os outros membros no card da equipe.
 
-  **Critérios de aceite:** A definir  
-  **Dependências:** A definir (depende da decisão acima)  
-  **Observações:** O mecanismo de Pusher já está pronto. A questão é definir o comportamento desejado: notificação passiva (popup local) vs. ativa (push para todos no vencimento).
+  **Dependências:** nenhuma.  
+  **Limites conhecidos (por design):**
+  - Lembretes **não compartilhados** (checkbox desmarcada) só avisam o próprio navegador.
+  - Só é avisado quem está com o ER aberto, porque o script só roda lá. Um push pelo Pusher também não alcançaria quem está offline, por isso não foi adotado. Mexer no Pusher seria Categoria B.
+
+  **Possível melhoria futura (não solicitada):** mostrar no pop-up quem criou cada lembrete e se ele é da equipe, e notificar uma vez por lembrete em vez de um resumo a cada 30 min. Registrar em P3.5 se a equipe quiser.
 
 ---
 
@@ -320,7 +327,7 @@ O módulo de geração de acordos (`at*`) já possui:
 
 | # | Dúvida | Contexto |
 |---|---|---|
-| 1 | Notificação no vencimento deve ser push ativo para todos, ou popup local já é suficiente? | P0.1 — hoje o popup aparece localmente; o Pusher só avisa quando algo muda |
+| 1 | ~~Notificação no vencimento deve ser push ativo para todos, ou popup local já é suficiente?~~ **Decidido (09/11/2026): o pop-up local é suficiente.** | P0.1 — o pop-up do dia já aparece para todos os membros que têm o lembrete compartilhado |
 | 2 | O card flutuante deve ser permanente (mesmo sem devidos) ou só quando há lembretes do dia? | P0.3 — hoje o popup só aparece com devidos |
 | 3 | O card flutuante deve ser arrastável ou fixo em um canto? | P0.3 — hoje é fixo |
 | 4 | O card flutuante deve mostrar todos os lembretes ativos ou só os devidos hoje? | P0.3 — hoje só mostra devidos |

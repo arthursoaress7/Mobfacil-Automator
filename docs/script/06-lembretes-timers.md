@@ -93,3 +93,5 @@ Quando `tmExpedienteAuto` está ativo (padrão: `true`), os agendamentos do pró
 ### Pop-up de lembretes do dia
 
 Ao detectar lembretes com pagamentos devidos hoje, `lbVerificarPopup()` aciona `lbMostrarPopup()` que exibe um pop-up não intrusivo sobre o painel. O estado do pop-up (visto / não visto) é salvo em `mfLembretesAviso`.
+
+Vale para os lembretes compartilhados de **qualquer** membro: eles ficam em `mfLembretes` de todos os navegadores da equipe (`eqAplicar`, e a troca de resumos ao reconectar), então no dia do acompanhamento cada membro com o ER aberto vê o pop-up, sem precisar de nenhuma alteração no lembrete (P0.1 do `PRIORIDADES.md`).

@@ -2555,7 +2555,10 @@
       $('#mf-cop').style.display = diario ? 'none' : '';
       $('#mf-cid').style.display = diario || m === 'rendas' ? 'none' : '';
       $('#mf-cfull').style.display = coleta && cfg('auditoriaCompleta') ? '' : 'none';
-      $('#mf-filtro').textContent = cfg('ignorarCanceladasTestes') ? 'Ignorando canceladas e testes' : 'Incluindo canceladas e testes';
+      // Relatório Diário com a visão geral do dia: canceladas e em digitação entram; só os testes ficam fora (ver motivoFora)
+      const ign = cfg('ignorarCanceladasTestes');
+      $('#mf-filtro').textContent = !ign ? 'Incluindo canceladas e testes' : diarioTudo() ? 'Incluindo canceladas (sem testes)' : 'Ignorando canceladas e testes';
+      $('#mf-filtro').title = ign && diarioTudo() ? 'Relatório Diário: visão geral do dia (Configurações). Entram canceladas e em digitação (CONF CAD); propostas de teste continuam fora.' : '';
     }
     $('#mf-modo').addEventListener('change', () => { GM_setValue('modo', modo()); atualizarConfigUI(); });
     const ligarOpcao = (sel, chave) => {

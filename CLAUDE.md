@@ -18,7 +18,7 @@
 |---|---|
 | Arquivo principal | `automacaomobfacil.user.js` (~8.300 linhas) |
 | Tipo | Tampermonkey userscript (monólito, sem build) |
-| Versão atual | 13.25 |
+| Versão atual | 13.26.3 |
 | Sites alvo | `paymobi.ercard.com.br` e `enviamotor.mobfacil.com.br` |
 | Arquitetura | **Monolítica** — não dividir em arquivos |
 | Fluxo Git | branch temporária → `development` (testes) → `main` (produção) |

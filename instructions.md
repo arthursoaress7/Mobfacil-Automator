@@ -95,7 +95,7 @@ A IA pode fazer diagnóstico e preparar proposta, mas **deve aguardar aprovaçã
 
 **A criação de uma tarefa por uma IA não constitui autorização para execução de alterações críticas.**
 
----
+**Limite:** a autonomia não autoriza ultrapassar o escopo solicitado.
 
 ## 6. Regras de Git
 

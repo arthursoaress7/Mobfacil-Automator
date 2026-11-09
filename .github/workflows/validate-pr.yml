@@ -1,0 +1,211 @@
+name: Validate PR
+
+# Executa em todo Pull Request aberto contra a main.
+# Valida se a alteração é segura para merge automático (rotineira).
+# Bloqueia automaticamente quando arquivos ou padrões protegidos são detectados.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validar alterações
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ----------------------------------------------------------------
+      # 1. Verificar arquivos alterados no PR
+      # ----------------------------------------------------------------
+      - name: Listar arquivos alterados
+        id: changed
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          FILES=$(git diff --name-only "$BASE" "$HEAD")
+          echo "Arquivos alterados:"
+          echo "$FILES"
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------------
+      # 2. Detectar arquivos protegidos
+      #    Qualquer alteração nesses arquivos = Categoria B (crítica)
+      #    → bloqueia o merge automático
+      # ----------------------------------------------------------------
+      - name: Verificar arquivos protegidos
+        id: protected
+        run: |
+          FILES="${{ steps.changed.outputs.files }}"
+
+          PROTECTED_PATTERNS=(
+            "automacaomobfacil.user.js"  # código principal
+          )
+
+          # Campos sensíveis dentro do script que não devem ser alterados
+          # sem autorização — verificados pelo workflow de lint do script
+          CRITICAL=false
+          REASON=""
+
+          for PATTERN in "${PROTECTED_PATTERNS[@]}"; do
+            if echo "$FILES" | grep -qF "$PATTERN"; then
+              # O script pode ser alterado em tarefas rotineiras.
+              # O que é crítico são campos específicos dentro dele.
+              # A verificação detalhada fica no job 'lint-script'.
+              echo "Arquivo de código detectado: $PATTERN"
+            fi
+          done
+
+          # Arquivos de configuração de infraestrutura são Categoria B
+          INFRA_PATTERNS=(
+            ".github/workflows/"
+            "package.json"
+            "package-lock.json"
+          )
+
+          for PATTERN in "${INFRA_PATTERNS[@]}"; do
+            if echo "$FILES" | grep -qF "$PATTERN"; then
+              CRITICAL=true
+              REASON="Alteração em arquivo de infraestrutura: $PATTERN"
+              break
+            fi
+          done
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "reason=$REASON" >> $GITHUB_OUTPUT
+
+          if [ "$CRITICAL" = "true" ]; then
+            echo "⛔ ALTERAÇÃO CRÍTICA detectada: $REASON"
+            echo "Este PR requer autorização explícita do responsável antes do merge."
+          else
+            echo "✅ Nenhum arquivo de infraestrutura protegido alterado."
+          fi
+
+      # ----------------------------------------------------------------
+      # 3. Verificar padrão do título do PR (Conventional Commits)
+      # ----------------------------------------------------------------
+      - name: Verificar título do PR
+        id: title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          PATTERN="^(feat|fix|docs|refactor|chore|perf|test|build|ci)(\(.+\))?(!)?: .+"
+
+          if echo "$TITLE" | grep -qE "$PATTERN"; then
+            echo "✅ Título segue Conventional Commits: $TITLE"
+            echo "valid=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Título fora do padrão: $TITLE"
+            echo "Formato esperado: tipo: descrição  (ex.: fix: corrigir leitura de propostas)"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      # ----------------------------------------------------------------
+      # 4. Verificar se o PR tem conflitos
+      # ----------------------------------------------------------------
+      - name: Verificar conflitos
+        run: |
+          MERGEABLE="${{ github.event.pull_request.mergeable }}"
+          if [ "$MERGEABLE" = "false" ]; then
+            echo "❌ PR tem conflitos com a main. Resolva antes do merge."
+            exit 1
+          fi
+          echo "✅ PR sem conflitos."
+
+      # ----------------------------------------------------------------
+      # 5. Lint básico do script (sem executar — apenas análise estática)
+      # ----------------------------------------------------------------
+      - name: Lint do script
+        id: lint
+        if: contains(steps.changed.outputs.files, 'automacaomobfacil.user.js')
+        run: |
+          FILE="automacaomobfacil.user.js"
+
+          echo "Verificando integridade do script..."
+
+          # O @version deve existir e ter formato semver
+          VERSION=$(grep -oP '(?<=@version\s{6})\S+' "$FILE" || true)
+          if [ -z "$VERSION" ]; then
+            echo "❌ @version não encontrado no cabeçalho do script."
+            exit 1
+          fi
+          echo "✅ @version encontrado: $VERSION"
+
+          # @downloadURL e @updateURL não devem ser alterados
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+
+          URL_BASE=$(git show "$BASE:$FILE" 2>/dev/null | grep -E "@(downloadURL|updateURL)" || true)
+          URL_HEAD=$(git show "$HEAD:$FILE" 2>/dev/null | grep -E "@(downloadURL|updateURL)" || true)
+
+          if [ "$URL_BASE" != "$URL_HEAD" ]; then
+            echo "❌ @downloadURL ou @updateURL foram alterados."
+            echo "  Antes: $URL_BASE"
+            echo "  Depois: $URL_HEAD"
+            echo "Alteração nos URLs de distribuição requer autorização explícita (Categoria B)."
+            exit 1
+          fi
+          echo "✅ @downloadURL e @updateURL não foram alterados."
+
+          # 'use strict' deve estar presente
+          if ! grep -q "'use strict'" "$FILE"; then
+            echo "❌ 'use strict' não encontrado no script."
+            exit 1
+          fi
+          echo "✅ 'use strict' presente."
+
+          # A IIFE deve estar presente
+          if ! grep -qP '^\(function \(\)' "$FILE"; then
+            echo "❌ IIFE não encontrada no início do script."
+            exit 1
+          fi
+          echo "✅ Estrutura IIFE presente."
+
+      # ----------------------------------------------------------------
+      # 6. Resumo final e classificação
+      # ----------------------------------------------------------------
+      - name: Classificar PR
+        run: |
+          CRITICAL="${{ steps.protected.outputs.critical }}"
+          TITLE="${{ github.event.pull_request.title }}"
+
+          echo "## Resultado da validação" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PR:** $TITLE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$CRITICAL" = "true" ]; then
+            echo "### ⛔ Categoria B — Alteração crítica" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Motivo:** ${{ steps.protected.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Este PR **não pode ser integrado automaticamente**." >> $GITHUB_STEP_SUMMARY
+            echo "Aguardando autorização explícita do responsável." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ Categoria A — Alteração rotineira" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Todas as verificações passaram." >> $GITHUB_STEP_SUMMARY
+            echo "O auto-merge será ativado após aprovação deste workflow." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # ----------------------------------------------------------------
+      # 7. Bloquear definitivamente PRs críticos
+      # ----------------------------------------------------------------
+      - name: Bloquear PR crítico
+        if: steps.protected.outputs.critical == 'true'
+        run: |
+          echo "⛔ PR classificado como Categoria B (crítica)."
+          echo "Razão: ${{ steps.protected.outputs.reason }}"
+          echo "Merge automático bloqueado. Aguardando autorização do responsável."
+          exit 1

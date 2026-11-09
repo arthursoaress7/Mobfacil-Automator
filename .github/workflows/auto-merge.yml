@@ -1,0 +1,160 @@
+name: Auto Merge
+
+# Ativa o auto-merge do GitHub em PRs rotineiros (Categoria A)
+# após todas as verificações obrigatórias passarem.
+#
+# PRÉ-REQUISITOS (configuração pelo proprietário do repositório):
+#   1. Settings > General > "Allow auto-merge" deve estar habilitado
+#   2. Settings > Branches > Branch protection rule para "main":
+#      - Require a pull request before merging
+#      - Require status checks to pass: "Validar alterações" (validate-pr.yml)
+#      - Do not allow bypassing the above settings
+#   3. Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests"
+#      deve estar habilitado (para o GITHUB_TOKEN poder usar a API GraphQL de auto-merge)
+#
+# PERMISSÕES DO GITHUB_TOKEN:
+#   - contents: write  (para o merge em si)
+#   - pull-requests: write  (para habilitar auto-merge via API)
+#
+# FUNCIONAMENTO:
+#   Este workflow dispara quando o workflow "Validate PR" conclui com sucesso.
+#   Se o PR passou em todas as verificações e não é crítico, ativa o auto-merge.
+#   O GitHub então executa o merge automaticamente assim que todos os requisitos
+#   da branch protection forem satisfeitos.
+
+on:
+  workflow_run:
+    workflows: ["Validate PR"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Ativar auto-merge
+    runs-on: ubuntu-latest
+    # Só executa se o workflow de validação passou
+    if: github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Recuperar o número do PR que disparou o workflow de validação
+      - name: Obter número do PR
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }}
+            });
+
+            const headSha = run.data.head_sha;
+            const headBranch = run.data.head_branch;
+
+            // Buscar o PR correspondente ao commit/branch
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${headBranch}`
+            });
+
+            if (prs.data.length === 0) {
+              console.log('Nenhum PR aberto encontrado para a branch:', headBranch);
+              core.setOutput('pr_number', '');
+              core.setOutput('found', 'false');
+              return;
+            }
+
+            const pr = prs.data[0];
+            console.log(`PR encontrado: #${pr.number} — ${pr.title}`);
+            core.setOutput('pr_number', pr.number.toString());
+            core.setOutput('pr_title', pr.title);
+            core.setOutput('found', 'true');
+
+      - name: Ativar auto-merge via GitHub API
+        if: steps.pr.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.pr.outputs.pr_number }}');
+            const prTitle = '${{ steps.pr.outputs.pr_title }}';
+
+            console.log(`Ativando auto-merge no PR #${prNumber}: ${prTitle}`);
+
+            // Buscar o node_id do PR (necessário para a mutation GraphQL)
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            // Ativar auto-merge via GraphQL (API do GitHub para enablePullRequestAutoMerge)
+            try {
+              await github.graphql(`
+                mutation EnableAutoMerge($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(input: {
+                    pullRequestId: $pullRequestId,
+                    mergeMethod: SQUASH
+                  }) {
+                    pullRequest {
+                      autoMergeRequest {
+                        enabledAt
+                        enabledBy { login }
+                      }
+                    }
+                  }
+                }
+              `, {
+                pullRequestId: pr.node_id
+              });
+
+              console.log(`✅ Auto-merge (Squash) ativado no PR #${prNumber}`);
+              console.log('O merge será executado automaticamente quando todos os requisitos da branch protection forem atendidos.');
+
+            } catch (error) {
+              // Auto-merge pode falhar se o repositório não tiver a opção habilitada
+              // ou se o PR já puder ser mergeado imediatamente (sem branch protection)
+              if (error.message && error.message.includes('already in a state where auto-merge')) {
+                console.log('Auto-merge já estava ativo neste PR.');
+              } else if (error.message && error.message.includes('Pull request is in clean status')) {
+                // PR já pode ser mergeado — fazer o merge diretamente
+                console.log('PR já está pronto para merge. Executando merge direto...');
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  merge_method: 'squash',
+                  commit_title: prTitle
+                });
+                console.log(`✅ PR #${prNumber} integrado via Squash Merge.`);
+              } else {
+                console.error('Erro ao ativar auto-merge:', error.message);
+                console.log('');
+                console.log('Possíveis causas:');
+                console.log('1. "Allow auto-merge" não está habilitado em Settings > General');
+                console.log('2. Branch protection não está configurada para a main');
+                console.log('3. GITHUB_TOKEN sem permissão para pull-requests: write');
+                console.log('');
+                console.log('Ver seção de pendências em instructions.md para as configurações necessárias.');
+                // Não falhar o workflow — registrar como aviso
+                core.warning(`Auto-merge não pôde ser ativado: ${error.message}`);
+              }
+            }
+
+      - name: Registrar resultado
+        if: steps.pr.outputs.found == 'true'
+        run: |
+          echo "## Auto-merge" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PR:** #${{ steps.pr.outputs.pr_number }} — ${{ steps.pr.outputs.pr_title }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Auto-merge (Squash) ativado após todas as verificações passarem." >> $GITHUB_STEP_SUMMARY
+          echo "O GitHub integrará o PR automaticamente assim que os requisitos de branch protection forem satisfeitos." >> $GITHUB_STEP_SUMMARY

@@ -1,5 +1,26 @@
 # Changelog
 
+## [v13.26.3] — 2026-11-09
+
+### 🐛 Correções
+
+- fix: aviso do Relatório Diário mostra que inclui canceladas (#22) (ab5de61)
+- fix: aviso do Relatório Diário mostra que inclui canceladas (#21) (3e9ec88)
+
+
+## [v13.26.2] — 2026-11-09
+
+### 🐛 Correções
+
+- fix: CPF escrito na conversa é achado em mais formatos, na conversa inteira e com dígito errado (#19) (02d50e7)
+- fix: CPF escrito na conversa é achado em mais formatos, na conversa inteira e com dígito errado (#18) (75b3282)
+
+### 🔧 Outros
+
+- Merge remote-tracking branch 'origin/main' into development (921e8cc)
+- Merge remote-tracking branch 'origin/main' into development (e7973ac)
+
+
 ## [v13.26.1] — 2026-11-09
 
 ### 🐛 Correções

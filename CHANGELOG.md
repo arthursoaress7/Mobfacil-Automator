@@ -1,5 +1,18 @@
 # Changelog
 
+## [v13.26.1] — 2026-11-09
+
+### 🐛 Correções
+
+- fix: conversa encerrada no RD que sai da lista não fica mais como não encerrada (4c948ed)
+
+### 🔧 Outros
+
+- Merge pull request #15 from arthursoaress7/development (6ff4a39)
+- RD: automação não fica lenta com a aba do RD escondida (070f652)
+- Update version number in README (a9e8b0b)
+
+
 ## [v13.26.0] — 2026-11-09
 
 ### ✨ Novas funcionalidades

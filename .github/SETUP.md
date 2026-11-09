@@ -5,6 +5,26 @@
 
 ---
 
+## ⚡ Ação imediata — Merge manual do PR dos workflows
+
+O PR **`feature/auto-merge-workflow`** foi bloqueado pelo próprio `validate-pr.yml` porque altera
+arquivos em `.github/workflows/` — o que é classificado como Categoria B (alteração crítica).
+
+Esse comportamento é **correto e intencional**: nenhuma IA pode alterar os workflows sem autorização.
+
+Porém, este é o PR que *cria* os workflows pela primeira vez. Ele precisa ser mergeado **manualmente**
+pelo proprietário, uma única vez.
+
+**Como fazer:**
+1. Abrir o PR `feature/auto-merge-workflow` no GitHub
+2. Clicar em **"Merge pull request"** → **"Squash and merge"**
+3. Confirmar o merge
+
+Após este merge, todos os PRs futuros rodarão os workflows automaticamente. Esta exceção manual
+não se repetirá.
+
+---
+
 ## Por que isso é necessário
 
 Os workflows de auto-merge e release estão prontos no código, mas precisam de configurações

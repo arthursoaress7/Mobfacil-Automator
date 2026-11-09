@@ -18,10 +18,10 @@
 |---|---|
 | Arquivo principal | `automacaomobfacil.user.js` (~8.300 linhas) |
 | Tipo | Tampermonkey userscript (monólito, sem build) |
-| Versão atual | 13.22 |
+| Versão atual | 13.26.3 |
 | Sites alvo | `paymobi.ercard.com.br` e `enviamotor.mobfacil.com.br` |
 | Arquitetura | **Monolítica** — não dividir em arquivos |
-| Fluxo Git | branch temporária → PR → `main` (Squash Merge) |
+| Fluxo Git | branch temporária → `development` (testes) → `main` (produção) |
 
 ---
 
@@ -29,25 +29,31 @@
 
 - **Não divida o arquivo** — refatoração não está no escopo atual
 - **Não altere `@downloadURL`/`@updateURL`** — push na `main` atualiza todos os usuários
-- **Não commite na `main` diretamente** — sempre via branch + PR
+- **Nunca commitar em `main` ou `development` diretamente** — sempre via branch + PR
+- **Branch temporária parte de `development`**, não de `main`
+- **PR de trabalho vai para `development`** — `development` → `main` é PR separado, após testes
 - **Não sobrescreva dados de armazenamento existentes** — siga o padrão de `salvar()`
 - **Dentro do painel, use `$()`, não `document.querySelector()`**
 - **Timeouts apenas em `CONFIG`** — nunca valores hard-coded fora dele
 - **Use o prefixo correto** para novas funções (`ng`, `at`, `lb`, `tm`, `cac`, `eq`, `hs`, `bs`, `rd`)
-- **Alterações críticas (arquitetura, armazenamento, segurança) exigem autorização explícita**
+- **Alterações críticas (arquitetura, armazenamento, segurança, workflows) exigem autorização explícita**
 
 ---
 
 ## Ciclo de trabalho (Categoria A — rotineiro)
 
 ```bash
-git checkout main && git pull
+# Sempre partir de development atualizada
+git checkout development && git pull
 git checkout -b tipo/descricao-curta
+
 # implementar
 git add <arquivos>
 git commit -m "tipo: descrição"
 git push -u origin tipo/descricao-curta
-# abrir Pull Request no GitHub
+
+# abrir PR → development (não main)
+# development → main só após testes, por PR manual
 ```
 
 ---
@@ -78,4 +84,5 @@ docs/script/09-equipe.md
 docs/script/10-navegacao-busca.md
 docs/script/11-rd-encerramento.md
 README.md
+.github/SETUP.md                    ← configurações para o proprietário
 ```

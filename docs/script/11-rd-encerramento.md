@@ -16,6 +16,13 @@ Encerra os atendimentos com cadeado da lista "Meus atendimentos" (ícone com tí
 2. **Revisão** — cada conversa aparece com a categoria sugerida (pode ser trocada), solicitação, tipo, CPF/proposta e avisos (ex.: CPF da conversa diferente do Perfil). Dá para desmarcar.
 3. **Encerrar marcados** — confirma com um resumo por categoria e encerra uma a uma pelo fluxo da tela: botão `Encerrar` → janela "Encerrar atendimento" → opção da lista (`[role=option]`, texto exato) → botão `Encerrar` da janela. Antes de encerrar, confere que o telefone da conversa aberta é o da análise (últimos 8 dígitos, só números ou formatado; topo sem telefone vale o nome).
 
+**Quando a conversa sai da lista "Meus atendimentos":**
+- **Encerramento confirmado:** depois de clicar em confirmar, a conversa conta como encerrada quando a janela fecha **ou** quando ela sai da lista (`saiuDaLista`). Antes, só a janela contava: se o RD encerrava, mas a janela demorava a sumir (animação, aba em segundo plano), a conversa ficava "não encerrado", sem a linha da planilha. Na tentativa seguinte, aparecia "não está mais na lista". Se a janela continuar na tela depois disso, o script a fecha. Se a espera estourar com a conversa fora da lista, também conta como encerrada (`e.depoisDeConfirmar`).
+- **A conversa já não está na lista ao começar** (encerrada por fora, transferida ou escondida por busca ou filtro do RD): não adianta tentar de novo sozinho. Ela fica com `sumiu: true` e desmarcada, e o cartão mostra "Saiu da lista do RD" com dois botões:
+  - **"Já foi encerrada: incluir na planilha"** pede confirmação, grava a linha e marca `encerrado` e `encerradoFora`;
+  - **"Tentar de novo"** marca de novo, para quando ela só estava escondida.
+- **Registros antigos** (de antes desta versão), gravados só com o aviso "não está mais na lista de atendimentos", aparecem do mesmo jeito.
+
 **Telefone do topo.** Ao trocar de conversa o RD mostra o nome novo antes do telefone: por alguns instantes o topo tem o telefone da conversa anterior. Por isso:
 - o topo é acompanhado o tempo todo (`vigiarTopo`, no ritmo `RD_BOTAO_MS`): quando o nome muda, os telefones vistos com o nome anterior ficam marcados como da conversa anterior;
 - na análise (`telefoneDaConversa`), o telefone só é aceito quando não é o da conversa anterior nem o de outra conversa já analisada (espera até `RD_ESPERA_TELEFONE` s; se não trocar, fica o do topo com aviso para conferir);
@@ -37,7 +44,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 | D Solicitação | Gemini |
 | E Proposta | ER: a proposta efetivada do CPF (Mesa de Crédito); senão a citada na conversa ("proposta 1234") |
 | F Nome do Cliente | ER (nome do cadastro, quando o cruzamento acha o cliente); senão **sempre o nome do contato no RD** (o do Perfil; sem Perfil, o da lista), mesmo que o cliente não tenha dito o nome na conversa. O nome que a IA lê na conversa só serve para procurar no ER |
-| G CPF | ER: CPF do cadastro (aba Cliente da proposta); senão Perfil ou o CPF que o cliente escreveu |
+| G CPF | ER: CPF do cadastro (aba Cliente da proposta); senão Perfil ou o CPF que o cliente escreveu (mesmo com o dígito verificador errado, quando não há outro) |
 | H Vendedor | ER: Digitador do detalhe da proposta |
 | I Filial | ER: Ponto de Atendimento da Mesa de Crédito |
 | J Canal | RD |
@@ -47,7 +54,7 @@ Só as PaymobiFin de `RD_CATEGORIAS` (o Gemini recebe a lista como `enum` no `re
 
 ## Privacidade
 
-CPF, telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); esses dados são lidos localmente para a planilha. No plano grátis o Google pode usar o texto enviado para melhorar os produtos dele.
+CPF (nos mesmos formatos aceitos na busca do CPF), telefone e e-mail saem do texto antes de ir para o Gemini (`mascarar`); esses dados são lidos localmente para a planilha. No plano grátis o Google pode usar o texto enviado para melhorar os produtos dele.
 
 ## Armazenamento
 
@@ -72,10 +79,11 @@ Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): a
 Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
 
 1. **Caminhos, em ordem** (`MesaCreditoLista`), porque o CPF do Perfil pode estar errado ou ser de outra pessoa:
-   1. CPF do Perfil do RD
-   2. CPF que o cliente escreveu na conversa
-   3. Nº da proposta citado na conversa
-   4. Nome completo (Perfil, Gemini ou nome do contato com 2+ palavras) — só propostas com o **nome igual**
+   1. CPF do Perfil do RD (CPF com dígito verificador errado é pulado)
+   2. CPF que o cliente escreveu na conversa (procurado na conversa **inteira**, não só nas últimas `RD_MAX_MENSAGENS`; aceita 123.456.789-09, 12345678909, "123 456 789 09", "123.456.789.09", colado na palavra; só vale com os **dígitos verificadores** certos, para um telefone de 11 dígitos não virar CPF; sem nenhum do cliente, vale o que o atendente escreveu)
+   3. Número de 11 dígitos escrito na conversa com o **dígito verificador errado** (o cliente digitou errado, ex.: 18448492370): também é consultado, depois dos CPFs válidos (`cpfsSemDvDe`, no máximo 3). Ficam de fora os que parecem celular (DDD + 9…), a não ser que a mensagem fale em "cpf", e os pedaços de números maiores (boleto, código de barras, protocolo). Sozinho não confirma o cliente, nem no lojista: precisa do telefone ou do nome. Se o ER recusar a busca, só esse caminho falha. Achando o cliente, o aviso diz que o CPF escrito não confere e a planilha leva o do cadastro
+   4. Nº da proposta citado na conversa
+   5. Nome completo (Perfil, Gemini ou nome do contato com 2+ palavras) — só propostas com o **nome igual**
 2. Em cada caminho, várias propostas: a **efetivada** (a mais recente, se houver mais de uma); sem efetivada, a citada na conversa; senão a mais recente que não está cancelada (`escolherProposta`).
 3. **Confirmação** na aba Cliente da proposta (`MesaAnaliseCliente`, `erCadastro`): o telefone do RD (últimos 8 dígitos) ou um nome conhecido tem de bater com o cadastro. Fica o primeiro caminho confirmado; se nenhum confirmar, o primeiro achado, com aviso para conferir (continua marcado; só as conversas com erro na análise vêm desmarcadas).
 4. `DetalheProposta` / `MesaAnaliseProposta` da proposta escolhida: **Digitador** = vendedor.
@@ -106,7 +114,7 @@ Ordem de decisão do tipo (coluna M), mostrada na revisão ("pelo setor…", "pe
 2. **Nome do contato** com cara de loja (`RD_NOME_LOJA`: loja, xpanse, mundo amarelo, shop, celulares, ltda, realme, samsung…) → Lojista. "iPhone"/"Apple" ficam de fora (clientes usam "iPhone de Fulano").
 3. Sem esses sinais: o Gemini decide, recebendo o setor e o critério (fala em nome de loja, de "meu cliente", venda, cadastro, IMEI ou aparelho de cliente).
 
-No **lojista**, o Perfil e o telefone do contato são da loja: o cruzamento com o ER ignora o CPF e o nome do Perfil, procura pelo CPF/proposta que o lojista escreveu (ou o nome do cliente citado), aceita o achado sem exigir telefone igual e não avisa "nome do ER diferente do RD".
+No **lojista**, o Perfil e o telefone do contato são da loja: o cruzamento com o ER ignora o CPF e o nome do Perfil, procura pelo CPF/proposta que o lojista escreveu (ou o nome do cliente citado), aceita o achado sem exigir telefone igual (menos pelo CPF com dígito verificador errado) e não avisa "nome do ER diferente do RD".
 
 ## Encerrar antes das 24 h (conversa escolhida)
 

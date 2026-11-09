@@ -1,208 +1,354 @@
-# instructions.md — Guia central de desenvolvimento do PaymobiFin - Assistente
+# instructions.md — Manual operacional do PaymobiFin
 
-> **Este documento é a fonte única de verdade para qualquer desenvolvimento, manutenção ou extensão do projeto.**
-> Toda IA ou desenvolvedor deve ler este arquivo antes de escrever ou alterar qualquer linha de código.
+> **Fonte única de verdade para qualquer IA ou desenvolvedor que trabalhe neste projeto.**
+> Leia este arquivo completamente antes de iniciar qualquer tarefa.
 
 ---
 
-## A. Identidade e objetivo do projeto
+## 1. Identidade e contexto do projeto
 
-### O que é
+O **PaymobiFin - Assistente** é um userscript Tampermonkey que roda em dois sites:
 
-O **PaymobiFin - Assistente** é um userscript Tampermonkey (arquivo `.user.js`) que adiciona um painel flutuante ao sistema ER da Paymobi (`paymobi.ercard.com.br`). Ele também roda no motor de análise de crédito (`enviamotor.mobfacil.com.br`).
-
-### Qual problema resolve
-
-A equipe de cobrança e crédito precisa coletar dados de análise, registrar acordos, gerar textos padronizados para grupos de WhatsApp e copiar linhas formatadas para planilhas do Excel. Sem o script, tudo isso exige navegação manual repetitiva e cópia manual de dados dispersos em várias telas do sistema.
-
-### Ambiente de execução
-
-| Item | Valor |
+| Site | Função |
 |---|---|
-| Extensão | Tampermonkey (Chrome/Edge/Firefox) |
-| Sites alvo | `paymobi.ercard.com.br` e `enviamotor.mobfacil.com.br` |
-| Momento de execução | `document-idle` (após carregamento completo da página) |
-| Contexto JS | IIFE (função imediatamente invocada), `'use strict'` |
-| Acesso ao site | Via `unsafeWindow` (alias `PAGINA` no código) |
+| `paymobi.ercard.com.br` | Painel principal com todas as funcionalidades |
+| `enviamotor.mobfacil.com.br` | Motor de coleta de dados de crédito (iframe) |
 
-### Tecnologias utilizadas
+**Arquivo de código:** `automacaomobfacil.user.js` — único arquivo JavaScript, ~8.300 linhas, sem transpilador ou bundler.
 
-- JavaScript puro (ES2020+), sem transpilador ou bundler
-- Tampermonkey APIs: `GM_setValue/getValue/deleteValue`, `GM_setClipboard`, `GM_xmlhttpRequest`, `unsafeWindow`
-- Pusher Channels 8.4.0 (biblioteca externa via `@require`)
-- Web Crypto API (AES-GCM 256 + PBKDF2 + HMAC-SHA256)
-- Web Workers (para `sleep` não bloqueante em abas em segundo plano)
+**Versão atual:** 13.22 (campo `@version` no cabeçalho do script — única fonte da versão)
 
-### Princípios que orientam o desenvolvimento
-
-1. **Não sobrescrever dados bons** — uma leitura posterior nunca substitui um campo já preenchido (`salvar()` implementa isso explicitamente)
-2. **Tolerância a falhas silenciosa** — blocos `catch (_) {}` são intencionais onde o site pode mudar sem quebrar o script
-3. **Autossuficiência** — o script não depende de servidor próprio; tudo roda no navegador do usuário
-4. **Compatibilidade retroativa** — estruturas de armazenamento são versionadas (`LB_VERSAO`, `AC_VERSAO`) e migradas automaticamente
-5. **A versão fica em um lugar só** — o número de versão existe apenas no `@version` do cabeçalho; o código lê via `GM_info.script.version`
+**Repositório:** `git@github.com:arthursoaress7/Mobfacil-Automator.git`  
+**Proprietário do repositório:** arthursoaress7 (pode ter permissões administrativas que o usuário atual não tem)
 
 ---
 
-## B. Arquitetura e organização
+## 2. Prioridades atuais
 
-### Estrutura de arquivos atual
+1. **Manter o sistema funcionando** — preservar toda funcionalidade existente
+2. **Estabelecer padrões de desenvolvimento** — governança, versionamento, documentação
+3. **Não refatorar** — a divisão do monólito não está no escopo atual
+
+Qualquer solicitação que contrarie estas prioridades requer autorização explícita.
+
+---
+
+## 3. Regras de preservação do monólito
+
+Até autorização formal para refatoração:
+
+- **Não dividir `automacaomobfacil.user.js` em múltiplos arquivos**
+- **Não reorganizar diretórios do projeto**
+- **Não alterar a arquitetura ou a ordem de execução**
+- **Não remover funções** sem investigar todos os pontos de uso
+- **Não alterar variáveis globais** por conveniência
+- **Não substituir implementações existentes** por alternativas sem justificativa técnica aprovada
+- **Não fazer melhorias** fora do escopo explicitamente solicitado
+
+---
+
+## 4. Hierarquia das instruções
+
+Em caso de conflito entre documentos, esta é a ordem de precedência:
+
+1. Instruções diretas do responsável (chat/sessão atual)
+2. Este arquivo (`instructions.md`)
+3. `README.md`
+4. `docs/script/<módulo>.md`
+5. Comentários no código-fonte
+
+O código-fonte é sempre a fonte de verdade sobre **como o sistema funciona hoje**.
+
+---
+
+## 5. Política de autonomia das IAs
+
+### Categoria A — Alterações rotineiras (autonomia total)
+
+A IA pode executar o ciclo completo sem aguardar aprovação:
+
+- Criar branch → implementar → commitar → push → abrir Pull Request
+
+**Exemplos:**
+- Atualização de documentação
+- Correções pontuais de bug
+- Novas funcionalidades isoladas (sem impacto em módulos compartilhados)
+- Ajustes visuais no painel
+- Testes e manutenção de baixo risco
+
+**Limite:** a autonomia não autoriza ultrapassar o escopo solicitado.
+
+### Categoria B — Alterações críticas (exigem autorização explícita)
+
+A IA pode fazer diagnóstico e preparar proposta, mas **deve aguardar aprovação antes de executar**:
+
+- Mudança de arquitetura ou divisão do monólito
+- Refatoração estrutural
+- Alteração da estrutura de diretórios
+- Exclusão de funcionalidades existentes
+- Alterações em mecanismos de autenticação
+- Alterações na estrutura de armazenamento (`GM_setValue/getValue`)
+- Modificações em mecanismos de segurança (criptografia, Pusher)
+- Alterações no `@downloadURL` ou `@updateURL` (impacta todos os usuários)
+- Mudanças em permissões ou configurações administrativas do GitHub
+- Qualquer alteração que afete todos os usuários do script imediatamente
+
+**A criação de uma tarefa por uma IA não constitui autorização para execução de alterações críticas.**
+
+**Limite:** a autonomia não autoriza ultrapassar o escopo solicitado.
+
+## 6. Regras de Git
+
+### Proibido em qualquer circunstância
+
+- Commitar diretamente na `main`
+- Fazer push direto na `main`
+- Executar `force push` sem autorização explícita
+- Sobrescrever alterações de outras pessoas ou IAs
+- Apagar branches ou histórico sem autorização
+- Executar `git reset --hard` sem autorização
+- Modificar permissões do repositório
+- Criar tags de release manualmente
+- Ignorar conflitos sem investigar a origem
+
+### Obrigatório sempre
+
+- Verificar o estado do Git antes de iniciar (`git status`, `git log --oneline -5`)
+- Verificar os arquivos alterados antes do commit (`git diff --stat`)
+- Trabalhar em branches temporárias
+- Resolver conflitos compreendendo a causa antes de aceitar qualquer lado
+
+### Sobre autenticação
+
+As IAs usam a autenticação pessoal do responsável pelo desenvolvimento. O GitHub não distingue automaticamente ações de IA de ações humanas. Toda operação Git feita por uma IA é registrada como ação do usuário autenticado.
+
+---
+
+## 7. Padrão de branches (GitHub Flow)
 
 ```
-Mobfacil-Automator/
-├── automacaomobfacil.user.js   ← ÚNICO arquivo de código (monólito, ~6.300 linhas)
-├── README.md                   ← Documentação funcional e histórico de versões
-├── instructions.md             ← Este arquivo (guia central de desenvolvimento)
-├── CLAUDE.md                   ← Entrada para o Claude Code
-└── docs/
-    └── script/
-        ├── 01-visao-geral.md
-        ├── 02-motor-coleta.md
-        ├── 03-painel-interface.md
-        ├── 04-atendimento.md
-        ├── 05-historico.md
-        ├── 06-lembretes-timers.md
-        ├── 07-cac.md
-        ├── 08-ccbs-contas.md
-        ├── 09-equipe.md
-        ├── 10-navegacao-busca.md
-        └── 11-rd-encerramento.md
+main  ←  única branch permanente, sempre estável
+  └── tipo/descricao-curta  (temporária, por tarefa)
 ```
 
-> ⚠️ **Arquitetura monolítica:** todo o código está em `automacaomobfacil.user.js`. Não existe separação de módulos em arquivos diferentes. A refatoração em módulos **não faz parte do escopo atual** — qualquer alteração deve respeitar essa estrutura.
+**Prefixos obrigatórios:**
 
-### Organização interna do script (por seção)
+| Prefixo | Uso |
+|---|---|
+| `feature/` | Nova funcionalidade |
+| `fix/` | Correção de erro |
+| `docs/` | Documentação |
+| `refactor/` | Refatoração autorizada |
+| `chore/` | Manutenção e configurações |
+| `hotfix/` | Correção urgente |
 
-O script é uma IIFE única. Internamente está organizado por blocos delimitados com comentários `/* ===== NOME ===== */`:
+**Regras:**
+- Criar sempre a partir da `main` atualizada: `git checkout main && git pull`
+- Uma branch por tarefa — não acumular múltiplas tarefas na mesma branch
+- Remover após o merge
 
-| Bloco | Linhas aprox. | Responsabilidade |
+> **Nota:** a branch `development` existe no repositório mas não é o fluxo adotado. O `@updateURL` do script aponta para `main`. Novas tarefas devem usar o padrão acima.
+
+---
+
+## 8. Conventional Commits
+
+Formato obrigatório:
+
+```
+tipo: descrição objetiva em minúsculas
+```
+
+**Tipos permitidos:**
+
+| Tipo | Impacto SemVer | Quando usar |
 |---|---|---|
-| Cabeçalho Tampermonkey | 1–23 | Metadados, permissões, URLs alvo, dependências |
-| Constantes globais | 24–113 | `VERSAO`, `TITULO`, `CONFIG`, `PAGINA`, `PADRAO`, `cfg`, `sleep` |
-| Leitura da árvore | 114–374 | Funções de coleta de dados do motor MobFacil (DOM + React) |
-| Motor (`iniciarMotor`) | 375–836 | Navegação automática na árvore do iframe |
-| Painel (`iniciarPainel`) | 837–6293 | Todo o painel: interface, coleta, relatórios e módulos |
-| → CCBs | 2881–3068 | Download de CCBs em lote |
-| → Contas | 3069–3273 | Troca rápida de conta |
-| → Gerador de Negociações | 3274–3767 | Formulário de negociação + textos |
-| → Lembretes | 3768–4160 | Pagamentos parciais (v2) |
-| → Consulta CAC | 4161–4480 | Leitura da CAC |
-| → Atendimento | 4546–4834 | Negociação e Renegociação |
-| → Timers | 4835–5171 | Agendamentos de expediente |
-| → Navegação/Aparência | 5172–5272 | Nova UI / UI Antiga |
-| → Equipe (Pusher) | 5273–5739 | Compartilhamento criptografado |
-| → Histórico | 5740–5968 | Acordos registrados |
-| → Busca de cliente | 5969–6273 | Central de busca somente leitura |
-| → Navegação automática | 6274–6293 | Troca de tela automática |
-| Inicialização | 6294–6297 | Ponto de entrada: `iniciarMotor()` ou `iniciarPainel()` |
+| `feat` | MINOR | Nova funcionalidade |
+| `fix` | PATCH | Correção de bug |
+| `perf` | PATCH | Melhoria de desempenho |
+| `docs` | — | Apenas documentação |
+| `refactor` | — (ou MINOR/PATCH se funcional) | Refatoração |
+| `chore` | — | Versão, configs, manutenção |
+| `test` | — | Testes |
+| `build` | — | Dependências, build |
+| `ci` | — | GitHub Actions, automação |
 
-### Ponto de entrada (inicialização)
+**Mudança incompatível:** usar `BREAKING CHANGE:` no rodapé ou `!` após o tipo:
+```
+feat!: remover suporte ao formato antigo de exportação
+```
+
+**O título do Pull Request deve seguir o mesmo formato.**
+
+---
+
+## 9. Pull Requests e integração
+
+### Alterações rotineiras (Categoria A)
+
+```
+1. Criar branch a partir da main atualizada
+2. Implementar dentro do escopo solicitado
+3. Revisar o diff antes de commitar
+4. Push da branch
+5. Abrir PR com título no formato Conventional Commits
+6. Integrar via Squash Merge após verificações
+```
+
+### Alterações críticas (Categoria B)
+
+```
+1. Preparar diagnóstico e proposta detalhada
+2. Apresentar ao responsável e aguardar autorização explícita
+3. Executar somente após aprovação
+4. Abrir PR
+5. Integrar somente após nova confirmação do responsável
+```
+
+**Squash Merge é o padrão** — mantém histórico da `main` organizado (um commit por feature/fix).
+
+---
+
+## 10. Verificações obrigatórias antes de commitar
+
+Checklist que a IA deve executar antes de qualquer commit:
+
+- [ ] O diff contém apenas alterações do escopo solicitado?
+- [ ] Nenhuma funcionalidade existente foi removida sem autorização?
+- [ ] Nenhuma variável global (`CONFIG`, `PADRAO`, `PAGINA`) foi alterada sem necessidade?
+- [ ] Novas chaves de armazenamento foram adicionadas à tabela do item 15?
+- [ ] O HTML do painel usa `$('#id')` (não `document.querySelector`)?
+- [ ] Novos timeouts usam `CONFIG` (não valores hard-coded)?
+- [ ] Novas funções de módulo usam o prefixo correto?
+- [ ] O arquivo `docs/script/` correspondente foi atualizado se necessário?
+- [ ] `@downloadURL` e `@updateURL` não foram alterados?
+- [ ] `'use strict'` não foi removido?
+
+---
+
+## 11. Tratamento de falhas
+
+**Política: bloqueio por padrão.**
+
+Quando uma verificação ou teste falhar:
+
+1. Identificar qual verificação falhou
+2. Investigar a causa
+3. Determinar se é relacionada à alteração realizada
+4. **Se relacionada:** corrigir antes de prosseguir
+5. **Se não relacionada:** documentar a evidência de que não é relacionada
+6. Avaliar o risco — falhas desconhecidas ou inconclusivas não podem ser ignoradas
+7. Permitir exceção somente com justificativa técnica defensável
+
+**Nunca:**
+- Ignorar falhas para facilitar o merge
+- Desabilitar verificações temporariamente sem autorização
+- Assumir que uma falha pré-existente justifica deixar outra passar
+
+---
+
+## 12. Versionamento SemVer
+
+O campo `@version` no cabeçalho do script é a única fonte da versão. Não duplicar em nenhum outro lugar.
+
+**Regras de incremento:**
+
+| Tipo de commit | Incremento |
+|---|---|
+| `feat` | MINOR (ex.: 13.22 → 13.23) |
+| `fix`, `perf` | PATCH (ex.: 13.22 → 13.22.1) |
+| `BREAKING CHANGE` | MAJOR (ex.: 13.22 → 14.0.0) |
+| `docs`, `chore`, `test`, `ci`, `refactor` sem impacto funcional | nenhum |
+
+Atualizar o `@version` acompanhado de um commit `chore: versão X.Y.Z`.
+
+---
+
+## 13. GitHub Actions e releases (situação atual e planejada)
+
+**Estado atual:** não há workflows ou Actions configurados. Não há tags de release no repositório.
+
+**Planejado:** avaliar `semantic-release` para:
+1. Detectar commits desde a última versão
+2. Calcular o incremento SemVer automaticamente
+3. Atualizar `CHANGELOG.md`
+4. Criar tag Git e GitHub Release
+5. Sincronizar o campo `@version` do script sem quebrar o código funcional
+
+**Antes de implementar Actions:**
+- Confirmar permissões disponíveis com o proprietário do repositório (arthursoaress7)
+- Verificar proteção existente da `main`
+- Confirmar se a conta tem permissão para criar releases e tags
+- Não presumir acesso administrativo
+
+**Não implementar** publicação automática do script em serviços externos sem autorização.  
+**Não presumir** que criar uma GitHub Release atualiza automaticamente os usuários — isso é feito pelo `@updateURL` do Tampermonkey, que aponta para a `main`.
+
+---
+
+## 14. Segurança e proteção de dados
+
+- **`senhasContas`** — armazena senhas no Tampermonkey, que não é criptografado. Quem acessa o perfil do navegador pode ler. Não expor em logs ou diagnósticos.
+- **`equipeSecret` e `equipeChave`** — idem. Nunca exibir valores, apenas confirmar existência.
+- **`@updateURL` aponta para `main`** — qualquer push na `main` atualiza todos os usuários com auto-update ativo. Testar antes de integrar.
+- **`PAGINA.eval()`** — usado no módulo de CCBs para acessar `DetalhePropostaDocumentos`. Frágil se o site adicionar CSP restritivo.
+- **Diagnósticos (`debug`)** — nunca incluem valores pessoais; apenas nomes de campos e valores numéricos de interesse.
+
+---
+
+## 15. Arquitetura interna do script
+
+### Ponto de entrada
 
 ```javascript
-// Linha 6294–6297 — ÚNICO ponto de entrada
+// Últimas linhas do arquivo
 if (location.hostname.endsWith('mobfacil.com.br')) iniciarMotor();
 else if (window.top === window) iniciarPainel();
 ```
 
-- `enviamotor.mobfacil.com.br` → roda `iniciarMotor()` (coleta dados da árvore)
-- `paymobi.ercard.com.br` → roda `iniciarPainel()` **apenas na janela principal** (`window.top === window`), não em iframes
+- `enviamotor.mobfacil.com.br` → `iniciarMotor()` (coleta dados da árvore)
+- `paymobi.ercard.com.br` → `iniciarPainel()` apenas na janela principal (não em iframes)
 
-### Variáveis e constantes compartilhadas (escopo da IIFE)
+### Mapa de seções internas
 
-Estas variáveis são acessíveis por todos os módulos internos. Modificá-las tem impacto global:
+| Bloco | Responsabilidade |
+|---|---|
+| Cabeçalho (linhas 1–23) | Metadados Tampermonkey, permissões, dependências |
+| Constantes globais | `VERSAO`, `CONFIG`, `PAGINA`, `PADRAO`, `cfg`, `sleep` |
+| Leitura da árvore | Funções de coleta React/DOM do motor MobFacil |
+| `iniciarMotor()` | Navegação automática na árvore do iframe |
+| `iniciarPainel()` | Painel completo — contém todos os módulos abaixo |
+| → CCBs | Download de CCBs em lote |
+| → Contas | Troca rápida de conta, `contaAtiva()` |
+| → Gerador de Negociações (`ng`) | Formulário + geração de textos |
+| → Lembretes (`lb`) | Pagamentos parciais v2 |
+| → Consulta CAC (`cac`) | Leitura da Central de Atendimento |
+| → Atendimento (`at`) | Negociação e Renegociação |
+| → Timers (`tm`) | Agendamentos de expediente |
+| → Navegação/Aparência | Nova UI / UI Antiga |
+| → Equipe (`eq`) | Pusher, criptografia AES-GCM |
+| → Histórico (`hs`) | Acordos registrados |
+| → Busca de cliente (`bs`) | Central de busca (somente leitura) |
+| → Navegação automática | Troca de tela automática no ER |
+| → RD Atendimento (`rd`) | Análise com Gemini e encerramento do dia |
 
-| Nome | Tipo | Descrição | Linha |
-|---|---|---|---|
-| `VERSAO` | string | Versão lida do `@version` via `GM_info` | 29 |
-| `TITULO` | string | Nome do painel | 30 |
-| `CONFIG` | objeto | Todos os timeouts e limites de comportamento | 31 |
-| `PAGINA` | objeto | `unsafeWindow` — acesso ao JS do site | 63 |
-| `PADRAO` | objeto | Valores padrão das preferências do usuário | 66 |
-| `cfg` | função | Lê preferência: `cfg('chave')` → `GM_getValue` com fallback | 82 |
-| `sleep` | função | Aguarda N ms via Web Worker (não bloqueia) | 86 |
-| `NOMES` | objeto | Nomes legíveis dos campos de crédito | 102 |
-| `campos` | função | Retorna quais campos devem ser coletados (depende do modo) | 104 |
-| `completo` | função | Verifica se todos os campos do modo atual estão preenchidos | 111 |
-| `react` | objeto | Estado da leitura da árvore React (mutável durante coleta) | 144 |
-| `RAIZES` | RegExp | Nós raiz do SPC usados na navegação | 282 |
+### Variáveis globais compartilhadas (impacto em todo o script)
 
-### Integração com o sistema ER
-
-O script interage com o site de três formas:
-
-1. **DOM direto** — `document.querySelector`, `querySelectorAll` com seletores CSS do antd (ex.: `.ant-tree-treenode`)
-2. **Objetos internos via `PAGINA`** — acessa funções e objetos do próprio site:
-   - `PAGINA.MostraConsulta('MesaCredito')` — troca de tela
-   - `PAGINA.objFilaPropostas.FilaPropostas('X')` — pesquisa na fila
-   - `PAGINA.jQuery` — biblioteca jQuery do site (usada para eventos AJAX)
-   - `PAGINA.eval(...)` — usado apenas para acessar `DetalhePropostaDocumentos` quando não está exposto globalmente
-3. **Fibra React** — acessa `treeData` via `__reactFiber$` para ler nós fechados da árvore
-
-### Armazenamento (`GM_setValue`/`GM_getValue`)
-
-Todas as chaves usadas no script. Modificar uma chave sem migração quebra dados existentes:
-
-| Chave | Conteúdo | Módulo |
+| Nome | Tipo | Descrição |
 |---|---|---|
-| `dados` | `{ [id]: { qtd, val, score, consultas, cpf, reprov } }` | Motor/Coleta |
-| `debug` | Snapshots de diagnóstico por proposta | Motor |
-| `fila` | `[id, id, ...]` — propostas a coletar | Painel |
-| `feitas` | `[id, id, ...]` — propostas já coletadas | Painel |
-| `ignoradas` | `{ id: 'teste' \| 'cancelada' }` | Painel |
-| `verificadas` | `[id, ...]` — conferidas na tabela | Painel |
-| `rodando` | boolean — coleta ativa | Painel |
-| `batida` | timestamp — heartbeat da aba ativa | Painel |
-| `atualId` | string — ID da proposta sendo coletada | Painel |
-| `fim` | string — sinaliza que o motor terminou | Motor→Painel |
-| `modo` | `'coleta' \| 'aprovadas' \| 'reprovadas'` | Painel |
-| `mfLembretes` | `{ versao: 2, itens: [...], invalidos: [...] }` | Lembretes |
-| `mfLembretesAviso` | Estado do pop-up de lembretes | Lembretes |
-| `mfAcordos` | `{ versao: 1, itens: [...] }` | Histórico |
-| `equipeNome/Secret/Chave/Ativa/Id` | Config da equipe | Equipe |
-| `equipeOnline/Versao/Avisos/AvisosVistos` | Estado da equipe | Equipe |
-| `senhasContas` | Senhas das contas (criptografadas localmente) | Contas |
-| `contaAnterior` | Usuário da conta de onde se saiu na última troca (pré-seleção em "Trocar de conta") | Contas |
-| `negModelos` | Modelos de texto personalizados | Negociação |
-| `negModalidade/negModeloAtual/negPagamento` | Últimas escolhas | Negociação |
-| `atModelo` | Modelo ativo no Atendimento | Atendimento |
-| `abaPainel` | Aba ativa no painel | Interface |
-| `posPainel/tamPainel/tamAmpliado/min` | Posição e tamanho do painel | Interface |
-| `navAuto` | Navegação automática ligada/desligada | Navegação |
-| `tmExpediente/tmVolume` | Config de timers | Timers |
-| `geminiChave/geminiModelo` | Chave e modelo do Gemini (só neste navegador) | RD Atendimento |
-| `rdAnalises/rdLinhas` | Análises e linhas da planilha de encerramento do dia | RD Atendimento |
-| `erBase` | Endereço do ER (gravado pelo painel do ER; usado pelo RD Atendimento) | RD Atendimento |
-| `gruposCfg` | Estado aberto/fechado dos grupos de config | Config |
+| `VERSAO` | string | Versão do script lida via `GM_info` |
+| `CONFIG` | objeto | Todos os timeouts e limites — nunca hard-code fora daqui |
+| `PAGINA` | objeto | `unsafeWindow` — acesso ao JS do site |
+| `PADRAO` | objeto | Valores padrão das preferências |
+| `cfg(k)` | função | Lê preferência com fallback para `PADRAO` |
+| `sleep(ms)` | função | Aguarda N ms via Web Worker — usar sempre em loops |
 
----
-
-## C. Padrões obrigatórios de desenvolvimento
-
-### Padrões confirmados no código (existentes)
-
-#### 1. Estrutura do arquivo
-
-- Todo o código está dentro de uma IIFE: `(function () { 'use strict'; ... })();`
-- Indentação: **2 espaços**
-- Seções delimitadas com: `/* ================= NOME ================= */`
-- Subsistemas dentro do painel usados por uma só seção são declarados dentro da função correspondente (escopo local)
-
-#### 2. Nomenclatura
-
-| Tipo | Convenção | Exemplos reais |
-|---|---|---|
-| Constantes globais | MAIÚSCULAS | `CONFIG`, `PAGINA`, `PADRAO`, `VERSAO`, `RAIZES` |
-| Funções de módulo | prefixo de 2–3 letras + camelCase | `ngValor()`, `atDesenhar()`, `lbCarregar()`, `cacReq()`, `eqCifrar()`, `tmCriar()` |
-| Variáveis locais | camelCase | `dadosAtuais`, `ultimoClique`, `buscaOk` |
-| Chaves de armazenamento | camelCase string literal | `'mfLembretes'`, `'negModelos'`, `'equipeAtiva'` |
-| IDs de elementos HTML | prefixo `mf-` + kebab-case | `#mf-p`, `#mf-ini`, `#mf-bs-termo` |
-| Classes CSS | prefixo `mf-` + kebab-case | `.mf-sec`, `.mf-tit`, `.mf-grade` |
-
-**Prefixos de funções confirmados no código:**
+### Prefixos de funções por módulo
 
 | Prefixo | Módulo |
 |---|---|
 | `ng` | Gerador de Negociações |
-| `at` | Atendimento (Negociação/Renegociação) |
+| `at` | Atendimento |
 | `lb` | Lembretes |
 | `tm` | Timers |
 | `cac` | Consulta CAC |
@@ -210,327 +356,176 @@ Todas as chaves usadas no script. Modificar uma chave sem migração quebra dado
 | `eq` | Equipe (Pusher) |
 | `hs` | Histórico |
 | `bs` | Busca de cliente |
+| `rd` | RD Atendimento |
 
-#### 3. Seletor interno do painel
-
-Dentro de `iniciarPainel`, o acesso ao DOM usa um atalho local:
-
-```javascript
-const $ = s => painel.querySelector(s);  // linha 1532
-```
-
-Isso significa que `$('#mf-ini')` busca **dentro do painel**, não no documento inteiro. Usar `document.querySelector` dentro do painel é incorreto e pode capturar elementos do próprio site.
-
-#### 4. Tratamento de erros
-
-Padrão dominante: `catch (_) {}` — silencioso, sem log, quando o erro é esperado ou irrelevante:
+### Seletor interno do painel
 
 ```javascript
-try { raizes = [...PAGINA.document.querySelectorAll('.ant-tree')]; } catch (_) { return null; }
+const $ = s => painel.querySelector(s);  // definido dentro de iniciarPainel()
 ```
 
-Para erros em sistemas críticos com informação útil: captura com log:
+`$('#mf-id')` busca dentro do painel. **Nunca usar `document.querySelector` dentro do painel** — pode capturar elementos do próprio site.
 
-```javascript
-} catch (e) { react.bruta = react.lista = []; }
-```
+### Chaves de armazenamento (`GM_setValue/getValue`)
 
-Para o módulo de Timers (loop infinito), usa `console.warn` com prefixo:
+Adicionar novas chaves a esta tabela antes de usar. Modificar chaves existentes sem migração quebra dados de usuários reais.
 
-```javascript
-} catch (e) { console.warn('[PaymobiFin] timers', e && e.message); }
-```
-
-Para erros no módulo de CCBs, usa classe própria:
-
-```javascript
-class ErroCCB extends Error { constructor(m, parar) { super(m); this.parar = !!parar; } }
-```
-
-**⚠️ Recomendação nova:** O módulo CAC e o módulo de Equipe deveriam ter tratamento de erros com log similar a `[PaymobiFin] cac` / `[PaymobiFin] equipe`. Hoje esses erros são silenciosos, dificultando diagnóstico.
-
-#### 5. Logs de depuração
-
-Apenas dois usos de `console.log/warn` em todo o script:
-
-```javascript
-console.log('[PaymobiFin]', r.id, atual);          // linha 372 — confirma dado salvo
-console.warn('[PaymobiFin] timers', e && e.message); // linha 5169 — erro no timer
-```
-
-Prefixo padrão: `[PaymobiFin]`. Todo novo log deve usar este prefixo.
-
-#### 6. Funções assíncronas
-
-Funções longas e com espera usam `async/await` com `sleep()`:
-
-```javascript
-async function rodarCaminho(passos, maxSeg) {
-  while (Date.now() < limite) {
-    await sleep(CONFIG.ESPERA_CLIQUE);
-    ...
-  }
-}
-```
-
-Nunca usar `setTimeout` direto para esperas em loops — usar `sleep()` que resolve o problema de abas em segundo plano.
-
-#### 7. Timeouts e limites
-
-Todos os timeouts e limites de tempo ficam em `CONFIG` (linha 31). Nunca colocar valores de tempo hard-coded em outro lugar do código.
-
-#### 8. Interação com o site via `PAGINA`
-
-Sempre envolver em `try/catch` — o site pode ser atualizado e quebrar o acesso:
-
-```javascript
-try {
-  if (typeof PAGINA.MostraConsulta === 'function') PAGINA.MostraConsulta(tela.menu);
-} catch (_) {}
-```
-
-#### 9. Armazenamento: leitura imutável
-
-A função `salvar()` implementa a regra "nunca sobrescrever dado bom":
-
-```javascript
-// só preenche campos ainda vazios: uma leitura posterior nunca sobrescreve dado bom
-function salvar(r) {
-  ...
-  if (r[k] != null && (atual[k] == null || ...)) { atual[k] = r[k]; mudou = true; }
-  ...
-}
-```
-
-Qualquer nova função que grave dados de proposta deve seguir a mesma lógica.
-
-#### 10. Prevenção de execução duplicada
-
-O painel só inicia se `window.top === window` (linha 6296). Evita instâncias dentro de iframes.
-
-Durante a coleta, o mecanismo de "batida" (`batida`) impede que outra aba tome o controle enquanto a atual está ativa.
-
-### Padrões que precisam ser formalizados (oportunidades de melhoria)
-
-> Os itens abaixo **não são padrões atuais** — são recomendações para futuras sessões de desenvolvimento.
-
-1. **Logs de módulos específicos:** adicionar `console.warn('[PaymobiFin] <módulo>', ...)` nos blocos catch do CAC e Equipe
-2. **Comentários de parâmetros nas funções complexas:** algumas funções como `cacAbrir(row, termo, extra, dentro)` não têm JSDoc; adicionar ao criar ou alterar
-3. **Constantes de seletores CSS:** seletores como `.ant-tree-treenode` estão espalhados; centralizar em um objeto seria mais seguro para manutenção futura
-
----
-
-## D. Regras para desenvolvimento com IA
-
-> Estas regras se aplicam ao Claude, ao Kiro e a qualquer outra IA que trabalhe neste projeto.
-
-### Antes de qualquer trabalho
-
-1. **Leia este arquivo (`instructions.md`) completamente**
-2. Leia o arquivo `docs/script/` correspondente ao módulo que será alterado
-3. Leia as seções relevantes do `README.md`
-4. **Leia o código-fonte** da seção que será alterada — nunca assuma o que o código faz
-5. Identifique quais chaves de `GM_setValue/getValue` a alteração pode afetar
-6. Identifique se a alteração impacta o módulo de Equipe (dados compartilhados)
-
-### Durante o desenvolvimento
-
-7. **Reutilize funções existentes** — verifique se já existe antes de criar. Exemplos de funções reutilizáveis: `cfg()`, `sleep()`, `salvar()`, `num()`, `limpa()`
-8. **Não crie funcionalidades duplicadas** — se existir `lbCarregar()`, não crie `carregarLembretes()`
-9. **Preserve o comportamento existente** — não remova parâmetros de funções, não mude assinaturas sem mapear todos os usos
-10. **Não altere `CONFIG`** sem entender o impacto em todas as esperas e loops que o usam
-11. **Não altere `PADRAO`** sem verificar se a chave já tem dados salvos em usuários reais
-12. **Use o prefixo correto** para novas funções de módulo (veja tabela de prefixos na seção C)
-13. **Use `$()` dentro do painel**, não `document.querySelector()`
-14. **Implemente apenas o que foi solicitado** — não adicione features extras, não refatore código fora do escopo
-
-### Verificações obrigatórias
-
-15. Ao adicionar nova chave de armazenamento: verificar se o nome já está em uso (ver tabela da seção B)
-16. Ao alterar lógica de coleta (`extrair`, `extrairDeLista`, `salvar`): testar que dados válidos não são sobrescritos
-17. Ao alterar o HTML do painel: verificar que o seletor `$('#id')` correspondente existe
-18. Ao alterar um módulo compartilhado com a Equipe (`mfLembretes`, `mfAcordos`): verificar compatibilidade com a versão serializada
-
-### Proibições absolutas
-
-19. **Não divida o arquivo em múltiplos arquivos** — a refatoração em módulos não está no escopo atual
-20. **Não altere o cabeçalho `@downloadURL` e `@updateURL`** — o Tampermonkey usa para atualização automática
-21. **Não remova `'use strict'`**
-22. **Não altere a lógica de inicialização** (linhas 6294–6297) sem entender o impacto nos dois sites
-23. **Não invente nomes de funções** que não existem — se não encontrar, pergunte
-24. **Não assuma que uma funcionalidade existe** sem verificar no código
-25. Se tiver dúvida sobre o funcionamento de uma parte, **diga explicitamente** antes de prosseguir
-
----
-
-## E. Fluxo de trabalho para alterações
-
-### Antes de desenvolver
-
-```
-1. Ler instructions.md (este arquivo)
-2. Identificar o módulo afetado (ver tabela de seções em B)
-3. Ler docs/script/<arquivo do módulo>.md
-4. Ler o bloco correspondente no código-fonte
-5. Mapear:
-   - Quais funções serão criadas/alteradas
-   - Quais chaves de GM_setValue/getValue serão afetadas
-   - Quais outros módulos chamam as funções que serão alteradas
-   - Se a alteração impacta dados compartilhados com a Equipe
-6. Apresentar o plano antes de implementar (em alterações não triviais)
-```
-
-### Durante o desenvolvimento
-
-```
-1. Seguir os padrões da seção C
-2. Um bloco de mudança de cada vez — não misturar correções não relacionadas
-3. Manter comentários explicativos quando a lógica não for óbvia
-4. Não alterar código fora do escopo da solicitação
-5. Se descobrir um bug fora do escopo, reportar sem corrigir
-```
-
-### Depois do desenvolvimento
-
-```
-1. Revisar se alguma chave de armazenamento foi adicionada sem documentar
-2. Verificar se a seção docs/script correspondente precisa ser atualizada
-3. Verificar se o README precisa ser atualizado (mudança de comportamento visível ao usuário)
-4. Apresentar resumo: o que foi alterado, por qual motivo, o que pode ter impacto indireto
-```
-
----
-
-## F. Manutenção e evolução
-
-### Correção de bugs
-
-- Leia o snapshot de diagnóstico (`GM_getValue('debug')`) para entender o estado quando o bug ocorreu
-- Identifique se o bug é intermitente (depende de timing) → provável relação com `CONFIG` ou `sleep`
-- Identifique se o bug só ocorre em abas em segundo plano → possível problema com `requestAnimationFrame`
-- Não altere timeouts de `CONFIG` sem entender todos os pontos que os usam
-
-### Criação de novo módulo dentro do painel
-
-1. Escolher um prefixo de 2–3 letras único (verificar que não existe na tabela)
-2. Nomear todas as funções com esse prefixo
-3. Nomear IDs HTML com `mf-<prefixo>-<elemento>`
-4. Adicionar chaves de armazenamento à tabela da seção B deste documento
-5. Delimitar o bloco com `/* ================= NOME ================= */`
-6. Criar o documento correspondente em `docs/script/`
-
-### Alteração de scripts existentes
-
-- Toda alteração em funções chamadas por mais de um módulo exige verificar todos os pontos de chamada
-- Alterações no fluxo de coleta (`rodar`, `coletar`, `coletarEtapas`) impactam a experiência de toda a auditoria
-- Alterações no sistema de Equipe impactam dados de todos os computadores conectados
-
-### Remoção de funcionalidades
-
-- Nunca remover sem verificar se está referenciado em: (1) outros módulos, (2) armazenamento salvo, (3) documentação
-- Funcionalidades removidas do UI (como campos do CAC na v12.0) devem ser documentadas no README
-
-### Atualização de dependências
-
-- A biblioteca Pusher está fixada em `8.4.0` via `@require`. Não atualizar sem testar
-- O número de versão no `@version` é o único lugar — não duplicar em comentários
-
-### Compatibilidade com mudanças no sistema ER
-
-- Os seletores CSS do antd (`.ant-tree-*`) podem mudar em atualizações do ER
-- Os objetos internos (`PAGINA.objFilaPropostas`, `PAGINA.MostraConsulta`) podem mudar
-- Toda interação com o site deve estar em `try/catch` para degradar graciosamente
-
-### Evolução da arquitetura
-
-A arquitetura monolítica é intencional **no momento atual**. A refatoração em módulos só deve ocorrer quando formalmente planejada com a equipe. Até lá, toda implementação deve respeitar o monólito.
-
----
-
-## G. Documentação
-
-### Estrutura atual
-
-| Arquivo | Propósito | Atualizar quando |
+| Chave | Conteúdo | Módulo |
 |---|---|---|
-| `instructions.md` | Fonte central para desenvolvimento | Novos padrões, novos módulos, mudanças estruturais |
-| `README.md` | Referência funcional para o usuário | Comportamento visível muda, versão muda |
-| `docs/script/01-visao-geral.md` | Mapa do script | Novo módulo ou seção adicionada |
-| `docs/script/02-motor-coleta.md` | Motor de coleta | Mudança na lógica de coleta ou caminhos |
-| `docs/script/03-painel-interface.md` | Interface e coleta | Mudança no painel ou no loop de auditoria |
-| `docs/script/04-atendimento.md` | Atendimento | Nova modalidade, novo campo, mudança no plano |
-| `docs/script/05-historico.md` | Histórico | Mudança nas regras de registro ou retenção |
-| `docs/script/06-lembretes-timers.md` | Lembretes e Timers | Mudança na estrutura v2 ou nos timers |
-| `docs/script/07-cac.md` | CAC | Mudança no fluxo da consulta |
-| `docs/script/08-ccbs-contas.md` | CCBs e Contas | Mudança no download ou troca de conta |
-| `docs/script/09-equipe.md` | Equipe | Mudança na criptografia ou protocolo Pusher |
-| `docs/script/10-navegacao-busca.md` | Navegação e Busca | Mudança nas telas gerenciadas |
-| `docs/script/11-rd-encerramento.md` | RD Atendimento (encerramento com IA) | Mudança na tela do RD ou nas categorias |
-
-### Regras
-
-- **Não duplicar** informações entre arquivos — referenciar com link
-- Atualizar a documentação **na mesma sessão** que a alteração de código
-- Usar exemplos reais do código, não exemplos genéricos
-- Não criar novos arquivos em `docs/script/` sem adicionar a entrada na tabela acima e em `01-visao-geral.md`
-- O `README.md` documenta comportamento para o usuário — `instructions.md` documenta para o desenvolvedor/IA
-
----
-
-## H. Inconsistências e pontos de atenção
-
-> Identificados durante a auditoria. Não foram corrigidos nesta etapa.
-
-### Divergências entre documentação e código
-
-| Item | README diz | Código diz | Impacto |
-|---|---|---|---|
-| Versão no título | `v11.39` | `@version 12.1` | Baixo — cosmético, README não foi atualizado |
-| Tamanho do script | "~3.000 linhas" (mencionado na tarefa) | 6.297 linhas | Médio — estimativas de esforço estarão erradas |
-| `@downloadURL` e `@updateURL` | Aponta para `main` | Aponta para `main` | Branch `development` não é usada pelo Tampermonkey para atualização automática |
-
-### Pontos de atenção para futuras manutenções
-
-1. **`PAGINA.eval()`** — usado no módulo de CCBs (linha 2942) para acessar `DetalhePropostaDocumentos`. É uma prática frágil; se o site adicionar CSP restritivo, quebra.
-2. **`senhasContas`** — a chave armazena senhas no Tampermonkey, que não é criptografado. O README avisa, mas o código não tem nenhuma proteção adicional.
-3. **`@downloadURL` aponta para `main`** — qualquer push na `main` atualiza o script em todos os usuários do Tampermonkey que têm atualização automática. Cuidado com o que vai para `main`.
-4. **Loop infinito no timer** — `(async () => { for (;;) { ... } })()` (linha 5169). Se `tmTick` lançar erro não capturado, o loop para silenciosamente.
-5. **Seletores do antd** — `.ant-tree-treenode`, `.ant-tree-switcher_close` etc. dependem da versão do antd usada pelo ER. Uma atualização do ER pode quebrar toda a coleta.
+| `dados` | `{ [id]: { qtd, val, score, consultas, cpf, reprov } }` | Motor/Coleta |
+| `debug` | Snapshots de diagnóstico por proposta | Motor |
+| `fila` | `[id, ...]` propostas a coletar | Coleta |
+| `feitas` | `[id, ...]` já coletadas | Coleta |
+| `ignoradas` | `{ id: 'teste' \| 'cancelada' }` | Coleta |
+| `verificadas` | `[id, ...]` conferidas na tabela | Coleta |
+| `rodando` | boolean — coleta ativa | Coleta |
+| `batida` | timestamp — heartbeat da aba | Coleta |
+| `atualId` | ID da proposta em coleta | Coleta |
+| `fim` | sinal de fim do motor | Motor→Painel |
+| `modo` | `'coleta' \| 'aprovadas' \| 'reprovadas'` | Coleta |
+| `mfLembretes` | `{ versao: 2, itens: [...], invalidos: [...] }` | Lembretes |
+| `mfLembretesAviso` | estado do pop-up de lembretes | Lembretes |
+| `mfAcordos` | `{ versao: 1, itens: [...] }` | Histórico |
+| `equipeNome/Secret/Chave/Ativa/Id` | config da equipe | Equipe |
+| `equipeOnline/Versao/Avisos/AvisosVistos/Lider/Limpeza` | estado da equipe | Equipe |
+| `senhasContas` | senhas das contas (não criptografado) | Contas |
+| `negModelos/negModalidade/negModeloAtual/negPagamento` | negociação | Negociação |
+| `atModelo` | modelo ativo no Atendimento | Atendimento |
+| `abaPainel` | aba ativa no painel | Interface |
+| `posPainel/tamPainel/tamAmpliado/min` | posição e tamanho | Interface |
+| `navAuto` | navegação automática | Navegação |
+| `tmExpediente/tmVolume` | config de timers | Timers |
+| `geminiChave/geminiModelo` | chave e modelo Gemini | RD Atendimento |
+| `rdAnalises/rdLinhas` | análises e planilha do RD | RD Atendimento |
+| `erBase` | endereço do ER (gravado pelo painel) | RD Atendimento |
+| `gruposCfg` | grupos abertos/fechados na config | Config |
+| `buscaAberta/buscaComCac` | estado da busca de cliente | Busca |
 
 ---
 
-## I. Como usar esta documentação ao solicitar trabalho ao Claude ou Kiro
+## 16. Padrões de código obrigatórios
 
-### Ao solicitar um novo script ou funcionalidade
+### Estrutura
 
-Inclua na sua mensagem:
+- IIFE única: `(function () { 'use strict'; ... })();`
+- Indentação: 2 espaços
+- Seções delimitadas: `/* ================= NOME ================= */`
 
-```
-Consulte instructions.md e docs/script/<módulo>.md antes de começar.
-Quero <descrição do que precisa>.
-O módulo relacionado é <nome do módulo>.
-```
+### Tratamento de erros
 
-### Ao solicitar correção de bug
+- `catch (_) {}` — silencioso, quando o erro é esperado (site pode mudar)
+- `catch (e) { console.warn('[PaymobiFin] módulo', e && e.message); }` — para loops críticos
+- `class ErroXXX extends Error` — para módulos com fluxo de erro estruturado (ex.: `ErroCCB`)
+- Prefixo obrigatório em todos os logs: `[PaymobiFin]`
 
-```
-Consulte instructions.md e docs/script/<módulo>.md.
-O bug é: <descrição>.
-Ele ocorre em: <módulo/função>.
-Comportamento esperado: <o que deveria acontecer>.
-```
+### Assincronicidade
 
-### Ao solicitar alteração de comportamento existente
+- Usar `sleep(ms)` (não `setTimeout`) em todos os loops de espera — resolve problema de abas em segundo plano
+- Funções com espera devem ser `async/await`
+- Timeouts de rede: usar `AbortController` + `clearTimeout`
 
-```
-Consulte instructions.md e docs/script/<módulo>.md.
-Quero alterar <o quê> para que <novo comportamento>.
-Atualmente funciona assim: <comportamento atual>.
-```
+### Interação com o site
 
-### O que a IA deve fazer com estas instruções
+- Sempre envolver acessos a `PAGINA.*` em `try/catch`
+- Verificar existência antes de chamar: `if (typeof PAGINA.MostraConsulta === 'function')`
 
-1. Confirmar que leu `instructions.md` e a documentação do módulo
-2. Apresentar o plano antes de implementar (para alterações não triviais)
-3. Informar explicitamente se a alteração impactar outros módulos
-4. Ao terminar: listar arquivos alterados, chaves de armazenamento afetadas e documentação que precisa ser atualizada
+### Armazenamento
+
+- Nunca sobrescrever dado existente sem verificar — seguir o padrão de `salvar()`
+- Estruturas versionadas: incrementar `VERSAO` interno e implementar migração automática
+
+---
+
+## 17. Comportamento diante de conflitos de merge
+
+1. **Nunca aceitar um lado automaticamente** sem entender o que cada versão faz
+2. Identificar a origem de cada conflito (qual commit criou cada versão)
+3. Resolver mantendo a funcionalidade mais recente e mais completa
+4. Se o conflito envolver armazenamento ou criptografia, **interromper e consultar** o responsável
+5. Testar o comportamento após a resolução
+
+---
+
+## 18. Documentação — quando e o que atualizar
+
+| Arquivo | Atualizar quando |
+|---|---|
+| `instructions.md` | Novo módulo, novo prefixo, nova chave de armazenamento, mudança de padrão, nova regra de governança |
+| `README.md` | Mudança de comportamento visível ao usuário, nova dependência, mudança no processo de instalação |
+| `docs/script/01-visao-geral.md` | Novo módulo adicionado ao script |
+| `docs/script/<módulo>.md` | Mudança de comportamento, nova função, nova chave de armazenamento no módulo |
+
+Regras:
+- Não duplicar informações — referenciar com link
+- Atualizar documentação **na mesma sessão** que a alteração de código
+- Usar exemplos reais do código, não exemplos inventados
+- O `README.md` é para o usuário/desenvolvedor humano — este arquivo é para IAs e mantenedores técnicos
+
+---
+
+## 19. Checklist obrigatório antes de finalizar uma tarefa
+
+Execute este checklist antes de todo push e antes de abrir todo PR:
+
+**Escopo**
+- [ ] A implementação está dentro do escopo solicitado?
+- [ ] Nenhuma funcionalidade fora do escopo foi alterada?
+- [ ] Nenhum bug fora do escopo foi "corrigido" silenciosamente?
+
+**Código**
+- [ ] `'use strict'` está presente?
+- [ ] `@downloadURL` e `@updateURL` não foram alterados?
+- [ ] Novos timeouts usam `CONFIG`?
+- [ ] Novas funções de módulo usam o prefixo correto?
+- [ ] `$()` é usado dentro do painel (não `document.querySelector`)?
+- [ ] Novos acessos a `PAGINA.*` estão em `try/catch`?
+- [ ] `sleep()` é usado em loops de espera (não `setTimeout` direto)?
+
+**Armazenamento**
+- [ ] Novas chaves de armazenamento foram documentadas na tabela do item 15?
+- [ ] Nenhuma chave existente foi renomeada sem migração?
+- [ ] Dados existentes não são sobrescritos pela nova lógica?
+
+**Git**
+- [ ] Está em uma branch temporária (não na `main`)?
+- [ ] O commit segue o formato Conventional Commits?
+- [ ] O diff foi revisado antes do commit?
+- [ ] Nenhum arquivo fora do escopo foi incluído no commit?
+
+**Documentação**
+- [ ] `docs/script/<módulo>.md` foi atualizado se necessário?
+- [ ] `instructions.md` foi atualizado se novo prefixo ou chave foi criado?
+- [ ] O `README.md` foi atualizado se o comportamento visível mudou?
+
+**Ao finalizar a tarefa, apresentar:**
+1. Arquivos alterados
+2. Chaves de armazenamento afetadas
+3. Outros módulos que podem ter sido impactados indiretamente
+4. Documentação atualizada
+5. Pendências identificadas (bugs fora do escopo, riscos, configurações que dependem do proprietário)
+
+---
+
+## 20. Pendências técnicas e configurações que dependem do proprietário
+
+As seguintes configurações **não podem ser feitas sem o proprietário do repositório (arthursoaress7)**:
+
+| Item | Motivo |
+|---|---|
+| Proteção da branch `main` (exigir PR, bloquear push direto) | Requer permissão de admin no repositório |
+| Configuração de GitHub Actions (semantic-release) | Requer permissão para criar workflows e secrets |
+| Criação de secrets do repositório (ex.: `GITHUB_TOKEN` para releases) | Requer acesso às configurações do repositório |
+| Configuração de Squash Merge como padrão no GitHub | Requer permissão de admin |
+| Remover ou arquivar a branch `development` | Decisão do proprietário |
+
+**Riscos identificados:**
+1. `@updateURL` aponta para `main` — push direto (acidental ou não) distribui imediatamente para todos os usuários
+2. Sem proteção de branch, qualquer colaborador com acesso pode pushar direto na `main`
+3. Não há processo de rollback documentado — uma versão com bug distribuída automaticamente exige push corretivo urgente
+4. `senhasContas` armazena credenciais sem criptografia adicional no Tampermonkey
+
+**Próximos passos sugeridos:**
+1. Solicitar ao proprietário que proteja a branch `main` (exigir PR, impedir push direto)
+2. Definir se a branch `development` será mantida ou removida
+3. Avaliar implementação de `semantic-release` após proteção da `main`
+4. Documentar processo de rollback de emergência

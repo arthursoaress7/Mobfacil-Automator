@@ -2,8 +2,6 @@
 
 v13.25
 
-**Versão atual:** 13.22
-
 ---
 
 ## O que faz

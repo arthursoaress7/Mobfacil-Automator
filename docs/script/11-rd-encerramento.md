@@ -130,6 +130,15 @@ Os estilos são aplicados pelo CSSOM (`el.style.cssText`), sem `<style>` na pág
     3. informação, em neutro.
 - **As regras não mudaram:** conversas com erro continuam desmarcadas e sem poder marcar, e as analisadas continuam marcadas por padrão.
 
+## Segundo plano (aba do RD escondida)
+
+Com a aba escondida, o Chrome segura os temporizadores da página: no mínimo 1 s e, depois de uns 5 minutos escondida, só um por minuto. Ele também pode congelar a aba. As esperas do script já usavam o `sleep` do Web Worker (começo do arquivo), mas a tela do próprio RD usa os temporizadores da página (janela de encerrar, lista de categorias, carregamento da conversa), e era isso que atrasava.
+
+- **Temporizadores da página pelo Worker** (`rdTemporizadoresDaPagina`, injetado na página do RD; a política do site só restringe `frame-ancestors`): enquanto a nossa automação roda (`rdRodando` ou `rdAbertas`) **e** a aba está escondida (`document.hidden`), `setTimeout`, `setInterval` e `requestAnimationFrame` da página são contados por um Web Worker, que não é segurado. Fora disso, a página usa os temporizadores normais dela. Os ids do Worker começam em 1e9, para `clearTimeout` e `clearInterval` saberem de quem é cada temporizador.
+- **Liga e desliga:** pelo atributo `data-mf-segundo-plano` no `<html>`, atualizado em `rdMarcarSegundoPlano()`. Ele é chamado no `status()`, no fim de cada análise ou encerramento e a cada `RD_BOTAO_MS`.
+- **Web Lock:** enquanto a automação roda, o painel segura um Web Lock (nome próprio da aba). O Chrome não congela uma aba que tem um Web Lock, e a trava é solta no fim.
+- **Testado na simulação:** com o "escondido" simulado, a automação completa funcionou (analisar, encerrar e gerar as linhas). Os temporizadores passaram pelo Worker só durante a automação, e o `requestAnimationFrame` rodou em 17 ms, quando com a aba escondida ele nem roda. O navegador interno do teste não segura abas como o Chrome, então o ganho de tempo real só aparece no Chrome com a aba escondida.
+
 ## Fechar e continuar
 
 O topo do painel tem **✕ (fechar)**, que só recolhe o painel no botão do canto (até a 13.23 havia também um "—" de minimizar, que fazia exatamente o mesmo); a análise e o encerramento continuam (só **Parar** interrompe). Recolhido, o botão do canto mostra o andamento ao vivo ("🔒 Analisando 3 de 20: …", depois o resultado) e o texto completo ao passar o mouse. Ao reabrir, o painel mantém o andamento/resultado em vez de trocar pela contagem da lista. Fechar ou recarregar a **aba** do RD para o script; o que já foi analisado/encerrado fica salvo e "Analisar"/"Encerrar marcados" continuam de onde pararam.

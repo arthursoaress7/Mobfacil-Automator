@@ -7155,6 +7155,76 @@
     let rdAbertas = 0, rdLendo = false;
     const emAnalise = new Set();
 
+    /* ---- segundo plano: a automação não fica lenta com a aba do RD escondida ----
+       Com a aba escondida, o Chrome segura os temporizadores da PÁGINA (1 s no mínimo; depois de ~5 min, um por minuto) e
+       pode congelar a aba. As esperas do nosso código já usam o sleep do Web Worker, mas a tela do RD (janela de encerrar,
+       lista de categorias, carregamento da conversa) usa os temporizadores da página, e é isso que atrasava o encerramento.
+       Enquanto a nossa automação roda (rdRodando ou rdAbertas) E a aba está escondida, os setTimeout/setInterval/
+       requestAnimationFrame da página passam a ser contados por um Web Worker (não é segurado). Fora disso a página usa os
+       temporizadores normais dela: nada muda no uso comum do RD. Os ids dos temporizadores do worker começam em 1e9 (os do
+       navegador são bem menores), então clearTimeout/clearInterval sabem de quem é cada um.
+       A troca é feita na própria página (script injetado: o RD não restringe scripts) e ligada pelo atributo
+       data-mf-segundo-plano no <html>. Enquanto roda, o painel também segura um Web Lock, que impede o Chrome de congelar a aba. */
+    function rdTemporizadoresDaPagina() {
+      if (window.__mfTemporizadores) return;
+      window.__mfTemporizadores = true;
+      const nat = { st: window.setTimeout.bind(window), ct: window.clearTimeout.bind(window), si: window.setInterval.bind(window), ci: window.clearInterval.bind(window),
+        raf: window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : null, caf: window.cancelAnimationFrame ? window.cancelAnimationFrame.bind(window) : null };
+      let w = null;
+      try {
+        w = new Worker(URL.createObjectURL(new Blob(['const t={};onmessage=e=>{const d=e.data;if(d.c==="s"){t[d.i]=(d.r?setInterval:setTimeout)(()=>{postMessage(d.i);if(!d.r)delete t[d.i]},d.ms)}else{clearTimeout(t[d.i]);clearInterval(t[d.i]);delete t[d.i]}}'])));
+      } catch (_) { return; }
+      const BASE = 1e9, cbs = new Map();
+      let n = BASE;
+      const ativo = () => document.hidden && document.documentElement.getAttribute('data-mf-segundo-plano') === '1';
+      w.onmessage = e => {
+        const x = cbs.get(e.data);
+        if (!x) return;
+        if (!x.r) cbs.delete(e.data);
+        try { if (typeof x.f === 'function') x.f.apply(window, x.a); else (0, eval)(String(x.f)); } catch (err) { nat.st(() => { throw err; }, 0); }
+      };
+      const criar = r => function (f, ms, ...a) {
+        if (!ativo()) return (r ? nat.si : nat.st)(f, ms, ...a);
+        const i = ++n;
+        cbs.set(i, { f, a, r });
+        w.postMessage({ c: 's', i, ms: Math.max(0, Number(ms) || 0), r });
+        return i;
+      };
+      const limpar = nativo => function (i) {
+        if (typeof i === 'number' && i > BASE) { cbs.delete(i); w.postMessage({ c: 'x', i }); return; }
+        return nativo(i);
+      };
+      window.setTimeout = criar(false); window.setInterval = criar(true);
+      window.clearTimeout = limpar(nat.ct); window.clearInterval = limpar(nat.ci);
+      if (nat.raf) {
+        window.requestAnimationFrame = function (f) { return ativo() ? window.setTimeout(() => f(performance.now()), 16) : nat.raf(f); };
+        window.cancelAnimationFrame = function (i) { return typeof i === 'number' && i > BASE ? window.clearTimeout(i) : nat.caf(i); };
+      }
+    }
+    try {
+      const sc = document.createElement('script');
+      sc.textContent = '(' + rdTemporizadoresDaPagina.toString() + ')();';
+      (document.head || document.documentElement).appendChild(sc); sc.remove();
+    } catch (_) {}
+    // liga/desliga conforme a automação (chamado pelo status(), no fim de cada análise/encerramento e periodicamente)
+    let rdTrava = null, rdTravaPedida = false;   // rdTrava = função que solta o Web Lock (nome próprio desta aba)
+    const rdTravaNome = 'paymobifin-rd-' + Math.random().toString(36).slice(2, 8);
+    const rdMarcarSegundoPlano = () => {
+      const roda = !!(rdRodando || rdAbertas);
+      const html = document.documentElement;
+      if (roda !== (html.getAttribute('data-mf-segundo-plano') === '1')) html.setAttribute('data-mf-segundo-plano', roda ? '1' : '0');
+      try {
+        if (roda && !rdTravaPedida && navigator.locks) {
+          rdTravaPedida = true;
+          navigator.locks.request(rdTravaNome, () => new Promise(solta => {
+            rdTrava = solta;
+            if (!(rdRodando || rdAbertas)) { solta(); rdTrava = null; rdTravaPedida = false; }   // já terminou enquanto pedia
+          })).catch(() => { rdTravaPedida = false; });
+        }
+        if (!roda && rdTrava) { rdTrava(); rdTrava = null; rdTravaPedida = false; }
+      } catch (_) {}
+    };
+
     /* ---- interface (estilos pelo CSSOM: não depende de <style> liberado pelo site) ----
        Tema claro/escuro só do painel (o RD não muda): cada elemento fixo guarda a função que monta o estilo a partir das
        cores do tema (estilo()); trocar o tema reaplica tudo (repintar) e redesenha a lista. Preferência em GM 'rdTema'. */
@@ -7303,6 +7373,7 @@
     const st = estilo(el('div'), c => 'padding:9px 12px;background:' + c.priSuave + ';border:1px solid ' + c.priBorda + ';border-radius:10px;font-size:12.5px;line-height:1.5;color:' + c.txt + ';white-space:pre-wrap;' + TRANS);
     // com o painel recolhido, o andamento aparece no botão do canto (e o texto completo ao passar o mouse)
     const status = t => {
+      rdMarcarSegundoPlano();
       st.textContent = t;
       if (card.style.display === 'none' && (rdRodando || rdAbertas || /^(Análise|Encerrados|Parei)/.test(t))) {
         abrir.textContent = '🔒 ' + String(t).split('\n')[0];
@@ -8069,7 +8140,7 @@
           await sleep(CONFIG.RD_PAUSA_IA);
         }
       } finally {
-        rdRodando = false;
+        rdRodando = false; rdMarcarSegundoPlano();
         // as que iam ser refeitas e não foram (parou antes ou saíram da lista) voltam como estavam
         const agora = new Set(analises().map(a => a.chave)), faltam = refeitas.filter(a => !agora.has(a.chave));
         if (faltam.length) { guardarAnalises([...analises(), ...faltam]); desenhar(); }
@@ -8108,7 +8179,7 @@
         guardarAnalises([...analises(), reg]);
         desenhar();
         status('Análise da conversa aberta: ' + (reg.erro ? 'não deu para analisar ' + reg.nome + ': ' + reg.erro + '.' : reg.nome + ' entrou na lista (marcada). Revise e clique em "2. Encerrar marcados".'));
-      } finally { fimLeitura(); rdAbertas--; emAnalise.delete(nome); }
+      } finally { fimLeitura(); rdAbertas--; emAnalise.delete(nome); rdMarcarSegundoPlano(); }
     }
     btAberta.onclick = () => analisarConversaAberta();
 
@@ -8148,6 +8219,7 @@
       btIA.style.left = Math.max(0, esq - btIA.offsetWidth - 12) + 'px';
     };
     setInterval(posicionarBotaoIA, CONFIG.RD_BOTAO_MS);
+    setInterval(rdMarcarSegundoPlano, CONFIG.RD_BOTAO_MS);   // reserva: desliga o modo de segundo plano se algo terminar sem passar pelo status
     window.addEventListener('resize', posicionarBotaoIA);
     btIA.onclick = async () => {
       // confere a situação na hora do clique (o texto do botão pode estar atrasado alguns instantes depois de trocar de conversa)
@@ -8264,7 +8336,7 @@
           guardarAnalises(x); desenhar();
           await sleep(CONFIG.PAUSA * 10);
         }
-      } finally { rdRodando = false; }
+      } finally { rdRodando = false; rdMarcarSegundoPlano(); }
       status('Encerrados: ' + ok + (falhas ? ' · com erro: ' + falhas : '') + '. Clique em "Copiar linhas da planilha" e cole com Ctrl+Shift+V na planilha de encerramento.');
     };
     btParar.onclick = () => { rdParar = true; status('Parando depois da conversa atual...'); };

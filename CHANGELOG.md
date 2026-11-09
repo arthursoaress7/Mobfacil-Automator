@@ -1,5 +1,13 @@
 # Changelog
 
+## [v13.26.3] — 2026-11-09
+
+### 🐛 Correções
+
+- fix: aviso do Relatório Diário mostra que inclui canceladas (#22) (ab5de61)
+- fix: aviso do Relatório Diário mostra que inclui canceladas (#21) (3e9ec88)
+
+
 ## [v13.26.2] — 2026-11-09
 
 ### 🐛 Correções

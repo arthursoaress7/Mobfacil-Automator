@@ -7766,6 +7766,23 @@
       }
       return '';
     };
+    // números de 11 dígitos com cara de CPF mas com o dígito verificador errado (cliente digitou errado, ex.: 18448492370):
+    // também vão para o ER, depois dos CPFs válidos. Ficam de fora os que parecem celular (DDD + 9...), a não ser que a
+    // mensagem fale em "cpf"; e os pedaços de números maiores (linha digitável de boleto, código de barras, protocolo:
+    // dígitos colados antes ou depois por ponto/espaço). No máximo 3, sem repetir.
+    const cpfsSemDvDe = msgs => {
+      const r = [];
+      for (const m of msgs) for (const x of String(m.texto || '').matchAll(RX_CPF)) {
+        const d = x[1] + x[2] + x[3] + x[4];
+        if (cpfValido(d) || r.includes(d) || /^(\d)\1{10}$/.test(d)) continue;
+        if (/^\d{2}9/.test(d) && !/cpf/i.test(m.texto)) continue;   // celular
+        const antes = m.texto.slice(Math.max(0, x.index - 4), x.index), depois = m.texto.slice(x.index + x[0].length, x.index + x[0].length + 4);
+        if (/\d[\s.\-_/]{1,3}$/.test(antes) || /^[\s.\-_/]{1,3}\d/.test(depois)) continue;   // parte de um número maior
+        r.push(d);
+        if (r.length >= 3) return r;
+      }
+      return r;
+    };
     const propostaDe = msgs => { for (const m of msgs) { const x = m.texto.match(/proposta\D{0,20}(\d{4,6})\b/i); if (x) return x[1]; } return ''; };
     const dataDe = msgs => {
       for (let i = msgs.length - 1; i >= 0; i--) {
@@ -8041,9 +8058,11 @@
       const add = (tipo, valor, rotulo) => { if (valor && !tentativas.some(t => t.tipo === tipo && t.valor === valor)) tentativas.push({ tipo, valor, rotulo }); };
       add('cpf', String(d.cpfPerfil || '').replace(/\D/g, ''), 'CPF do Perfil');
       add('cpf', String(d.cpfConversa || '').replace(/\D/g, ''), 'CPF escrito na conversa');
+      // CPF escrito com o dígito verificador errado: tentado mesmo assim (a confirmação no cadastro continua valendo)
+      (d.cpfsSemDv || []).forEach(c => { add('cpf', c, 'CPF escrito na conversa (' + fmtCpf(c) + ', dígito verificador não confere)'); const t = tentativas.find(x => x.tipo === 'cpf' && x.valor === c); if (t) t.semDv = true; });
       add('proposta', d.propostaConversa, 'proposta citada na conversa');
       (d.nomes || []).filter(n => /\S+\s+\S+/.test(n || '')).forEach(n => add('nome', n.trim(), 'nome ' + n.trim()));
-      tentativas.forEach(t => { if (t.tipo === 'cpf' && !cpfValido(t.valor)) t.invalida = true; });   // inclui o dígito verificador
+      tentativas.forEach(t => { if (t.tipo === 'cpf' && !t.semDv && !cpfValido(t.valor)) t.invalida = true; });   // inclui o dígito verificador
       const validas = tentativas.filter(t => !t.invalida);
       if (!validas.length) return { avisos: [d.lojista ? 'lojista: a conversa não cita CPF, proposta nem nome completo do cliente para consultar o ER' : 'sem CPF, proposta ou nome completo para consultar o ER'] };
       const nomesConhecidos = (d.nomes || []).filter(Boolean).map(semAcento);
@@ -8053,6 +8072,8 @@
       let reserva = null;
       for (const t of validas) {
         const res = await erMesa(t.valor);
+        // CPF com dígito errado que o ER recusa como busca: só esse caminho falha, os outros continuam
+        if (res.erro && t.semDv && /sem a lista/.test(res.erro)) { naoAchou.push(t.rotulo + ': o ER recusou a busca'); continue; }
         if (res.erro) return { avisos: ['ER: ' + res.erro] };   // sem endereço / sessão expirada: nada adianta tentar
         let cands = res.linhas;
         if (t.tipo === 'proposta') cands = cands.filter(c => c.proposta === t.valor);
@@ -8063,7 +8084,8 @@
         const porTelefone = !!(cad && telRD && cad.telefones.some(x => fim8(x) === telRD));
         const porNome = !!((cad && cad.nome && nomesConhecidos.includes(semAcento(cad.nome))) || nomesConhecidos.includes(semAcento(esc.p.nome)));
         // lojista: o telefone e o nome do contato são da loja; o CPF ou a proposta que o lojista escreveu identificam o cliente
-        const peloLojista = !!d.lojista && (t.tipo === 'cpf' || t.tipo === 'proposta');
+        // (o CPF com dígito errado não conta: precisa do telefone ou do nome para confirmar)
+        const peloLojista = !!d.lojista && ((t.tipo === 'cpf' && !t.semDv) || t.tipo === 'proposta');
         const achado = { t, esc, cad, confirmado: porTelefone || porNome || peloLojista, como: porTelefone ? 'telefone' : porNome ? 'nome' : peloLojista ? 'dado citado pelo lojista' : '' };
         if (achado.confirmado) { reserva = achado; break; }
         if (!reserva) reserva = achado;
@@ -8076,6 +8098,7 @@
       if (!reserva.confirmado) avisos.unshift('⚠ ER: não consegui confirmar que é o mesmo cliente (telefone e nome do RD não batem com o cadastro da proposta ' + esc.p.proposta + '); confira antes de encerrar');
       const cpfER = cad && cad.cpf && cad.cpf.length === 11 ? fmtCpf(cad.cpf) : '';
       if (cpfER && d.cpfPerfil && fmtCpf(d.cpfPerfil) !== cpfER) avisos.push('o CPF do Perfil do RD (' + fmtCpf(d.cpfPerfil) + ') está diferente do cadastro no ER (' + cpfER + ')');
+      if (t.semDv) avisos.push('o CPF escrito na conversa (' + fmtCpf(t.valor) + ') tem o dígito verificador errado' + (cpfER ? '; na planilha vai o do cadastro no ER (' + cpfER + ')' : ''));
       const vendedor = await erVendedor(esc.p.proposta);
       if (!vendedor) avisos.push('ER: vendedor não encontrado no detalhe da proposta ' + esc.p.proposta);
       return { proposta: esc.p.proposta, nome: (cad && cad.nome) || esc.p.nome, cpf: cpfER, filial: esc.p.filial, situacao: esc.p.situacao, vendedor,
@@ -8112,6 +8135,8 @@
         // Lojista: o Perfil e o telefone são da LOJA; o cliente sai do CPF/proposta que o lojista citou na conversa.
         // CPF da conversa inteira: primeiro o que o cliente escreveu; sem nenhum, o que o atendente escreveu (ex.: confirmando)
         const cpfConversa = cpfDe(todasMsgs.filter(m => m.quem === 'Cliente')) || cpfDe(todasMsgs.filter(m => m.quem === 'Atendente'));
+        // números com cara de CPF mas com o dígito verificador errado: consultados no ER depois dos CPFs válidos
+        const cpfsSemDv = [...new Set([...cpfsSemDvDe(todasMsgs.filter(m => m.quem === 'Cliente')), ...cpfsSemDvDe(todasMsgs.filter(m => m.quem === 'Atendente'))])].slice(0, 3);
         const cpfPerfil = lojista ? '' : fmtCpf(perfil.cpf);
         const nomePerfil = !lojista && /\S+\s+\S+/.test(perfil.nome || '') ? perfil.nome.trim() : '';
         // Nome do cliente na planilha: o do ER quando o cruzamento acha o cliente (logo abaixo); senão é SEMPRE o nome do
@@ -8125,11 +8150,11 @@
         if (sol.trocado || obs.trocado) avisos.push('a IA escreveu que o atendimento não respondeu; troquei pelo assunto da conversa (confira a solicitação e a observação)');
         j.solicitacao = sol.texto; j.observacoes = obs.texto;
         Object.assign(reg, { tabulacao: j.tabulacao, solicitacao: (j.solicitacao || 'N/A').trim(), observacoes: (j.observacoes || 'N/A').trim(), tipo: j.tipo_atendimento || 'Cliente',
-          nomeCliente: nomeContato, cpf: cpfPerfil || cpfConversa, proposta: propostaDe(todasMsgs), data: dataDe(msgs) });
+          nomeCliente: nomeContato, cpf: cpfPerfil || cpfConversa || fmtCpf(cpfsSemDv[0]), proposta: propostaDe(todasMsgs), data: dataDe(msgs) });
         // cruzamento com o ER (Mesa de Crédito): proposta, nome, filial e vendedor
         status(rotulo + ' (consultando o ER)...');
         const nomeIA = (j.nome_cliente || '').trim();
-        const er = await cruzarER({ cpfPerfil, cpfConversa, propostaConversa: reg.proposta, telefone: lojista ? '' : reg.telefone, lojista,
+        const er = await cruzarER({ cpfPerfil, cpfConversa, cpfsSemDv, propostaConversa: reg.proposta, telefone: lojista ? '' : reg.telefone, lojista,
           nomes: [...new Set([nomePerfil, nomeIA, !lojista && /\S+\s+\S+/.test(reg.nome) ? reg.nome : ''].filter(Boolean))] });
         if (er.proposta) {
           const nomeER = er.nome || '';

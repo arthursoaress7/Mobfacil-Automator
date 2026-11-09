@@ -1,0 +1,329 @@
+# PRIORIDADES.md — Prioridades funcionais do PayMobi
+
+> **Referência central de prioridades.** Consulte este documento antes de solicitar qualquer desenvolvimento.
+> Para regras de desenvolvimento, Git e governança, leia [`instructions.md`](./instructions.md).
+
+---
+
+## Como usar este documento com o Claude
+
+1. Consultar `PRIORIDADES.md` (este arquivo).
+2. Identificar a tarefa pendente de maior prioridade.
+3. Solicitar ao Claude que **analise a implementação atual antes de propor alterações**.
+4. Pedir um **plano de implementação** com: arquivos envolvidos, riscos e critérios de aceite.
+5. Implementar **somente o escopo da tarefa solicitada**.
+6. Revisar as alterações e testar.
+7. **Atualizar o status** neste `PRIORIDADES.md` após a conclusão.
+
+O Claude deve respeitar integralmente o `instructions.md` e as regras de governança do repositório. Mudanças críticas seguem o processo de autorização definido na governança. **Não ampliar o escopo por iniciativa própria.**
+
+---
+
+## Regras
+
+- Este documento é a referência central de prioridades funcionais.
+- Não propor refatoração estrutural como prioridade sem necessidade comprovada.
+- Preservar funcionalidades existentes.
+- Concluir e validar uma tarefa antes de avançar para a próxima.
+- Registrar novas demandas aqui antes de iniciar seu desenvolvimento.
+
+---
+
+## P0 — Otimização dos lembretes
+
+**Status geral:** Pendente  
+**Objetivo:** tornar o sistema de lembretes mais eficiente para comunicação e acompanhamento das atividades da equipe.
+
+### Implementação atual (analisada no código)
+
+O módulo de lembretes (`lb*`) já possui:
+
+- **Compartilhamento manual:** `lbCompartilhar(id)` compartilha com a equipe via Pusher. É um botão que o usuário clica explicitamente. Novos lembretes podem nascer compartilhados se a checkbox estiver marcada (padrão: marcada quando a equipe está configurada).
+- **Edição sem restrição de autor:** qualquer membro da equipe pode editar, pagar, concluir, cancelar ou excluir um lembrete compartilhado. Não há verificação de `criadoPor`. A resolução de conflitos é por versão (`rev`) e timestamp.
+- **Avisos para a equipe:** `eqAvisarLembrete()` já envia notificações para toda a equipe (exceto quem fez a alteração) quando: novo lembrete, pagamento registrado, status mudou, lembrete atualizado ou excluído. Os avisos aparecem num card flutuante no canto superior direito da tela (`#mf-eq-avisos`, `position:fixed; top:16px`).
+- **Popup de lembretes do dia:** `lbMostrarPopup()` já é um card flutuante no canto inferior direito da tela (`#mf-lb-popup`, `position:fixed; bottom:16px`). Mostra até 20 lembretes devidos, com botões "Ver lembrete", "Adiar" e "Concluir". Rodapé com "Lembrar mais tarde (1 h)". Dispara também notificação do navegador (uma vez a cada 30 min). Verificado a cada minuto.
+- **Renderização principal:** `lbDesenhar()` renderiza a lista dentro da aba "Agenda" do painel — não é flutuante.
+
+### Tarefas
+
+---
+
+- [ ] **P0.1 — Notificações para toda a equipe**
+
+  **Status:** Pendente  
+  **Objetivo:** garantir que todos os integrantes da equipe sejam notificados sobre lembretes, não somente quem criou.
+
+  **Comportamento esperado:** quando um lembrete está vencido ou chega no dia de acompanhamento, todos os membros da equipe conectados devem ver a notificação — não apenas quem criou o lembrete.
+
+  **O que já existe:** `eqAvisarLembrete()` já notifica toda a equipe sobre mudanças em lembretes compartilhados (novo, pagamento, status, atualização, exclusão). O popup de lembretes do dia (`lbVerificarPopup`) já verifica todos os lembretes — inclusive compartilhados — e mostra o popup para o usuário local.
+
+  **O que falta esclarecer:**
+  - O popup de lembretes do dia já aparece para quem tem o lembrete compartilhado. A necessidade é que ele apareça para **todos** os membros, ou que a notificação seja mais ativa (som, destaque, notificação do navegador para todos)?
+  - Hoje a notificação do navegador só dispara para a aba que detecta o lembrete (uma vez a cada 30 min). Outros membros da equipe só recebem o aviso via `equipeAvisos` quando **algo muda** — não quando um lembrete simplesmente chega no dia. Querem que todos sejam notificados no dia do vencimento, mesmo sem nenhuma alteração?
+
+  **Critérios de aceite:** A definir  
+  **Dependências:** A definir (depende da decisão acima)  
+  **Observações:** O mecanismo de Pusher já está pronto. A questão é definir o comportamento desejado: notificação passiva (popup local) vs. ativa (push para todos no vencimento).
+
+---
+
+- [ ] **P0.2 — Edição compartilhada**
+
+  **Status:** Concluído (já implementado)  
+  **Objetivo:** qualquer usuário da equipe deve conseguir editar os lembretes, independentemente de quem os criou.
+
+  **Comportamento atual:** não há restrição de autor. O botão "Editar" aparece para qualquer lembrete pendente, compartilhado ou não. `lbSalvar()` envia via Pusher as alterações em lembretes compartilhados. A resolução de conflitos usa `rev` (versão) + timestamp, e pagamentos/histórico se somam.
+
+  **Critérios de aceite:** já atendidos — qualquer membro pode editar, pagar, concluir, cancelar ou excluir.  
+  **Dependências:** nenhuma.  
+  **Observações:** confirmar com a equipe se o comportamento atual é suficiente ou se precisam de controle mais granular (ex.: impedir exclusão por quem não criou). Hoje exclusão de lembrete compartilhado exclui para todos, com confirmação.
+
+---
+
+- [ ] **P0.3 — Card flutuante**
+
+  **Status:** Parcialmente implementado  
+  **Objetivo:** os lembretes devem ser exibidos em um card móvel pela tela, permitindo acompanhar sem depender de uma aba específica.
+
+  **O que já existe:**
+  - `#mf-lb-popup` (canto inferior direito): card flutuante que mostra lembretes devidos hoje. Aparece automaticamente, pode ser adiado ("Lembrar mais tarde 1h"). Não é arrastável — fica fixo no canto.
+  - `#mf-eq-avisos` (canto superior direito): card flutuante com notificações da equipe. Tampouco é arrastável.
+
+  **O que pode faltar:**
+  - O popup de lembretes do dia some quando não há devidos. Um card flutuante permanente (minimizável, arrastável) mostrando os lembretes ativos seria diferente do comportamento atual?
+  - O card deve mostrar **todos** os lembretes ativos, ou só os devidos hoje?
+  - O card deve ser arrastável pela tela, ou fixo em um canto (como hoje)?
+  - O card deve funcionar fora do ER (ex.: em outras abas do navegador) ou só dentro do painel?
+
+  **Critérios de aceite:** A definir  
+  **Dependências:** A definir (depende das decisões acima)  
+  **Observações:** o painel principal já é arrastável e redimensionável. Um card de lembretes flutuante adicional seria um novo elemento no `document.body`, similar ao popup atual mas permanente.
+
+---
+
+## P1 — Otimização das mensagens
+
+**Status geral:** Pendente  
+**Objetivo:** melhorar as funcionalidades existentes de criação, preenchimento e envio de mensagens.
+
+### Implementação atual (analisada no código)
+
+O módulo de mensagens (`ng*` e `at*`) já possui:
+
+- **7 modelos de mensagem** (`NG_MODELOS`): Pedido de negociação, Acordo realizado, Retorno do setor, Campanha do Fôlego, Retorno do setor — Instruções de pagamento, Solicitação de negociação, Antecipação de parcela.
+- **11 modalidades de acordo** (`NG_MODALIDADES`): Novo valor mensal, Parcelamento, Entrada + parcelas, Pagamento parcial + restante, Campanha do Fôlego, PIX semanal/Automático, Alteração de vencimento, Antecipação/quitação, Regularização, Sem acordo, Condições gerais.
+- **Preenchimento automático existente:**
+  - `data_contato` = hoje (padrão)
+  - `responsavel` = nome da equipe ou apelido da conta ativa
+  - `com_juros` = true (padrão)
+  - `abrangencia` = calculada a partir de `abrangencia_tipo` + `parcela_inicial`/`parcelas_especificas`
+  - `antecipacao_descr` = calculada a partir de `tipo_antecipacao` + `qtd_antecipadas`
+  - `valor_restante` = `total_devido` − `valor_pago_parcial` (auto-calculado, bloqueia pagar acima do total)
+  - Dados de pagamento (`chave_pix`, `banco`, `agência`, `conta`) vindos de Configurações
+  - `atSugerir()`: copia data 1° pagamento, quantidade de parcelas e "Todo Contrato" dos campos do acordo (só se estiverem vazios)
+- **Preenchimento manual:** todo o resto — nome, proposta, CPF, valores das parcelas, entrada, datas, quantidades, observações, vencimentos.
+- **Modelos editáveis:** o usuário pode personalizar o texto de qualquer modelo em Configurações > Gerador de negociações. Os modelos personalizados ficam em `negModelos`.
+
+### Tarefas
+
+---
+
+- [ ] **P1.1 — Revisar os modelos de mensagens existentes**
+
+  **Status:** Pendente  
+  **Objetivo:** avaliar se os 7 modelos e 11 modalidades atuais atendem às necessidades da equipe.  
+  **Comportamento esperado:** modelos cobrem todos os cenários do dia a dia sem precisar edição manual excessiva.  
+  **Critérios de aceite:** lista de modelos que precisam ajuste, novos modelos necessários ou modelos obsoletos.  
+  **Dependências:** feedback da equipe sobre o uso real.  
+  **Observações:** não criar modelos novos sem necessidade confirmada.
+
+---
+
+- [ ] **P1.2 — Melhorar o preenchimento automático dos campos**
+
+  **Status:** Pendente  
+  **Objetivo:** reduzir digitação manual identificando campos que poderiam ser preenchidos automaticamente a partir de dados já disponíveis.  
+  **Comportamento esperado:** ao aplicar o cliente atual (`atAplicarCliente`), o máximo de campos relevantes deve vir preenchido.  
+  **Critérios de aceite:** lista de campos que hoje são manuais mas poderiam ser automáticos, com origem do dado.  
+  **Dependências:** `atAplicarCliente` já preenche: nome, proposta, CPF, IMEI, data da proposta, filial, atendente, valor da parcela, FPD, parcelas em atraso, dias de atraso, vencimento mais antigo, parcela atual. O Número de contato é sempre manual (por design).  
+  **Observações:** o número de contato (RD Station) nunca deve ser preenchido com o telefone da proposta — isso é uma regra confirmada.
+
+---
+
+- [ ] **P1.3 — Padronizar as mensagens utilizadas pela equipe**
+
+  **Status:** Pendente  
+  **Objetivo:** garantir que todos os membros usem os mesmos modelos e formatos.  
+  **Comportamento esperado:** mensagens geradas sejam consistentes independentemente de quem as gerou.  
+  **Critérios de aceite:** equipe confirma que os textos gerados estão padronizados e corretos.  
+  **Dependências:** feedback da equipe.  
+  **Observações:** os modelos personalizados (`negModelos`) são por navegador — não são compartilhados via Pusher.
+
+---
+
+- [ ] **P1.4 — Identificar oportunidades de reduzir preenchimentos manuais e erros**
+
+  **Status:** Pendente  
+  **Objetivo:** mapear onde os erros mais acontecem e onde a automação pode ajudar.  
+  **Comportamento esperado:** relatório de pontos de fricção no fluxo de mensagens.  
+  **Critérios de aceite:** lista de melhorias identificadas com prioridade.  
+  **Dependências:** observação do uso real pela equipe.  
+  **Observações:** prioridade é otimizar o que já existe, não criar funcionalidades novas.
+
+---
+
+## P2 — Otimização da geração de acordos
+
+**Status geral:** Pendente  
+**Objetivo:** melhorar o processo de geração e formalização de acordos.
+
+### Implementação atual (analisada no código)
+
+O módulo de geração de acordos (`at*`) já possui:
+
+- **Plano de parcelas sugerido:** `atSugestao()` gera o plano a partir da modalidade. `atPlanoCampos()` preenche campos vazios com a sugestão, preservando edições manuais.
+- **Cálculos automáticos:**
+  - Vencimentos das parcelas: `atSomarMeses` (mensal, corrige dia 31 em mês curto) e `atSomarDias` (semanal, soma 7 dias)
+  - 1º vencimento: próximo "dia D" após a data de entrada (auto-calculado quando entrada e dia de vencimento estão informados)
+  - Rótulos de ação: "Pagamento Parcela 01/24" (mensal) ou "Pagamentos 01/88" (PIX semanal)
+  - Situação padrão: "Efetivado (Entrada)" na 1ª linha, "Em Aberto" nas demais, "Efetivado (Quitação)" na quitação
+  - Valor pago: valor da 1ª linha, "N/A" nas demais
+  - Saldo restante no pagamento parcial: total − pago (bloqueia pagar acima do total)
+- **Edição manual preservada:** tudo no plano é editável. Campos que o usuário já preencheu não são sobrescritos pela sugestão.
+- **Cópia para planilha:** `atLinhas()` monta as linhas tabuladas — Negociação (1 linha, 30 colunas) ou Renegociação (1 linha por parcela, 26 colunas).
+- **Manual:** quantidades, valores, data da entrada, 1º vencimento (embora sugerido), observações, procedimento na régua, recebeu boletos, negociação concluída.
+
+### Tarefas
+
+---
+
+- [ ] **P2.1 — Revisar o fluxo atual de geração de acordos**
+
+  **Status:** Pendente  
+  **Objetivo:** mapear o fluxo completo e identificar gargalos.  
+  **Comportamento esperado:** documentação do fluxo atual com pontos de melhoria.  
+  **Critérios de aceite:** fluxo documentado e gargalos identificados.  
+  **Dependências:** nenhuma.  
+  **Observações:** o fluxo já é bem automatizado — foco em identificar o que ainda é manual desnecessariamente.
+
+---
+
+- [ ] **P2.2 — Identificar oportunidades de automatizar cálculos e preenchimentos**
+
+  **Status:** Pendente  
+  **Objetivo:** reduzir etapas manuais no preenchimento do acordo e do plano de parcelas.  
+  **Comportamento esperado:** lista de campos que poderiam ser calculados ou preenchidos automaticamente.  
+  **Critérios de aceite:** melhorias identificadas com viabilidade técnica.  
+  **Dependências:** análise do fluxo atual (P2.1).  
+  **Observações:** o script já calcula vencimentos, situações, rótulos e saldo. Possíveis melhorias: cálculo de juros no restante, preenchimento automático de "procedimento na régua" e "recebeu boletos" baseado na modalidade.
+
+---
+
+- [ ] **P2.3 — Melhorar a consistência das informações geradas**
+
+  **Status:** Pendente  
+  **Objetivo:** garantir que os dados do acordo, do plano de parcelas e da planilha estejam sempre consistentes.  
+  **Comportamento esperado:** nenhum campo da planilha com valor divergente do que está na ficha.  
+  **Critérios de aceite:** auditoria de consistência entre ficha, plano e linhas copiadas.  
+  **Dependências:** nenhuma.  
+  **Observações:** `atValidar()` já verifica campos obrigatórios. Possível melhoria: validar consistência entre modalidade e plano (ex.: PIX semanal com período mensal).
+
+---
+
+- [ ] **P2.4 — Reduzir erros e etapas manuais**
+
+  **Status:** Pendente  
+  **Objetivo:** diminuir erros de digitação e etapas desnecessárias.  
+  **Comportamento esperado:** menos cliques e menos digitação para concluir um registro.  
+  **Critérios de aceite:** lista de etapas que podem ser eliminadas ou combinadas.  
+  **Dependências:** análise do fluxo (P2.1).  
+  **Observações:** `atSugerir()` já combina 3 preenchimentos. Possível: auto-gerar textos ao montar o plano, auto-copiar ao concluir.
+
+---
+
+- [ ] **P2.5 — Documentar melhorias necessárias identificadas na análise do código**
+
+  **Status:** Pendente  
+  **Objetivo:** registrar tecnicamente o que foi encontrado para referência futura.  
+  **Comportamento esperado:** documento com as melhorias e suas prioridades.  
+  **Critérios de aceite:** documento atualizado em `docs/script/04-atendimento.md` se necessário.  
+  **Dependências:** conclusão das análises P2.1 a P2.4.  
+  **Observações:** não criar documento novo — atualizar o existente.
+
+---
+
+## P3 — Otimização geral do sistema
+
+**Status geral:** Pendente  
+**Objetivo:** aperfeiçoar funcionalidades já existentes no PayMobi.
+
+### Tarefas
+
+---
+
+- [ ] **P3.1 — Identificar funcionalidades com lentidão ou dificuldade de uso**
+
+  **Status:** Pendente  
+  **Objetivo:** mapear pontos onde a experiência é lenta ou confusa.  
+  **Comportamento esperado:** lista de funcionalidades com problema, com descrição do sintoma.  
+  **Critérios de aceite:** itens priorizados pela equipe.  
+  **Dependências:** feedback da equipe sobre o uso diário.  
+  **Observações:** a coleta de auditoria já tem timeouts configuráveis em `CONFIG`. Possíveis pontos: tempo de abertura da árvore, lentidão do painel com muitos lembretes, troca de conta.
+
+---
+
+- [ ] **P3.2 — Identificar tarefas repetitivas que podem ser automatizadas**
+
+  **Status:** Pendente  
+  **Objetivo:** listar operações manuais repetitivas que o script poderia fazer sozinhas.  
+  **Comportamento esperado:** lista de tarefas com estimativa de viabilidade.  
+  **Critérios de aceite:** tarefas priorizadas pela equipe.  
+  **Dependências:** observação do uso diário.  
+  **Observações:** o script já automatiza coleta, navegação, troca de conta, login automático, timers de expediente. Foco no que ainda é manual e repetitivo.
+
+---
+
+- [ ] **P3.3 — Melhorar a experiência de uso**
+
+  **Status:** Pendente  
+  **Objetivo:** ajustes de usabilidade no painel e nos fluxos.  
+  **Comportamento esperado:** interface mais fluida e intuitiva.  
+  **Critérios de aceite:** melhorias validadas pela equipe.  
+  **Dependências:** itens identificados em P3.1 e P3.2.  
+  **Observações:** a Nova UI já melhorou muito a experiência. Foco em detalhes que ainda incomodam.
+
+---
+
+- [ ] **P3.4 — Corrigir problemas identificados**
+
+  **Status:** Pendente  
+  **Objetivo:** corrigir bugs e comportamentos inadequados.  
+  **Comportamento esperado:** bugs documentados e corrigidos.  
+  **Critérios de aceite:** bug corrigido e validado.  
+  **Dependências:** bugs reportados pela equipe.  
+  **Observações:** registrar cada bug como item separado quando identificado.
+
+---
+
+- [ ] **P3.5 — Registrar oportunidades futuras de melhoria**
+
+  **Status:** Pendente  
+  **Objetivo:** manter um backlog de ideias que surgirem do uso.  
+  **Comportamento esperado:** seção atualizada continuamente.  
+  **Critérios de aceite:** ideia registrada com descrição e contexto.  
+  **Dependências:** nenhuma.  
+  **Observações:** esta prioridade é alimentada continuamente conforme a equipe utiliza o sistema.
+
+---
+
+## Dúvidas funcionais que precisam de decisão da equipe
+
+| # | Dúvida | Contexto |
+|---|---|---|
+| 1 | Notificação no vencimento deve ser push ativo para todos, ou popup local já é suficiente? | P0.1 — hoje o popup aparece localmente; o Pusher só avisa quando algo muda |
+| 2 | O card flutuante deve ser permanente (mesmo sem devidos) ou só quando há lembretes do dia? | P0.3 — hoje o popup só aparece com devidos |
+| 3 | O card flutuante deve ser arrastável ou fixo em um canto? | P0.3 — hoje é fixo |
+| 4 | O card flutuante deve mostrar todos os lembretes ativos ou só os devidos hoje? | P0.3 — hoje só mostra devidos |
+| 5 | Devemos impedir que alguém exclua um lembrete compartilhado que não criou? | P0.2 — hoje qualquer um pode excluir |
+| 6 | Os modelos personalizados (`negModelos`) devem ser compartilhados entre a equipe? | P1.3 — hoje são por navegador |
+| 7 | Há campos do acordo que poderiam ser preenchidos automaticamente a partir do ER? | P2.2 — hoje muitos campos são manuais |

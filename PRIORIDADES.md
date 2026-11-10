@@ -323,6 +323,17 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
+- [x] **P3.6 — Relatório de pendências (conta master)**
+
+  **Status:** Concluído (v13.27.0, 09/11/2026)  
+  **Objetivo:** gerar, sem copiar à mão da Fila de Pendências, a lista das propostas com pendência em aberto no formato usado pela equipe (Proposta, Pendência, Cliente, Vendedor, Autorização, Data, Loja).  
+  **Comportamento:** botão "Gerar relatório" na seção Pendências da aba Relatórios. Lê a Fila de Pendências (filtro "TODAS PENDENTES") e o detalhe de cada autorização, só leitura. Troca para a conta master quando ela está configurada.  
+  **Critérios de aceite (atendidos):** o texto gerado bate com o exemplo da equipe (propostas 5017 e 4959 conferidas no ER real); pendências antigas ainda abertas também entram; fila vazia, sessão expirada e conta sem acesso dão aviso em vez de erro.  
+  **Dependências:** conta master com acesso à Fila de Pendências.  
+  **Observações:** detalhes técnicos em `docs/script/03-painel-interface.md` (Relatório de Pendências).
+
+---
+
 ## Dúvidas funcionais que precisam de decisão da equipe
 
 | # | Dúvida | Contexto |

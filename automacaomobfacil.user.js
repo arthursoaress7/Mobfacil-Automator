@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.26.4
+// @version      13.27.0
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.26.4');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.27.0');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -72,6 +72,7 @@
     LOGIN_AUTO_OUTRA_ABA_LIMITE_S: 30, // s depois dos quais o login de outra aba é dado como abandonado e esta aba assume
     MESA_HOJE_CONFERE_MS: 700,    // ms entre conferências da tela da Mesa de Crédito (filtro de datas do dia)
     MESA_HOJE_ESPERA_MS: 15000,   // ms máximos esperando a lista da Mesa carregar antes/depois de aplicar as datas do dia
+    PD_PAUSA_MS: 150,       // ms entre um detalhe e outro no Relatório de Pendências (não sobrecarrega o ER)
     RD_PAUSA_IA: 4000,      // ms entre uma conversa e outra na análise (respeita o limite do plano grátis do Gemini)
     RD_TIMEOUT_IA: 45,      // s máximos esperando cada resposta do Gemini
     RD_ESPERA_LIMITE: 20,   // s de espera quando o Gemini avisa limite de uso (HTTP 429), antes de tentar de novo
@@ -1147,11 +1148,11 @@
         #mf-p[data-ui=nova] .vermelho{color:#dc2626;border-color:#fecaca}
         #mf-p[data-ui=nova] .laranja{color:#c2410c;border-color:#fed7aa}
         #mf-p[data-ui=nova] #mf-ini,#mf-p[data-ui=nova] #mf-ng-gerar,#mf-p[data-ui=nova] #mf-cac-buscar,#mf-p[data-ui=nova] #mf-tm-criar,#mf-p[data-ui=nova] #mf-lb-salvar,
-        #mf-p[data-ui=nova] #mf-ccb-baixar,#mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-at-registrar,#mf-p[data-ui=nova] #mf-at-plano-gerar,#mf-p[data-ui=nova] #mf-eq-salvar,#mf-p[data-ui=nova] #mf-bs-buscar{background:#2563eb;color:#fff;border-color:#2563eb}
-        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-at-copiar,#mf-p[data-ui=nova] #mf-at-msg-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin{background:#16a34a;color:#fff;border-color:#16a34a}
+        #mf-p[data-ui=nova] #mf-ccb-baixar,#mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-at-registrar,#mf-p[data-ui=nova] #mf-at-plano-gerar,#mf-p[data-ui=nova] #mf-eq-salvar,#mf-p[data-ui=nova] #mf-bs-buscar,#mf-p[data-ui=nova] #mf-pd-gerar{background:#2563eb;color:#fff;border-color:#2563eb}
+        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-at-copiar,#mf-p[data-ui=nova] #mf-at-msg-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin,#mf-p[data-ui=nova] #mf-pd-copiar{background:#16a34a;color:#fff;border-color:#16a34a}
         #mf-p[data-ui=nova] #mf-ini:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-gerar:hover,#mf-p[data-ui=nova] #mf-cac-buscar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-tm-criar:hover,
-        #mf-p[data-ui=nova] #mf-lb-salvar:hover,#mf-p[data-ui=nova] #mf-ccb-baixar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-conta-trocar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-frases:hover,#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled){background:#1d4ed8}
-        #mf-p[data-ui=nova] #mf-cop:hover,#mf-p[data-ui=nova] #mf-ng-copiar:hover,#mf-p[data-ui=nova] #mf-at-copiar:hover,#mf-p[data-ui=nova] #mf-at-msg-copiar:hover,#mf-p[data-ui=nova] #mf-dval:hover,#mf-p[data-ui=nova] #mf-dlin:hover{background:#15803d}
+        #mf-p[data-ui=nova] #mf-lb-salvar:hover,#mf-p[data-ui=nova] #mf-ccb-baixar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-conta-trocar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-frases:hover,#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-pd-gerar:hover:not(:disabled){background:#1d4ed8}
+        #mf-p[data-ui=nova] #mf-cop:hover,#mf-p[data-ui=nova] #mf-ng-copiar:hover,#mf-p[data-ui=nova] #mf-at-copiar:hover,#mf-p[data-ui=nova] #mf-at-msg-copiar:hover,#mf-p[data-ui=nova] #mf-dval:hover,#mf-p[data-ui=nova] #mf-dlin:hover,#mf-p[data-ui=nova] #mf-pd-copiar:hover{background:#15803d}
         #mf-p[data-ui=nova] .mf-mini{border:0;background:transparent;color:#fff;padding:2px 8px;font-size:18px}
         #mf-p[data-ui=nova] #mf-tam{margin-left:0;font-size:15px}
         #mf-p[data-ui=nova] .mf-top{border-radius:13px 13px 0 0}
@@ -1555,16 +1556,16 @@
         #mf-p[data-ui=nova] button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mf-anel)}
         #mf-p[data-ui=nova] button:disabled{opacity:1;cursor:not-allowed;background:var(--mf-sup2);color:var(--mf-apagado);border-color:var(--mf-borda);box-shadow:none}
         #mf-p[data-ui=nova] #mf-ini,#mf-p[data-ui=nova] #mf-ng-gerar,#mf-p[data-ui=nova] #mf-cac-buscar,#mf-p[data-ui=nova] #mf-tm-criar,#mf-p[data-ui=nova] #mf-lb-salvar,#mf-p[data-ui=nova] #mf-ccb-baixar,
-        #mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-at-registrar,#mf-p[data-ui=nova] #mf-at-plano-gerar,#mf-p[data-ui=nova] #mf-eq-salvar,#mf-p[data-ui=nova] #mf-bs-buscar{
+        #mf-p[data-ui=nova] #mf-conta-trocar,#mf-p[data-ui=nova] #mf-ng-frases,#mf-p[data-ui=nova] #mf-at-registrar,#mf-p[data-ui=nova] #mf-at-plano-gerar,#mf-p[data-ui=nova] #mf-eq-salvar,#mf-p[data-ui=nova] #mf-bs-buscar,#mf-p[data-ui=nova] #mf-pd-gerar{
           background:var(--mf-pri);color:#fff;border-color:var(--mf-pri);box-shadow:0 1px 2px rgba(37,99,235,.25),inset 0 1px 0 rgba(255,255,255,.12)}
-        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-at-copiar,#mf-p[data-ui=nova] #mf-at-msg-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin{
+        #mf-p[data-ui=nova] #mf-cop,#mf-p[data-ui=nova] #mf-ng-copiar,#mf-p[data-ui=nova] #mf-at-copiar,#mf-p[data-ui=nova] #mf-at-msg-copiar,#mf-p[data-ui=nova] #mf-dval,#mf-p[data-ui=nova] #mf-dlin,#mf-p[data-ui=nova] #mf-pd-copiar{
           background:var(--mf-ok);color:#fff;border-color:var(--mf-ok);box-shadow:0 1px 2px rgba(22,163,74,.25),inset 0 1px 0 rgba(255,255,255,.12)}
         #mf-p[data-ui=nova] #mf-ini:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-gerar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-cac-buscar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-tm-criar:hover:not(:disabled),
         #mf-p[data-ui=nova] #mf-lb-salvar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ccb-baixar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-conta-trocar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-frases:hover:not(:disabled),
-        #mf-p[data-ui=nova] #mf-at-registrar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-at-plano-gerar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-eq-salvar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled){background:var(--mf-pri-hover);border-color:var(--mf-pri-hover)}
+        #mf-p[data-ui=nova] #mf-at-registrar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-at-plano-gerar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-eq-salvar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-bs-buscar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-pd-gerar:hover:not(:disabled){background:var(--mf-pri-hover);border-color:var(--mf-pri-hover)}
         #mf-p[data-ui=nova] #mf-cop:hover:not(:disabled),#mf-p[data-ui=nova] #mf-ng-copiar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-at-copiar:hover:not(:disabled),#mf-p[data-ui=nova] #mf-at-msg-copiar:hover:not(:disabled),
-        #mf-p[data-ui=nova] #mf-dval:hover:not(:disabled),#mf-p[data-ui=nova] #mf-dlin:hover:not(:disabled){background:var(--mf-ok-hover);border-color:var(--mf-ok-hover)}
-        #mf-p[data-ui=nova] #mf-ini:disabled,#mf-p[data-ui=nova] #mf-cac-buscar:disabled,#mf-p[data-ui=nova] #mf-ccb-baixar:disabled,#mf-p[data-ui=nova] #mf-conta-trocar:disabled,#mf-p[data-ui=nova] #mf-bs-buscar:disabled,
+        #mf-p[data-ui=nova] #mf-dval:hover:not(:disabled),#mf-p[data-ui=nova] #mf-dlin:hover:not(:disabled),#mf-p[data-ui=nova] #mf-pd-copiar:hover:not(:disabled){background:var(--mf-ok-hover);border-color:var(--mf-ok-hover)}
+        #mf-p[data-ui=nova] #mf-ini:disabled,#mf-p[data-ui=nova] #mf-cac-buscar:disabled,#mf-p[data-ui=nova] #mf-ccb-baixar:disabled,#mf-p[data-ui=nova] #mf-conta-trocar:disabled,#mf-p[data-ui=nova] #mf-bs-buscar:disabled,#mf-p[data-ui=nova] #mf-pd-gerar:disabled,
         #mf-p[data-ui=nova] #mf-cop:disabled,#mf-p[data-ui=nova] #mf-dval:disabled,#mf-p[data-ui=nova] #mf-dlin:disabled{background:var(--mf-sup2);color:var(--mf-apagado);border-color:var(--mf-borda);box-shadow:none}
         #mf-p[data-ui=nova] .vermelho{color:var(--mf-perigo);border-color:var(--mf-perigo-borda)}
         #mf-p[data-ui=nova] .vermelho:hover:not(:disabled){background:var(--mf-perigo-suave);border-color:var(--mf-perigo-borda)}
@@ -1791,6 +1792,16 @@
               <button id="mf-dval" class="verde mf-cheia" title="Só os valores de transação, um por linha, para colar na coluna N">Copiar somente valores (coluna N)</button>
               <button id="mf-colr" class="cinza mf-cheia" title="Só a coluna do motivo de reprovação, para colar na coluna R">Copiar motivo (coluna R)</button>
             </div>
+          </div>
+          <div class="mf-sec">
+            <div class="mf-tit">Pendências <span id="mf-pd-qtd" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
+            <div class="mf-info" style="margin-bottom:8px">Propostas com pendência em aberto na <b>Fila de Pendências</b> (Serviços), que fica na conta master. Só leitura: nada é baixado nem alterado.</div>
+            <div class="mf-grade">
+              <button id="mf-pd-gerar" class="verde">Gerar relatório</button>
+              <button id="mf-pd-copiar">Copiar</button>
+            </div>
+            <div id="mf-pd-st" class="mf-info" style="margin-top:8px"></div>
+            <textarea id="mf-pd-res" readonly wrap="off" placeholder="O relatório das pendências aparece aqui" style="display:none;margin-top:8px;height:240px;white-space:pre;overflow-x:auto;font-size:12px"></textarea>
           </div>
         </div>
 
@@ -2060,7 +2071,7 @@
             <label class="mf-opc" title="Na tela de login do ER, entra com a última conta usada. Precisa da senha salva na lista de contas (aba Contas)."><input type="checkbox" id="mf-login-auto"><span><b>Entrar sozinho quando a sessão expirar</b><small>Na tela de login, entra com a última conta usada (precisa da senha salva em Contas). Uma tentativa só: se a senha for recusada, não tenta de novo até você entrar manualmente ou salvar outra senha.</small></span></label>
           </details>
           <details class="mf-grupo" data-grupo="cac"><summary>Consulta CAC</summary>
-            <label class="mf-lb-rot">Conta master (acessa o CAC)<select id="mf-cac-master"></select></label>
+            <label class="mf-lb-rot">Conta master (acessa o CAC e a Fila de Pendências)<select id="mf-cac-master"></select></label>
             <label class="mf-opc"><input type="checkbox" id="mf-cac-troca"><span><b>Trocar automaticamente para a conta master</b><small>Quando a conta atual não acessar o CAC. Encerra a sessão em todas as abas.</small></span></label>
             <label class="mf-opc"><input type="checkbox" id="mf-cac-voltar"><span><b>Voltar para a conta anterior depois</b></span></label>
             <label class="mf-opc" title="Como na tela do CAC, abrir a Posição Geral registra um protocolo de atendimento. Desligado: lê só os contratos (a Filial pode ficar N/A)."><input type="checkbox" id="mf-cac-posicao"><span><b>Abrir a Posição Geral</b><small>Traz a Filial (Origem); o sistema registra protocolo.</small></span></label>
@@ -5241,6 +5252,146 @@
     ligarOpcao('#mf-cac-posicao', 'cacPosicaoGeral');
     desenharMaster();
     cacRetomar();
+
+    /* ================= RELATÓRIO DE PENDÊNCIAS (pd) — SOMENTE LEITURA =================
+       Propostas com pendência em aberto na "Fila de Pendências" (Serviços), que fica na conta master:
+         1. GET /FilaPendencias/FilaPendenciasLista (filtro "TODAS PENDENTES", sem agrupar, desde PD_DESDE até hoje)
+            -> tabela com Pend, Sit, Autorização, Nome, Data Compra
+         2. GET /FilaPendencias/DetalheCompra?strAutorizacao=N&strPendencia=P&strTipoConsulta=P (a tela "Manutenção de
+            Pendência"; só é lida, nenhum botão dela é usado) -> Nro da Proposta, Usuário (vendedor), Lojista e Loja
+       Conta sem a fila: com a conta master escolhida em Configurações > Consulta CAC (e a troca automática ligada),
+       troca para ela e gera sozinho depois do login, como a Consulta CAC. O resultado fica nesta aba (sessionStorage). */
+    const PD_SS = 'mfPendencias';
+    const PD_DESDE = '01/01/2020';
+    const PD_SEPARADOR = '-'.repeat(66);
+    const pdSS = () => { try { return JSON.parse(sessionStorage.getItem(PD_SS) || 'null'); } catch (_) { return null; } };
+    const pdSSSet = v => { try { if (v) sessionStorage.setItem(PD_SS, JSON.stringify(v)); else sessionStorage.removeItem(PD_SS); } catch (_) {} };
+    const pdStatus = t => { $('#mf-pd-st').textContent = t || ''; };
+    const pdHoje = () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear(); };
+    let pdRodando = false;
+    // pares <dt>rótulo</dt><dd>valor</dd>: fica o PRIMEIRO de cada rótulo ("Usuário" se repete em cada pendência)
+    const pdDl = doc => {
+      const o = {};
+      doc.querySelectorAll('dt').forEach(dt => {
+        const dd = dt.nextElementSibling, k = limpoTxt(dt.textContent).replace(/:$/, '').toLowerCase();
+        if (dd && dd.tagName === 'DD' && !(k in o)) o[k] = limpoTxt(dd.textContent);
+      });
+      return o;
+    };
+    // "5170086580 - GUILHERME A. MELO-XP ITAQUERA AT" -> "GUILHERME A. MELO"; "5051394680 - JULIA - XP MAUA AT" -> "JULIA"
+    const pdVendedor = u => String(u || '').replace(/^\d+\s*-\s*/, '').split(/\s*-\s*/)[0].trim();
+    // Lojista "XPANSE NEGOCIOS LTDA - 000004" + Loja "XPANSE - ITAQUERA - 0009" -> "XPANSE NEGOCIOS LTDA - ITAQUERA"
+    const pdLoja = (lojista, loja) => {
+      const lj = String(lojista || '').replace(/\s*-\s*\d+$/, '').trim();
+      const lo = String(loja || '').replace(/\s*-\s*\d+$/, '').trim();
+      const partes = lo.split(/\s+-\s+/);
+      const nome = partes.length > 1 ? partes.slice(1).join(' - ') : lo;
+      return lj && nome ? lj + ' - ' + nome : lj || nome;
+    };
+    async function pdLista() {
+      const r = await cacReq('/FilaPendencias/FilaPendenciasLista', {
+        strPendencia: '', strTipoRepasse: 'R', strTipoPendencia: 'T', strProduto: '', strLojista: '', strLoja: '',
+        strDataInicial: PD_DESDE, strDataFinal: pdHoje(), strTipoData: 'S', strCliente: '', lngAutorizacao: '', lngProposta: '',
+        strPromotora: '', strPromotoraFilial: '', strAgrupamento: 'N', strReembolso: '', strTipoBloqueio: '', strTipoDocumento: '',
+        strConveniada: '', strPlano: '' });
+      if (r.erro) return { erro: 'o ER não respondeu (' + r.erro + ')' };
+      if (ehLogin(r.texto)) return { erro: 'sessão do ER expirada: entre de novo' };
+      if (!r.ok) return { erro: 'o ER respondeu com erro (HTTP ' + r.status + ')', semAcesso: r.status === 401 || r.status === 403 };
+      const doc = cacDoc(r.texto);
+      const t = doc.querySelector('table');
+      // sem nenhuma pendência o ER devolve só o aviso (o "ã" pode vir como &#227;: o DOMParser já decodifica)
+      if (!t) return /n[ãa]o foi localizada nenhuma pend[êe]ncia/i.test(doc.body.textContent) ? { linhas: [] }
+        : { erro: 'a resposta não trouxe a Fila de Pendências', semAcesso: true };
+      const ths = [...t.querySelectorAll('thead th')].map(th => limpoTxt(th.textContent).toLowerCase());
+      const col = n => ths.findIndex(x => x.startsWith(n));
+      const ci = { pend: col('pend'), aut: col('autoriza'), nome: col('nome'), data: col('data') };
+      if (ci.aut < 0) return { erro: 'a Fila de Pendências veio sem a coluna Autorização', semAcesso: true };
+      const linhas = [...t.querySelectorAll('tbody tr')].map(tr => {
+        const c = [...tr.children].map(td => limpoTxt(td.textContent));
+        return { aut: (c[ci.aut] || '').replace(/\D/g, ''), pend: c[ci.pend] || '', nome: c[ci.nome] || '', data: c[ci.data] || '' };
+      }).filter(l => l.aut);
+      return { linhas };
+    }
+    async function pdDetalhe(l) {
+      const r = await cacReq('/FilaPendencias/DetalheCompra', { strAutorizacao: l.aut, strPendencia: (l.pend.match(/\d+/) || [''])[0], strTipoConsulta: 'P' });
+      if (r.erro || !r.ok || ehLogin(r.texto)) return null;
+      const d = pdDl(cacDoc(r.texto));
+      return { proposta: (d['nro da proposta'] || '').replace(/\D/g, ''), vendedor: pdVendedor(d['usuário']), loja: pdLoja(d['lojista'], d['loja']),
+        nome: (d['nome'] || '').replace(/\s*\(\d+\)\s*$/, '').trim(), data: d['data da operação'] || '' };
+    }
+    function pdMostrar(st) {
+      const res = $('#mf-pd-res');
+      res.style.display = st && st.texto ? '' : 'none';
+      res.value = st && st.texto || '';
+      $('#mf-pd-qtd').textContent = st && st.qtd != null ? '(' + st.qtd + ')' : '';
+    }
+    async function pdGerar(extra) {
+      extra = extra || {};
+      if (pdRodando) return;
+      const master = contas().find(x => x.usuario === GM_getValue('cacContaMaster', ''));
+      const atual = contaAtiva();
+      const ehMaster = !!(master && atual && atual.usuario.toLowerCase() === master.usuario.toLowerCase());
+      // a fila fica na conta master: troca antes (quando há master escolhida e a troca automática está ligada)
+      if (master && !ehMaster && !extra.jaTrocou && cfg('cacTrocaAuto')) {
+        if (GM_getValue('trocaConta', null)) return pdStatus('Já existe uma troca de conta em andamento. Aguarde terminar.');
+        pdSSSet({ etapa: 'trocando', quando: Date.now() });
+        pdStatus('Trocando para a conta master (' + rotuloConta(master) + ')...');
+        msg('As pendências ficam na conta master. Trocando para ela; o relatório é gerado sozinho depois do login.');
+        return trocarPara(master);
+      }
+      pdRodando = true; $('#mf-pd-gerar').disabled = true;
+      try {
+        pdStatus('Lendo a Fila de Pendências...');
+        const lista = await pdLista();
+        if (lista.erro) {
+          const dica = lista.semAcesso && !ehMaster ? (master ? ' Entre na conta master (' + rotuloConta(master) + ') e gere de novo.' : ' As pendências ficam na conta master: escolha a conta master em Configurações > Consulta CAC ou entre nela e gere de novo.') : '';
+          return pdStatus('Não deu para gerar: ' + lista.erro + '.' + dica);
+        }
+        if (!lista.linhas.length) {
+          const st = { etapa: 'resultado', texto: '', qtd: 0, em: Date.now() };
+          pdSSSet(st); pdMostrar(st);
+          return pdStatus('Nenhuma proposta com pendência em aberto' + (master && !ehMaster ? ' nesta conta (as pendências ficam na conta master)' : '') + '.');
+        }
+        // mais recentes primeiro (o número da autorização cresce com o tempo)
+        const linhas = lista.linhas.sort((a, b) => Number(b.aut) - Number(a.aut));
+        const blocos = [];
+        let semDetalhe = 0;
+        for (const [i, l] of linhas.entries()) {
+          pdStatus('Lendo o detalhe ' + (i + 1) + ' de ' + linhas.length + ' (autorização ' + l.aut + ')...');
+          const d = await pdDetalhe(l);
+          if (!d) semDetalhe++;
+          blocos.push(['Proposta: ' + ((d && d.proposta) || 'N/A'), 'Pendência: ' + (l.pend || 'N/A'), 'Cliente: ' + (l.nome || (d && d.nome) || 'N/A'),
+            'Vendedor: ' + ((d && d.vendedor) || 'N/A'), 'Autorização: ' + l.aut, 'Data: ' + (l.data || (d && d.data) || 'N/A'), 'Loja: ' + ((d && d.loja) || 'N/A')].join('\n'));
+          if (i < linhas.length - 1) await sleep(CONFIG.PD_PAUSA_MS);
+        }
+        const st = { etapa: 'resultado', texto: blocos.join('\n' + PD_SEPARADOR + '\n'), qtd: linhas.length, em: Date.now() };
+        pdSSSet(st); pdMostrar(st);
+        pdStatus(linhas.length + ' proposta(s) com pendência em aberto. ' + (semDetalhe ? semDetalhe + ' sem o detalhe (proposta, vendedor e loja ficaram N/A). ' : '') + 'Gerado às ' + new Date().toLocaleTimeString().slice(0, 5) + '.');
+      } catch (e) {
+        console.warn('[PaymobiFin] pendências', e && e.message);
+        pdStatus('Não deu para gerar: ' + (e && e.message || 'erro inesperado') + '.');
+      } finally { pdRodando = false; $('#mf-pd-gerar').disabled = false; }
+    }
+    // a cada página carregada: gera depois da troca para a master, ou mostra o último relatório desta aba
+    function pdRetomar() {
+      const st = pdSS();
+      if (!st) return;
+      if (st.etapa === 'resultado') return pdMostrar(st);
+      if (Date.now() - st.quando > 15 * 60 * 1000) return pdSSSet(null);
+      if (campoSenha() || GM_getValue('trocaConta', null)) return pdStatus('Aguardando o login da conta master...');
+      const master = GM_getValue('cacContaMaster', ''), a = contaAtiva();
+      pdSSSet(null);
+      if (a && master && a.usuario.toLowerCase() === master.toLowerCase()) { mostrarAba('rel'); pdGerar({ jaTrocou: true }); }
+      else msg('A troca para a conta master não foi confirmada (conta ativa: ' + (a ? rotuloConta(a) : 'não identificada') + '). Relatório de pendências cancelado.');
+    }
+    $('#mf-pd-gerar').addEventListener('click', () => pdGerar());
+    $('#mf-pd-copiar').addEventListener('click', () => {
+      const t = $('#mf-pd-res').value;
+      if (!t) return msg('Gere o relatório de pendências primeiro.');
+      GM_setClipboard(t, 'text');
+      msg('Relatório de pendências copiado (' + (pdSS() || {}).qtd + ' proposta(s)).');
+    });
+    pdRetomar();
 
     /* ---- Gerador: frases de uma linha para a planilha (colunas "Pedido do cliente" e "Acordo Realizado") ----
        "fechou" = acordo fechado; "solicitou" = simulação para ver se é viável. Só usa o que foi digitado. */

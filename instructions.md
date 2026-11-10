@@ -392,6 +392,7 @@ else if (window.top === window) iniciarPainel();
 | → Histórico (`hs`) | Acordos registrados |
 | → Busca de cliente (`bs`) | Central de busca (somente leitura) |
 | → Navegação automática | Troca de tela automática no ER |
+| → Relatório de Pendências (`pd`) | Fila de Pendências da conta master (somente leitura) |
 | → RD Atendimento (`rd`) | Análise com Gemini e encerramento do dia |
 
 ### Variáveis globais compartilhadas
@@ -418,6 +419,7 @@ else if (window.top === window) iniciarPainel();
 | `eq` | Equipe (Pusher) |
 | `hs` | Histórico |
 | `bs` | Busca de cliente |
+| `pd` | Relatório de Pendências |
 | `rd` | RD Atendimento |
 
 ### Seletor interno do painel

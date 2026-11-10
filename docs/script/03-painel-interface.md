@@ -125,6 +125,29 @@ A função `relatorioCols(m, id, d, processada)` monta as colunas de resultado p
 
 **Valor de transação (Diário e Aprovadas):** `valorTransacao()` usa o "Valor da Compra" da Operação de Crédito (`extra.compra`). O "Valor" do bloco Garantias (`extra.valor`) é o valor cadastrado do aparelho e, nas aprovações automáticas, vem simbólico (R$ 0,01, R$ 1,00...); ele só entra quando a página não tem Valor da Compra. Sem nenhum dos dois, N/A. A escolha é feita na hora de montar o relatório, então vale também para propostas já coletadas.
 
+### Relatório de Pendências (`pd`, bloco "RELATÓRIO DE PENDÊNCIAS")
+
+Seção **Pendências** na aba Relatórios: lista as propostas com pendência em aberto na **Fila de Pendências** (Serviços), que fica na conta master. É só leitura: nenhum botão da tela de pendências é usado (nada é baixado, cancelado nem anexado).
+
+1. **Lista** — `GET /FilaPendencias/FilaPendenciasLista` com o filtro "TODAS PENDENTES" (`strTipoPendencia=T`), sem agrupar, de `PD_DESDE` (01/01/2020) até hoje. Lê Pend, Autorização, Nome e Data Compra pelo cabeçalho. Sem pendências, o ER devolve só o aviso "Não foi localizada nenhuma pendência".
+2. **Detalhe de cada autorização** — `GET /FilaPendencias/DetalheCompra?strAutorizacao=N&strPendencia=P&strTipoConsulta=P` (a tela "Manutenção de Pendência", só lida): Nro da Proposta, Usuário (vendedor), Lojista e Loja (`pdDl`, primeiro `dd` de cada `dt`). Pausa de `CONFIG.PD_PAUSA_MS` entre um detalhe e outro.
+3. **Texto** — mais recentes primeiro (autorização maior), um bloco por proposta, separados por 66 traços:
+   ```
+   Proposta: 5017
+   Pendência: 10
+   Cliente: REGINALDO ARAUJO
+   Vendedor: GUILHERME A. MELO
+   Autorização: 2689
+   Data: 08/11/2026
+   Loja: XPANSE NEGOCIOS LTDA - ITAQUERA
+   ```
+   - **Pendência:** o código do tipo (10 = Ativação da licença, 07 = CCB assinada...). Com mais de uma em aberto, sai "07, 10".
+   - **Vendedor** (`pdVendedor`): o Usuário sem o código e sem o sufixo da loja ("5170086580 - GUILHERME A. MELO-XP ITAQUERA AT" → "GUILHERME A. MELO").
+   - **Loja** (`pdLoja`): nome do lojista + nome da loja, sem os códigos ("XPANSE NEGOCIOS LTDA - 000004" + "XPANSE - ITAQUERA - 0009" → "XPANSE NEGOCIOS LTDA - ITAQUERA").
+   - Detalhe que não abre: proposta, vendedor e loja saem N/A, e o status avisa quantas ficaram assim.
+4. **Conta master** — com a conta master escolhida em Configurações > Consulta CAC e "Trocar automaticamente para a conta master" ligado, o "Gerar relatório" numa conta que não é a master troca para ela e gera sozinho depois do login (`pdRetomar`, estado em `sessionStorage` `mfPendencias`, vale 15 min). Sem master escolhida, gera com a conta atual e, se ela não tiver a fila, avisa.
+5. **Copiar** — copia o texto (`GM_setClipboard`). O último relatório fica na caixa enquanto a aba estiver aberta (`sessionStorage`), inclusive depois da troca de conta.
+
 ---
 
 ## Configurações

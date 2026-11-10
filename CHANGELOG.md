@@ -1,5 +1,13 @@
 # Changelog
 
+## [v13.27.0] — 2026-11-10
+
+### ✨ Novas funcionalidades
+
+- feat: relatório de pendências da conta master (#28) (266e9af)
+- feat: relatório de pendências da conta master (#27) (6fc22e7)
+
+
 ## [v13.26.3] — 2026-11-09
 
 ### 🐛 Correções

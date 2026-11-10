@@ -332,6 +332,22 @@ O módulo de geração de acordos (`at*`) já possui:
   **Dependências:** conta master com acesso à Fila de Pendências.  
   **Observações:** detalhes técnicos em `docs/script/03-painel-interface.md` (Relatório de Pendências).
 
+- [x] **P3.7 — Nome do arquivo do script**
+
+  **Status:** Concluído (v13.27.2, 09/11/2026)  
+  **Objetivo:** o arquivo principal passa de `automacaomobfacil.user.js` para `paymobifin-assistente.user.js`, nome que bate com o que aparece no Tampermonkey ("PaymobiFin - Assistente").  
+  **Comportamento:** `@downloadURL`/`@updateURL` apontam para o arquivo novo. O arquivo antigo ficou como ponte congelada (cópia idêntica da 13.27.2), para que as instalações antigas atualizem e passem a seguir o arquivo novo. `@name` e `@namespace` não mudaram, então o Tampermonkey trata como o mesmo script e os dados salvos continuam.  
+  **Critérios de aceite:** os workflows (validação e release) leem o arquivo novo; a validação confere que os endereços de atualização apontam para o arquivo novo e bloqueia alterações no arquivo-ponte.  
+  **Observações:** alteração Categoria B (endereços de atualização e workflows), autorizada pelo responsável.
+
+- [ ] **P3.8 — Remover o arquivo-ponte `automacaomobfacil.user.js`**
+
+  **Status:** Aguardando (não antes de 09/12/2026)  
+  **Objetivo:** apagar o nome antigo depois que todas as instalações já migraram para `paymobifin-assistente.user.js`.  
+  **Critérios de aceite:** confirmar com a equipe que o Tampermonkey de cada pessoa mostra a versão 13.27.2 ou mais nova e o endereço de atualização terminando em `paymobifin-assistente.user.js`.  
+  **Riscos:** quem ainda estiver no endereço antigo deixa de receber atualizações sem aviso.  
+  **Observações:** alteração Categoria B (afeta a distribuição); exige autorização explícita.
+
 ---
 
 ## Dúvidas funcionais que precisam de decisão da equipe

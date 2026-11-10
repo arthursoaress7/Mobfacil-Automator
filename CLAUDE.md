@@ -8,7 +8,7 @@
 
 1. **`instructions.md`** — regras de desenvolvimento, autonomia, Git e arquitetura
 2. **`docs/script/<módulo>.md`** — documentação do módulo que será alterado
-3. **Bloco correspondente em `automacaomobfacil.user.js`** — o código é a fonte de verdade
+3. **Bloco correspondente em `paymobifin-assistente.user.js`** — o código é a fonte de verdade
 
 ---
 
@@ -16,9 +16,9 @@
 
 | Item | Valor |
 |---|---|
-| Arquivo principal | `automacaomobfacil.user.js` (~8.300 linhas) |
+| Arquivo principal | `paymobifin-assistente.user.js` (~8.300 linhas) |
 | Tipo | Tampermonkey userscript (monólito, sem build) |
-| Versão atual | 13.27.1 |
+| Versão atual | 13.27.2 |
 | Sites alvo | `paymobi.ercard.com.br` e `enviamotor.mobfacil.com.br` |
 | Arquitetura | **Monolítica** — não dividir em arquivos |
 | Fluxo Git | branch temporária → `development` (testes) → `main` (produção) |
@@ -29,6 +29,7 @@
 
 - **Não divida o arquivo** — refatoração não está no escopo atual
 - **Não altere `@downloadURL`/`@updateURL`** — push na `main` atualiza todos os usuários
+- **Não edite `automacaomobfacil.user.js`** — é o nome antigo, congelado na 13.27.2 só para migrar instalações antigas; o código vai em `paymobifin-assistente.user.js`
 - **Nunca commitar em `main` ou `development` diretamente** — sempre via branch + PR
 - **Branch temporária parte de `development`**, não de `main`
 - **PR de trabalho vai para `development`** — `development` → `main` é PR separado, após testes
@@ -63,7 +64,7 @@ git push -u origin tipo/descricao-curta
 Cole no início da conversa:
 1. `instructions.md` completo
 2. `docs/script/<módulo>.md` do módulo envolvido
-3. O trecho relevante de `automacaomobfacil.user.js`
+3. O trecho relevante de `paymobifin-assistente.user.js`
 4. Descrição do que precisa
 
 ---

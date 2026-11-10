@@ -1,5 +1,13 @@
 # Changelog
 
+## [v13.27.1] — 2026-11-10
+
+### 🐛 Correções
+
+- fix: seção de pendências recolhível e com botão Limpar (#31) (781daa7)
+- fix: seção de pendências recolhível e com botão Limpar (#29) (4fa7147)
+
+
 ## [v13.27.0] — 2026-11-10
 
 ### ✨ Novas funcionalidades

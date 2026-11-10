@@ -2,7 +2,7 @@
 
 Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymobi, automatizando tarefas operacionais da equipe de cobrança e crédito.
 
-**Versão atual:** 13.27.0
+**Versão atual:** 13.27.1
 
 ---
 

@@ -20,7 +20,7 @@ O **PaymobiFin - Assistente** é um userscript Tampermonkey que roda em dois sit
 
 **Versão atual:** 13.22 (campo `@version` no cabeçalho do script — única fonte da versão)
 
-**Repositório:** `git@github.com:arthursoaress7/Mobfacil-Automator.git`  
+**Repositório:** `git@github.com:arthursoaress7/PaymobiFin-Assistente.git`  
 **Proprietário do repositório:** arthursoaress7 (pode ter permissões administrativas que o usuário atual não tem)
 
 ---

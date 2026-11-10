@@ -145,7 +145,7 @@ jobs:
 
           # @downloadURL e @updateURL devem apontar para este arquivo na main:
           # é por eles que o Tampermonkey de todos os usuários busca atualizações
-          URL_OFICIAL="https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/$FILE"
+          URL_OFICIAL="https://github.com/arthursoaress7/PaymobiFin-Assistente/raw/refs/heads/main/$FILE"
           URLS=$(awk '$2 ~ /^@(downloadURL|updateURL)$/ { print $2 " " $3 }' "$FILE")
           QTD_OK=$(echo "$URLS" | awk -v u="$URL_OFICIAL" '$2 == u' | wc -l)
 

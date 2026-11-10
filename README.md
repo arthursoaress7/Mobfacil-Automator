@@ -37,7 +37,7 @@ Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymob
 2. Nas configurações do Tampermonkey, habilite a execução de userscripts
 3. Acesse a URL de instalação direta:
    ```
-   https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/paymobifin-assistente.user.js
+   https://github.com/arthursoaress7/PaymobiFin-Assistente/raw/refs/heads/main/paymobifin-assistente.user.js
    ```
 4. O Tampermonkey detecta o arquivo `.user.js` e exibe a tela de instalação — confirme
 5. O script estará ativo na próxima vez que abrir o ER ou o motor
@@ -51,7 +51,7 @@ Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymob
 ## Estrutura do projeto
 
 ```
-Mobfacil-Automator/
+PaymobiFin-Assistente/
 ├── paymobifin-assistente.user.js   ← código-fonte (monólito)
 ├── automacaomobfacil.user.js       ← nome antigo, congelado: só migra instalações antigas (não editar)
 ├── README.md                       ← este arquivo

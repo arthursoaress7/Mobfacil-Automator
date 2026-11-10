@@ -9,9 +9,9 @@
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
 // @include      https://enviamotor.mobfacil.com.br/*
 // @include      https://app.tallos.com.br/*
-// @homepageURL  https://github.com/arthursoaress7/Mobfacil-Automator/tree/main
-// @downloadURL  https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/paymobifin-assistente.user.js
-// @updateURL    https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/paymobifin-assistente.user.js
+// @homepageURL  https://github.com/arthursoaress7/PaymobiFin-Assistente/tree/main
+// @downloadURL  https://github.com/arthursoaress7/PaymobiFin-Assistente/raw/refs/heads/main/paymobifin-assistente.user.js
+// @updateURL    https://github.com/arthursoaress7/PaymobiFin-Assistente/raw/refs/heads/main/paymobifin-assistente.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue

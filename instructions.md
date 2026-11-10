@@ -455,6 +455,7 @@ Documentar novas chaves aqui antes de usar. Renomear sem migração quebra dados
 | `geminiChave/geminiModelo` | Chave e modelo Gemini | RD |
 | `rdAnalises/rdLinhas/erBase` | Dados do RD | RD |
 | `gruposCfg/buscaAberta/buscaComCac` | Config e busca | Config/Busca |
+| `pdRecolhido` | Seção Pendências recolhida (padrão: sim) | Relatório de Pendências |
 
 ---
 

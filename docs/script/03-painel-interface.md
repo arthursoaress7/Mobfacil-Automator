@@ -147,6 +147,8 @@ Seção **Pendências** na aba Relatórios: lista as propostas com pendência em
    - Detalhe que não abre: proposta, vendedor e loja saem N/A, e o status avisa quantas ficaram assim.
 4. **Conta master** — com a conta master escolhida em Configurações > Consulta CAC e "Trocar automaticamente para a conta master" ligado, o "Gerar relatório" numa conta que não é a master troca para ela e gera sozinho depois do login (`pdRetomar`, estado em `sessionStorage` `mfPendencias`, vale 15 min). Sem master escolhida, gera com a conta atual e, se ela não tiver a fila, avisa.
 5. **Copiar** — copia o texto (`GM_setClipboard`). O último relatório fica na caixa enquanto a aba estiver aberta (`sessionStorage`), inclusive depois da troca de conta.
+6. **Limpar** — o botão "Limpar" e o "Resetar" da coleta apagam o relatório da caixa e do `sessionStorage` (`pdLimpar`). Nada muda no ER.
+7. **Seção recolhível** — o título "Pendências" abre e fecha a seção (`pdDobra`). Vem **fechada** e lembra a última escolha (GM `pdRecolhido`). Fechada, o título continua mostrando a quantidade do último relatório. Gerar depois da troca para a master abre a seção.
 
 ---
 

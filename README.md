@@ -2,7 +2,7 @@
 
 Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymobi, automatizando tarefas operacionais da equipe de cobrança e crédito.
 
-**Versão atual:** 13.27.1
+**Versão atual:** 13.27.2
 
 ---
 
@@ -24,7 +24,7 @@ Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymob
 |---|---|
 | Tipo | Tampermonkey Userscript (JavaScript, sem build) |
 | Sites alvo | `paymobi.ercard.com.br` · `enviamotor.mobfacil.com.br` |
-| Arquivo principal | `automacaomobfacil.user.js` (~8.300 linhas, monólito) |
+| Arquivo principal | `paymobifin-assistente.user.js` (~8.300 linhas, monólito) |
 | Dependências externas | Pusher Channels 8.4.0 (via `@require`) |
 | APIs do browser | Web Crypto (AES-GCM 256), Web Workers, Web Locks |
 | APIs Tampermonkey | `GM_setValue/getValue/deleteValue`, `GM_setClipboard`, `GM_xmlhttpRequest`, `unsafeWindow` |
@@ -37,20 +37,23 @@ Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymob
 2. Nas configurações do Tampermonkey, habilite a execução de userscripts
 3. Acesse a URL de instalação direta:
    ```
-   https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/automacaomobfacil.user.js
+   https://github.com/arthursoaress7/PaymobiFin-Assistente/raw/refs/heads/main/paymobifin-assistente.user.js
    ```
 4. O Tampermonkey detecta o arquivo `.user.js` e exibe a tela de instalação — confirme
 5. O script estará ativo na próxima vez que abrir o ER ou o motor
 
 **Atualização automática:** o Tampermonkey verifica atualizações periodicamente via `@updateURL`, que aponta para a branch `main`. Toda alteração integrada na `main` será distribuída automaticamente aos usuários.
 
+**Quem instalou pelo endereço antigo** (`.../automacaomobfacil.user.js`) não precisa fazer nada: na próxima verificação o Tampermonkey baixa a 13.27.2 e passa a buscar as atualizações no arquivo novo, sem perder contas nem configurações.
+
 ---
 
 ## Estrutura do projeto
 
 ```
-Mobfacil-Automator/
-├── automacaomobfacil.user.js       ← código-fonte (monólito)
+PaymobiFin-Assistente/
+├── paymobifin-assistente.user.js   ← código-fonte (monólito)
+├── automacaomobfacil.user.js       ← nome antigo, congelado: só migra instalações antigas (não editar)
 ├── README.md                       ← este arquivo
 ├── instructions.md                 ← manual operacional para IAs e desenvolvedores
 ├── CLAUDE.md                       ← entrada rápida para o Claude Code

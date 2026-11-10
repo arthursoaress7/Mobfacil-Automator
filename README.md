@@ -2,7 +2,7 @@
 
 Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymobi, automatizando tarefas operacionais da equipe de cobrança e crédito.
 
-**Versão atual:** 13.26.4
+**Versão atual:** 13.27.0
 
 ---
 
@@ -13,6 +13,7 @@ Userscript Tampermonkey que adiciona um painel flutuante ao sistema ER da Paymob
 - Geração de textos formatados para WhatsApp e linhas para planilhas Excel
 - Gerenciamento de lembretes de pagamentos parciais
 - Consulta CAC, download de CCBs, troca rápida de conta
+- Relatório das propostas com pendência em aberto (Fila de Pendências da conta master)
 - Análise de atendimentos com IA (Gemini) no painel do RD Station
 
 ---

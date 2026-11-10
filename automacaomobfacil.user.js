@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.27.0
+// @version      13.27.1
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.27.0');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.27.1');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -1794,14 +1794,17 @@
             </div>
           </div>
           <div class="mf-sec">
-            <div class="mf-tit">Pendências <span id="mf-pd-qtd" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
-            <div class="mf-info" style="margin-bottom:8px">Propostas com pendência em aberto na <b>Fila de Pendências</b> (Serviços), que fica na conta master. Só leitura: nada é baixado nem alterado.</div>
-            <div class="mf-grade">
-              <button id="mf-pd-gerar" class="verde">Gerar relatório</button>
-              <button id="mf-pd-copiar">Copiar</button>
+            <div class="mf-tit mf-dobra" id="mf-pd-tit" title="Mostrar / esconder as pendências">Pendências <span id="mf-pd-qtd" style="text-transform:none;letter-spacing:0;font-weight:400"></span></div>
+            <div id="mf-pd-corpo" style="display:none">
+              <div class="mf-info" style="margin-bottom:8px">Propostas com pendência em aberto na <b>Fila de Pendências</b> (Serviços), que fica na conta master. Só leitura: nada é baixado nem alterado.</div>
+              <div class="mf-grade">
+                <button id="mf-pd-gerar" class="verde">Gerar relatório</button>
+                <button id="mf-pd-copiar">Copiar</button>
+                <button id="mf-pd-limpar" class="vermelho" title="Apaga o relatório da caixa (não mexe em nada no ER)">Limpar</button>
+              </div>
+              <div id="mf-pd-st" class="mf-info" style="margin-top:8px"></div>
+              <textarea id="mf-pd-res" readonly wrap="off" placeholder="O relatório das pendências aparece aqui" style="display:none;margin-top:8px;height:240px;white-space:pre;overflow-x:auto;font-size:12px"></textarea>
             </div>
-            <div id="mf-pd-st" class="mf-info" style="margin-top:8px"></div>
-            <textarea id="mf-pd-res" readonly wrap="off" placeholder="O relatório das pendências aparece aqui" style="display:none;margin-top:8px;height:240px;white-space:pre;overflow-x:auto;font-size:12px"></textarea>
           </div>
         </div>
 
@@ -3447,7 +3450,7 @@
     };
 
     $('#mf-res').onclick = async () => {
-      if (!confirm('Resetar tudo? Isso apaga os dados coletados, a fila e o progresso.')) return;
+      if (!confirm('Resetar tudo? Isso apaga os dados coletados, a fila, o progresso e o relatório de pendências.')) return;
       msg('Parando e limpando...');
       if (executando) {
         resetando = true;
@@ -3461,6 +3464,7 @@
       Object.keys(falhas).forEach(k => delete falhas[k]);
       atual = null;
       $('#mf-lista').value = '';
+      pdLimpar();   // o relatório de pendências também sai (ver RELATÓRIO DE PENDÊNCIAS)
       atualizarUI();
       msg('Tudo limpo. Pronto para uma nova coleta.');
     };
@@ -5381,9 +5385,24 @@
       if (campoSenha() || GM_getValue('trocaConta', null)) return pdStatus('Aguardando o login da conta master...');
       const master = GM_getValue('cacContaMaster', ''), a = contaAtiva();
       pdSSSet(null);
-      if (a && master && a.usuario.toLowerCase() === master.toLowerCase()) { mostrarAba('rel'); pdGerar({ jaTrocou: true }); }
+      if (a && master && a.usuario.toLowerCase() === master.toLowerCase()) { mostrarAba('rel'); pdDobra(true); pdGerar({ jaTrocou: true }); }
       else msg('A troca para a conta master não foi confirmada (conta ativa: ' + (a ? rotuloConta(a) : 'não identificada') + '). Relatório de pendências cancelado.');
     }
+    // seção recolhível (fechada por padrão; lembra a última escolha). Gerar o relatório abre a seção
+    function pdDobra(aberta) {
+      if (aberta != null) GM_setValue('pdRecolhido', !aberta);
+      const ab = !GM_getValue('pdRecolhido', true);
+      $('#mf-pd-corpo').style.display = ab ? '' : 'none';
+      $('#mf-pd-tit').classList.toggle('aberta', ab);
+    }
+    $('#mf-pd-tit').addEventListener('click', () => pdDobra(GM_getValue('pdRecolhido', true)));
+    // "Limpar" e o "Resetar" da coleta: apagam só o relatório da caixa (nada no ER)
+    function pdLimpar() {
+      if (pdRodando) return msg('Aguarde o relatório de pendências terminar.');
+      pdSSSet(null); pdMostrar(null); pdStatus('');
+    }
+    $('#mf-pd-limpar').addEventListener('click', () => { if (!$('#mf-pd-res').value && !$('#mf-pd-st').textContent) return; pdLimpar(); msg('Relatório de pendências limpo.'); });
+    pdDobra();
     $('#mf-pd-gerar').addEventListener('click', () => pdGerar());
     $('#mf-pd-copiar').addEventListener('click', () => {
       const t = $('#mf-pd-res').value;

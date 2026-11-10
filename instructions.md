@@ -14,7 +14,9 @@ O **PaymobiFin - Assistente** é um userscript Tampermonkey que roda em dois sit
 | `paymobi.ercard.com.br` | Painel principal com todas as funcionalidades |
 | `enviamotor.mobfacil.com.br` | Motor de coleta de dados de crédito (iframe) |
 
-**Arquivo de código:** `automacaomobfacil.user.js` — único arquivo JavaScript, ~8.300 linhas, sem transpilador ou bundler.
+**Arquivo de código:** `paymobifin-assistente.user.js` — único arquivo JavaScript, ~8.300 linhas, sem transpilador ou bundler.
+
+**Arquivo-ponte:** `automacaomobfacil.user.js` é o nome antigo do script. Ficou congelado na v13.27.2 (cópia idêntica, já com `@downloadURL`/`@updateURL` apontando para o arquivo novo) só para migrar as instalações antigas: o Tampermonkey de quem instalou pelo endereço antigo baixa a 13.27.2 e passa a seguir o arquivo novo. **Não editar** — toda alteração vai em `paymobifin-assistente.user.js`. Remoção prevista em `PRIORIDADES.md` (P3.8).
 
 **Versão atual:** 13.22 (campo `@version` no cabeçalho do script — única fonte da versão)
 
@@ -37,7 +39,7 @@ Qualquer solicitação que contrarie estas prioridades requer autorização expl
 
 Até autorização formal para refatoração:
 
-- **Não dividir `automacaomobfacil.user.js` em múltiplos arquivos**
+- **Não dividir `paymobifin-assistente.user.js` em múltiplos arquivos**
 - **Não reorganizar diretórios do projeto**
 - **Não alterar a arquitetura ou a ordem de execução**
 - **Não remover funções** sem investigar todos os pontos de uso

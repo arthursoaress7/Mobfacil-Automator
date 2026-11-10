@@ -117,7 +117,7 @@ jobs:
           LAST_TAG="${{ steps.last_tag.outputs.tag }}"
           if [ -z "$LAST_TAG" ]; then
             # Primeira release: ler o @version do script como base
-            SCRIPT_VERSION=$(grep -oP '(?<=@version\s{6})\d+\.\d+' automacaomobfacil.user.js 2>/dev/null || echo "0.0")
+            SCRIPT_VERSION=$(grep -oP '(?<=@version\s{6})\d+\.\d+' paymobifin-assistente.user.js 2>/dev/null || echo "0.0")
             MAJOR=$(echo "$SCRIPT_VERSION" | cut -d. -f1)
             MINOR=$(echo "$SCRIPT_VERSION" | cut -d. -f2)
             PATCH=0

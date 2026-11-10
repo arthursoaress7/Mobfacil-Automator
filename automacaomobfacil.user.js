@@ -10,8 +10,8 @@
 // @include      https://enviamotor.mobfacil.com.br/*
 // @include      https://app.tallos.com.br/*
 // @homepageURL  https://github.com/arthursoaress7/Mobfacil-Automator/tree/main
-// @downloadURL  https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/automacaomobfacil.user.js
-// @updateURL    https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/automacaomobfacil.user.js
+// @downloadURL  https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/paymobifin-assistente.user.js
+// @updateURL    https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/paymobifin-assistente.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue

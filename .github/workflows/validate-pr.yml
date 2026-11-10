@@ -50,7 +50,7 @@ jobs:
           FILES="${{ steps.changed.outputs.files }}"
 
           PROTECTED_PATTERNS=(
-            "automacaomobfacil.user.js"  # código principal
+            "paymobifin-assistente.user.js"  # código principal
           )
 
           # Campos sensíveis dentro do script que não devem ser alterados
@@ -72,6 +72,7 @@ jobs:
             ".github/workflows/"
             "package.json"
             "package-lock.json"
+            "automacaomobfacil.user.js"  # arquivo-ponte das atualizações antigas (congelado)
           )
 
           for PATTERN in "${INFRA_PATTERNS[@]}"; do
@@ -128,9 +129,9 @@ jobs:
       # ----------------------------------------------------------------
       - name: Lint do script
         id: lint
-        if: contains(steps.changed.outputs.files, 'automacaomobfacil.user.js')
+        if: contains(steps.changed.outputs.files, 'paymobifin-assistente.user.js')
         run: |
-          FILE="automacaomobfacil.user.js"
+          FILE="paymobifin-assistente.user.js"
 
           echo "Verificando integridade do script..."
 
@@ -142,21 +143,21 @@ jobs:
           fi
           echo "✅ @version encontrado: $VERSION"
 
-          # @downloadURL e @updateURL não devem ser alterados
-          BASE=${{ github.event.pull_request.base.sha }}
-          HEAD=${{ github.event.pull_request.head.sha }}
+          # @downloadURL e @updateURL devem apontar para este arquivo na main:
+          # é por eles que o Tampermonkey de todos os usuários busca atualizações
+          URL_OFICIAL="https://github.com/arthursoaress7/Mobfacil-Automator/raw/refs/heads/main/$FILE"
+          URLS=$(awk '$2 ~ /^@(downloadURL|updateURL)$/ { print $2 " " $3 }' "$FILE")
+          QTD_OK=$(echo "$URLS" | awk -v u="$URL_OFICIAL" '$2 == u' | wc -l)
 
-          URL_BASE=$(git show "$BASE:$FILE" 2>/dev/null | grep -E "@(downloadURL|updateURL)" || true)
-          URL_HEAD=$(git show "$HEAD:$FILE" 2>/dev/null | grep -E "@(downloadURL|updateURL)" || true)
-
-          if [ "$URL_BASE" != "$URL_HEAD" ]; then
-            echo "❌ @downloadURL ou @updateURL foram alterados."
-            echo "  Antes: $URL_BASE"
-            echo "  Depois: $URL_HEAD"
+          if [ "$QTD_OK" -ne 2 ] || [ "$(echo "$URLS" | wc -l)" -ne 2 ]; then
+            echo "❌ @downloadURL ou @updateURL fora do endereço oficial."
+            echo "  Esperado: $URL_OFICIAL"
+            echo "  Encontrado:"
+            echo "$URLS"
             echo "Alteração nos URLs de distribuição requer autorização explícita (Categoria B)."
             exit 1
           fi
-          echo "✅ @downloadURL e @updateURL não foram alterados."
+          echo "✅ @downloadURL e @updateURL apontam para o endereço oficial."
 
           # 'use strict' deve estar presente
           if ! grep -q "'use strict'" "$FILE"; then

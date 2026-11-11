@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.27.2
+// @version      13.29.0
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.27.2');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.29.0');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -109,6 +109,14 @@
     equipeAtiva: false,              // sincronização da equipe (Pusher): só liga quando o funcionário configura
   };
   const cfg = k => GM_getValue(k, PADRAO[k]);
+
+  // ER sem sessão: a tela de login (#frmLogin / #txtSenha) ou a página de aviso de sessão expirada. Com a sessão vencida,
+  // o ER redireciona TODA requisição para /AvisoSessao/AvisoSessao (HTTP 200, sem a lista e sem os dados): "Sua sessão
+  // de trabalho expirou. Por favor, refaça seu login no sistema." + botão "Acessar o Sistema" (ReiniciaSistema()).
+  // Só o "refaça seu login" e o ReiniciaSistema são da página de aviso: a janela #dlgRelogin, escondida em toda página
+  // logada, também diz "sessão de trabalho expirou". O "ç" pode vir como &#231; ou &ccedil;: \S{1,8} cobre as formas.
+  const erSemSessao = t => /id=["']?frmLogin|id=["']?txtSenha|function\s+ReiniciaSistema|refa\S{1,8}a seu login/i.test(t || '');
+  const SESSAO_EXPIRADA = 'sessão do ER expirada';
 
   // sleep via Web Worker: abas em segundo plano deixam setTimeout lento (até 1 minuto por tick); o worker não.
   // Se o site bloquear o worker (CSP), cai no setTimeout normal. O setTimeout reserva (ms + 1,5 s) evita travar se o worker falhar.
@@ -1875,7 +1883,7 @@
 
         <div data-pag="neg">
           <div class="mf-ui-seg mf-at-seg">
-            <button data-at="negociacao">Negociação</button><button data-at="renegociacao">Renegociação</button><button data-at="mensagens">Mensagens</button>
+            <button data-at="negociacao">Negociação</button><button data-at="renegociacao">Renegociação</button><button data-at="desbloqueios">Desbloqueios</button><button data-at="mensagens">Mensagens</button>
           </div>
           <div id="mf-at-form">
             <details class="mf-grupo" id="mf-at-g-cliente" data-grupo="at-cliente" open><summary>Cliente</summary>
@@ -1953,6 +1961,21 @@
               </div>
               <div class="mf-info" style="margin-top:6px">Os mesmos dados do Atendimento: o que foi digitado lá já aparece aqui. Nada é enviado.</div>
             </details>
+          </div>
+          <div id="mf-at-desbloqueio" style="display:none">
+            <details class="mf-grupo" data-grupo="at-desbloqueio" open><summary>Desbloqueio</summary>
+              <div class="mf-linha" style="flex-wrap:wrap;gap:6px;margin:2px 0 6px">
+                <button id="mf-at-desb-aplicar" class="cinza mf-bs-mini" title="Preenche com o cliente da busca do topo.">Aplicar cliente atual</button>
+              </div>
+              <div id="mf-at-desb-campos" class="mf-grade"></div>
+            </details>
+            <div class="mf-sec">
+              <div class="mf-grade">
+                <button id="mf-at-desb-copiar" class="verde mf-cheia">Copiar linha da planilha</button>
+                <button id="mf-at-desb-novo" class="cinza mf-cheia">Novo desbloqueio</button>
+              </div>
+              <div class="mf-info" style="margin-top:6px">Busque o cliente no topo e clique "Aplicar cliente atual" para preencher Proposta, Nome, CPF, IMEI, Data, Loja e Vendedor. Os demais campos são preenchidos manualmente.</div>
+            </div>
           </div>
         </div>
 
@@ -2412,8 +2435,16 @@
     /* ---- telas do sistema que algumas funções precisam (ver "NAVEGAÇÃO AUTOMÁTICA" no fim) ---- */
     const TELAS = {
       // (enquanto o painel aplica as datas do dia, a lista ainda é a padrão do sistema: espera a nova)
-      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') && !mesaFiltrando },
+      // recusa: o ER abriu a tela com um aviso no lugar da lista (ex.: conta que não é aprovadora da Mesa)
+      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') && !mesaFiltrando,
+        recusa: () => { const pr = document.querySelector('#divPrincipal'); const m = pr && pr.textContent.replace(/\s+/g, ' ').match(/Aprovador\s+\S+\s+n[ãa]o\s+cadastrad[oa]/i); return m ? m[0] : ''; } },
       fila: { nome: 'Fila de Propostas', menu: 'FilaPropostas', pronta: () => !!document.querySelector('#tabPropostasLista, #txtPropostasPesquisa') },
+    };
+    // por que a tela não vai abrir ('' = ainda pode abrir): sessão vencida ou aviso do ER no lugar da lista
+    const telaRecusada = tela => {
+      if (erAvisoSessaoNaTela()) return 'A sessão do ER expirou. Entre no ER de novo e tente outra vez.';
+      const r = tela.recusa ? tela.recusa() : '';
+      return r ? 'A ' + tela.nome + ' não abriu: o ER respondeu "' + r + '". Esta conta não usa a ' + tela.nome + '; entre com a conta da Mesa (Trocar de conta) e tente de novo.' : '';
     };
     let navOcupado = false;
     let mesaFiltrando = false;   // a Mesa está sendo refiltrada com as datas do dia (ver MESA DE CRÉDITO: DATAS DO DIA)
@@ -2433,7 +2464,11 @@
         if (typeof PAGINA.MostraConsulta === 'function') PAGINA.MostraConsulta(tela.menu);
         else link.click();
         const ate = Date.now() + 25000;
-        while (!tela.pronta() && Date.now() < ate) await sleep(250);
+        while (!tela.pronta() && Date.now() < ate) {
+          const recusa = telaRecusada(tela);
+          if (recusa) { msg(recusa); return false; }
+          await sleep(250);
+        }
         if (!tela.pronta()) { msg('A ' + tela.nome + ' não abriu a tempo. Abra pelo menu do sistema e tente de novo.'); return false; }
         await sleep(300);   // espera a tela terminar de carregar a lista
         const ate2 = Date.now() + 10000;
@@ -2910,12 +2945,14 @@
     async function buscarDetalhe(base, id) {
       const raiz = base.replace(/\/$/, '');
       const docs = [], info = [], rotulos = new Set();
+      let expirou = false;
       for (const a of DETALHES) {
         const nome = a.split('?')[0].split('/').pop();
         const ctl = new AbortController();
         const tm = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_REDE * 1000);
         try {
           const html = await (await fetch(raiz + a + id, { credentials: 'include', signal: ctl.signal })).text();
+          if (erSemSessao(html)) { expirou = true; info.push(nome + ': erro (sessão expirada)'); continue; }
           const doc = new DOMParser().parseFromString(html, 'text/html');
           docs.push(doc);
           info.push(nome + ': ' + html.length + ' bytes');
@@ -2925,6 +2962,13 @@
           });
         } catch (e) { info.push(nome + ': erro'); }
         finally { clearTimeout(tm); }
+      }
+      // sessão vencida: não grava a proposta "sem vendedor/valor" (no Diário viraria N/A); quem chamou para a fila
+      if (expirou) {
+        const dbg = GM_getValue('extraDbg', {});
+        dbg[id] = { paginas: info, sessaoExpirada: true };
+        GM_setValue('extraDbg', dbg);
+        return;
       }
       let vendedor = null, valor = null;
       for (const doc of docs) {
@@ -2971,6 +3015,7 @@
         const resp = await fetch(base.replace(/\/$/, '') + '/MesaCredito/MesaAnaliseCliente?lngProposta=' + encodeURIComponent(id), { credentials: 'include', signal: ctl.signal });
         if (!resp.ok) { r.motivo = 'aba Cliente respondeu HTTP ' + resp.status; return r; }
         html = await resp.text();
+        if (erSemSessao(html)) { r.motivo = SESSAO_EXPIRADA; return r; }
       } catch (e) {
         r.motivo = ctl.signal.aborted ? 'aba Cliente: tempo esgotado' : 'aba Cliente: erro de rede';
         return r;
@@ -3204,13 +3249,15 @@
       if (precisaDetalhe && !GM_getValue('extra', {})[id]) {
         etapa(id, 'detalhe da proposta');
         await buscarDetalhe(base, id);
-        const pg = (GM_getValue('extraDbg', {})[id] || {}).paginas || [];
-        etapa(id, 'detalhe da proposta', pg.some(x => /erro/.test(x)) ? 'erro ao abrir página' : 'ok');
+        const dbgDet = GM_getValue('extraDbg', {})[id] || {}, pg = dbgDet.paginas || [];
+        etapa(id, 'detalhe da proposta', dbgDet.sessaoExpirada ? SESSAO_EXPIRADA : pg.some(x => /erro/.test(x)) ? 'erro ao abrir página' : 'ok');
+        if (dbgDet.sessaoExpirada) return SESSAO_EXPIRADA;
       }
       if (m === 'coleta' && cfg('auditoriaCompleta') && cfg('lerAbaCliente')) {
         etapa(id, 'aba Cliente');
         const cli = await dadosCliente(base, id);
         etapa(id, 'aba Cliente', cli.ok ? 'ok' : cli.motivo);
+        if (cli.motivo === SESSAO_EXPIRADA) return SESSAO_EXPIRADA;
         const ex1 = GM_getValue('extra', {});
         ex1[id] = { ...(ex1[id] || {}), abaCliente: cli.ok, telefone: cli.telefone, email: cli.email, cpfCliente: cli.cpf, clienteAba: cli.nome || null };
         GM_setValue('extra', ex1);
@@ -3245,6 +3292,7 @@
       } finally { clearTimeout(tm); ctlAtual = null; }
 
       if (!html.trim()) return 'MobFacil indisponível';
+      if (erSemSessao(html)) return SESSAO_EXPIRADA;
       const src = (new DOMParser().parseFromString(html, 'text/html').querySelector('iframe') || {}).src;
       if (!src) return 'sem link do motor';
 
@@ -3269,6 +3317,7 @@
 
     async function rodar() {
       const ids = fila();
+      let sessaoCaiu = '';   // proposta em que o ER respondeu "sessão expirada": a fila pausa (não segue gravando falhas)
       try {
         for (const id of ids) {
           if (!GM_getValue('rodando', false)) break;
@@ -3284,6 +3333,7 @@
           }
           let erro = null;
           if (!ignoradas()[id]) erro = await coletar(id);
+          if (erro === SESSAO_EXPIRADA) { sessaoCaiu = id; GM_setValue('rodando', false); }
           if (!GM_getValue('rodando', false)) break;    // pausou no meio: NÃO marca como feita, será refeita
           if (erro) falhas[id] = erro;                  // falhou: não marca, "Continuar" tenta de novo
           else GM_setValue('feitas', [...feitas(), id]);
@@ -3302,6 +3352,10 @@
       atualizarUI();
 
       const total = fila().length;
+      if (sessaoCaiu) {
+        return msg('A sessão do ER expirou (proposta ' + sessaoCaiu + '). A fila foi pausada em ' + (total - pendentes().length) + ' de ' + total +
+          ' para não gravar dados em branco. Entre no ER de novo e clique em Continuar.');
+      }
       if (!concluiu) {
         return msg('Pausado em ' + (total - pendentes().length) + ' de ' + total +
           '. Clique em Continuar para seguir de onde parou.');
@@ -3598,6 +3652,10 @@
         if (feito || !String((settings && settings.url) || '').includes(trecho)) return;
         fim();
         const st = xhr ? xhr.status : 0;
+        // sessão vencida: o ER responde 200 com o aviso "Sua sessão de trabalho expirou" no lugar da lista/do detalhe
+        if (st === 200 && xhr && typeof xhr.responseText === 'string' && erSemSessao(xhr.responseText)) {
+          return reject(new ErroCCB('A sessão do ER expirou. Entre no ER de novo e clique em Baixar CCBs para continuar.', true));
+        }
         if (st === 200) resolve(); else reject(new ErroCCB('O sistema retornou uma resposta inesperada (' + st + ') em ' + trecho.split('/').pop() + '.', true));
       };
       const fim = () => { feito = true; clearTimeout(timer); try { jq(PAGINA.document).off('ajaxComplete', handler); } catch (_) {} };
@@ -4004,10 +4062,18 @@
       if (motivo) { if (motivo !== 'desligado') msg(motivo); return; }
       GM_setValue('trocaConta', { usuario, quando: Date.now(), etapa: 'login', auto: true, aba: ABA_ID });
     }
+    // sessão vencida na tela: a janela #dlgRelogin por cima da página, a página /AvisoSessao/AvisoSessao ("Sua sessão de
+    // trabalho expirou", que o ER abre ao recarregar) ou o mesmo aviso dentro da área principal (ao abrir um menu)
+    const erAvisoSessaoNaTela = () => {
+      const d = document.querySelector('#dlgRelogin');
+      if (d && (d.classList.contains('in') || getComputedStyle(d).display === 'block')) return true;
+      if (/\/AvisoSessao\//i.test(location.pathname)) return true;
+      const pr = document.querySelector('#divPrincipal');
+      return !!pr && erSemSessao(pr.textContent);
+    };
     let reloginIndo = false;
     setInterval(() => {
-      const d = document.querySelector('#dlgRelogin');
-      if (reloginIndo || !d || !(d.classList.contains('in') || getComputedStyle(d).display === 'block')) return;
+      if (reloginIndo || !erAvisoSessaoNaTela()) return;
       if (GM_getValue('trocaConta', null) || loginAutoConta().motivo) return;
       reloginIndo = true;
       msg('Sessão do ER expirada: indo para a tela de login para entrar de novo com ' + loginAutoConta().usuario + '...');
@@ -4239,8 +4305,8 @@
     const ngModalidade = () => (GM_getValue('negModalidade', 'mensal') in NG_MODALIDADES ? GM_getValue('negModalidade', 'mensal') : 'mensal');
     // contexto: 'negociacao' / 'renegociacao' (Atendimento: sempre o acordo da modalidade) ou 'mensagens' (todos os modelos)
     let ngCtx = GM_getValue('atModelo', 'negociacao');
-    if (!['negociacao', 'renegociacao', 'mensagens'].includes(ngCtx)) ngCtx = 'negociacao';
-    const ngNoAtendimento = () => ngCtx !== 'mensagens';
+    if (!['negociacao', 'renegociacao', 'mensagens', 'desbloqueios'].includes(ngCtx)) ngCtx = 'negociacao';
+    const ngNoAtendimento = () => ngCtx !== 'mensagens' && ngCtx !== 'desbloqueios';
     const ngChave = () => ngNoAtendimento() ? (ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : 'acordo')
       : (ngModeloAtual() === 'acordo' && ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : ngModeloAtual());
     const ngDef = () => NG_ALL[ngChave()];
@@ -4964,7 +5030,7 @@
       } finally { clearTimeout(tm); }
     }
     const cacDoc = t => new DOMParser().parseFromString(t, 'text/html');
-    const ehLogin = t => /id=["']?frmLogin|id=["']?txtSenha/i.test(t || '');
+    const ehLogin = erSemSessao;   // tela de login ou aviso de sessão expirada (ver erSemSessao)
     // pares <dt>rótulo</dt><dd>valor</dd> de um fragmento
     const cacDl = doc => {
       const o = {};
@@ -5511,6 +5577,15 @@
       responsavel: { rot: 'Responsável pela negociação', tipo: 'texto' },
       formalizou: { rot: 'Formalizou o acordo?', tipo: 'select', opcoes: [['SIM', 'SIM'], ['NÃO', 'NÃO']] },
       obs_reneg: { rot: 'Observação (todas as linhas)', tipo: 'texto', dica: 'Ex.: Boletos no App' },
+      // ---- Desbloqueios ----
+      tipo_desbloqueio: { rot: 'Tipo de desbloqueio', tipo: 'texto' },
+      data_desbloqueio: { rot: 'Data do desbloqueio', tipo: 'data' },
+      motivo_desbloqueio: { rot: 'Motivo', tipo: 'area' },
+      adicionado_regua: { rot: 'Adicionado à régua', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO']] },
+      cumpriu_acordo: { rot: 'Cumpriu acordo?', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO']] },
+      tipo_atendimento_desb: { rot: 'Tipo de atendimento', tipo: 'select', opcoes: [['RD', 'RD'], ['Paymobi', 'Paymobi'], ['Recupere', 'Recupere']], padrao: 'RD' },
+      desb_parcelas_atraso: { rot: 'Parcelas em atraso', tipo: 'num' },
+      obs_desbloqueio: { rot: 'Observação', tipo: 'area' },
       plano_entrada_valor: { rot: 'Entrada (linha 1)', tipo: 'moeda' },
       plano_entrada_data: { rot: 'Data da entrada', tipo: 'data' },
       plano_qtd: { rot: 'Nº de parcelas', tipo: 'num' },
@@ -5537,6 +5612,12 @@
       ['Vencimento', 'p:venc'], ['Observação', 'obs_reneg'], ['Número Contrato Novo', 'contrato_novo'], ['Procedimento feito na regua', 'regua'],
       ['Recebeu Boletos?', 'recebeu_boletos'], ['Negociação Concluída?', 'concluida']];
     const AT_SITUACOES = ['Efetivado (Entrada)', 'Em Aberto', 'Pendente', 'Efetivado', 'Efetivado (Quitação)', 'Pendente (ATRASO)', 'Pendente (QUEBRA DE ACORDO)'];
+    // ---- Desbloqueios: campos e colunas da planilha ----
+    const AT_DESBLOQUEIO = ['proposta', 'nome', 'cpf', 'tipo_desbloqueio', 'imei', 'data_proposta', 'data_desbloqueio', 'filial', 'atendente', 'motivo_desbloqueio', 'adicionado_regua', 'cumpriu_acordo', 'tipo_atendimento_desb', 'desb_parcelas_atraso', 'obs_desbloqueio'];
+    const AT_COL_DESBLOQUEIO = [['Proposta', 'proposta'], ['Nome', 'nome'], ['CPF', 'cpf'], ['Tipo Desbloqueio', 'tipo_desbloqueio'],
+      ['IMEI', 'imei'], ['Data da proposta', 'data_proposta'], ['Data do desbloqueio', 'data_desbloqueio'], ['Loja', 'filial'], ['Vendedor', 'atendente'],
+      ['Motivo', 'motivo_desbloqueio'], ['Adicionado à régua', 'adicionado_regua'], ['Cumpriu Acordo?', 'cumpriu_acordo'],
+      ['Tipo de atendimento', 'tipo_atendimento_desb'], ['Parcelas em atraso', 'desb_parcelas_atraso'], ['Observação', 'obs_desbloqueio']];
     let atPlano = [];   // linhas da Renegociação (em memória, como o resto da ficha)
     const atIso = br => { const m = String(br || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
     const atNomeEquipe = () => String(GM_getValue('equipeNome', '') || '').trim();
@@ -5548,10 +5629,16 @@
       campos.forEach(c => g.appendChild(ngCampoEl(c, NG_CAMPOS[c].rot, obrig.includes(c))));
     }
     function atDesenhar() {
-      const at = ngNoAtendimento(), reneg = ngCtx === 'renegociacao';
+      const at = ngNoAtendimento(), reneg = ngCtx === 'renegociacao', desb = ngCtx === 'desbloqueios';
       painel.querySelectorAll('.mf-at-seg button').forEach(b => b.classList.toggle('ativa', b.dataset.at === ngCtx));
-      $('#mf-at-form').style.display = at ? '' : 'none';
-      $('#mf-at-mensagens').style.display = at ? 'none' : '';
+      $('#mf-at-form').style.display = desb ? 'none' : (at ? '' : 'none');
+      $('#mf-at-mensagens').style.display = at ? 'none' : (desb ? 'none' : '');
+      $('#mf-at-desbloqueio').style.display = desb ? '' : 'none';
+      if (desb) {
+        if (ngValores.tipo_atendimento_desb == null) ngValores.tipo_atendimento_desb = 'RD';
+        atDesbBloco(AT_DESBLOQUEIO);
+        return;
+      }
       // o mesmo bloco de campos da modalidade serve às duas telas
       (at ? $('#mf-at-modal') : $('#mf-ng-slot')).appendChild($('#mf-ng-campos'));
       if (at) {
@@ -5691,6 +5778,12 @@
     /* ---- cópia para a planilha ---- */
     const atTexto = k => ({ pedido: $('#mf-ng-f-pedido').value, acordo: $('#mf-ng-f-acordo').value, parcela: $('#mf-ng-f-parcela').value }[k] || '').replace(/\s*\n\s*/g, ' ').trim();
     function atValidar() {
+      if (ngCtx === 'desbloqueios') {
+        const obrig = ['proposta', 'nome'];
+        const falta = obrig.filter(k => !ngValor(k)).map(k => NG_CAMPOS[k].rot);
+        painel.querySelectorAll('#mf-at-desb-campos [data-campo]').forEach(i => i.classList.toggle('mf-erro', falta.includes(NG_CAMPOS[i.dataset.campo].rot)));
+        return falta;
+      }
       const obrig = ngCtx === 'renegociacao' ? ['proposta', 'nome', 'responsavel'] : ['proposta', 'nome'];
       const falta = obrig.filter(k => !ngValor(k)).map(k => NG_CAMPOS[k].rot);
       painel.querySelectorAll('#mf-at-form [data-campo]').forEach(i => i.classList.toggle('mf-erro', falta.includes(NG_CAMPOS[i.dataset.campo].rot)));
@@ -5704,6 +5797,7 @@
       return falta;
     }
     function atLinhas() {
+      if (ngCtx === 'desbloqueios') return [AT_COL_DESBLOQUEIO.map(([, k]) => ngValor(k))];
       if (ngCtx === 'renegociacao') return atPlano.map(l => AT_COL_RENEG.map(([, k]) => {
         if (k.startsWith('t:')) return atTexto(k.slice(2));
         if (k === 'p:valor') return ngReais(l.valor);
@@ -5716,6 +5810,10 @@
     $('#mf-at-copiar').onclick = () => {
       const falta = atValidar();
       if (falta.length) return msg('Preencha antes de copiar:\n- ' + falta.join('\n- '));
+      if (ngCtx === 'desbloqueios') {
+        GM_setClipboard(textoTab(atLinhas()), 'text');
+        return msg('Linha copiada (' + AT_COL_DESBLOQUEIO.length + ' colunas, Proposta → Observação). Cole na coluna Proposta da aba Desbloqueios. Campos vazios vão em branco.');
+      }
       if (ngCtx === 'renegociacao' && !atPlano.length) return msg('Monte as parcelas (bloco Renegociação) antes de copiar.');
       if (!atTexto('pedido') && !atTexto('acordo') && !ngGerarTextos(true) && !confirm('Os textos "Pedido" e "Acordo Realizado" não puderam ser gerados (faltam dados do acordo). Copiar a linha com eles em branco?')) return;
       const linhas = atLinhas();
@@ -5770,6 +5868,39 @@
       msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + n + ' campo(s)). O número de contato não vem da proposta: digite o que o cliente usou.');
     }
     $('#mf-at-aplicar').onclick = atAplicarCliente;
+
+    /* ---- Desbloqueios: renderização e handlers ---- */
+    function atDesbBloco(campos) {
+      const g = $('#mf-at-desb-campos'); g.innerHTML = '';
+      const obrig = ['proposta', 'nome'];
+      campos.forEach(c => g.appendChild(ngCampoEl(c, NG_CAMPOS[c].rot, obrig.includes(c))));
+    }
+    function atDesbAplicarCliente() {
+      const st = bsGet();
+      if (!st || !st.cliente) return msg('Busque um cliente antes (campo "Buscar cliente" no topo).');
+      const c = st.cliente.campos;
+      const novos = { nome: c.nome, proposta: c.proposta, cpf: c.cpf, imei: c.imei, data_proposta: atIso(c.dataProposta), filial: c.filial, atendente: c.vendedor };
+      const conflitos = Object.entries(novos).filter(([k, v]) => v && String(ngValores[k] || '').trim() && String(ngValores[k]).trim() !== String(v));
+      if (conflitos.length && !confirm(conflitos.length + ' campo(s) já preenchido(s) serão substituídos pelos dados do cliente atual. Continuar?')) return;
+      let n = 0;
+      Object.entries(novos).forEach(([k, v]) => { if (v) { ngValores[k] = v; n++; } });
+      atDesenhar();
+      mostrarAba('neg');
+      msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + n + ' campo(s)).');
+    }
+    $('#mf-at-desb-aplicar').onclick = atDesbAplicarCliente;
+    $('#mf-at-desb-copiar').onclick = () => {
+      const falta = atValidar();
+      if (falta.length) return msg('Preencha antes de copiar:\n- ' + falta.join('\n- '));
+      GM_setClipboard(textoTab(atLinhas()), 'text');
+      msg('Linha copiada (' + AT_COL_DESBLOQUEIO.length + ' colunas, Proposta → Observação). Cole na coluna Proposta da aba Desbloqueios. Campos vazios vão em branco.');
+    };
+    $('#mf-at-desb-novo').onclick = () => {
+      const tem = AT_DESBLOQUEIO.some(k => String(ngValores[k] || '').trim());
+      if (tem && !confirm('Começar um novo desbloqueio? Os dados digitados serão apagados.')) return;
+      AT_DESBLOQUEIO.forEach(k => delete ngValores[k]);
+      atDesenhar(); msg('Pronto para um novo desbloqueio.');
+    };
     atDesenhar();
 
 
@@ -5923,8 +6054,7 @@
     const tmLogado = () => {
       const u = usuarioLogado();
       if (!u) return null;
-      const relogin = document.querySelector('#dlgRelogin');
-      if (relogin && (relogin.classList.contains('in') || getComputedStyle(relogin).display === 'block')) return null;   // sessão expirada
+      if (erAvisoSessaoNaTela()) return null;   // sessão expirada
       return u;
     };
     // ativa os agendamentos "próximo expediente" (uma vez por dia; o mesmo agendamento nunca duas vezes)
@@ -8102,7 +8232,7 @@
       });
     }
     const erDoc = t => new DOMParser().parseFromString(t, 'text/html');
-    const erLogin = t => /id=["']?frmLogin|id=["']?txtSenha/i.test(t || '');
+    const erLogin = erSemSessao;   // tela de login ou aviso de sessão expirada (ver erSemSessao)
     const erTxt = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
     const erProprio = e => erTxt([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(''));
     // valor que vem logo depois do rótulo (ex.: "Digitador"), como na leitura do detalhe da proposta no painel

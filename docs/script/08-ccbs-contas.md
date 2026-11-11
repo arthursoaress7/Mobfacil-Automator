@@ -27,6 +27,10 @@ Faz o download em lote das CCBs das propostas listadas na Fila de Propostas do E
 
 Se a tela de Fila de Propostas não estiver aberta, o módulo usa a navegação automática para abrí-la antes de tentar ler as propostas. Ver [Módulo de Navegação](./10-navegacao-busca.md).
 
+### Sessão expirada
+
+Cada passo espera a resposta do sistema (`aguardarResposta`). Se a resposta for o aviso de sessão expirada do ER (`erSemSessao`, HTTP 200), o lote para com "A sessão do ER expirou. Entre no ER de novo e clique em Baixar CCBs para continuar." em vez de dizer que a proposta não está na fila.
+
 ---
 
 ## Contas (Troca rápida)
@@ -65,6 +69,6 @@ Opção `loginAuto` (padrão ligado; Configurações > Contas, "Entrar sozinho q
 - **Tela de login:** sem troca de conta em andamento, `loginAutomatico()` cria um `trocaConta` com `auto: true` para essa conta. Quem preenche e envia é `processarTroca()`, o mesmo caminho da troca de conta. Ele só envia com a senha salva na lista de contas, sem captcha visível (o `#txtCaptcha` do ER é oculto) e numa única tentativa.
 - **Senha recusada:** grava `loginAutoBloqueado = conta` e o login automático para, mesmo depois dos 15 min da troca. Volta a funcionar quando o funcionário entra à mão (`lembrarConta` limpa) ou salva outra senha para a conta (`guardarSenha` limpa).
 - **Várias abas:** o id da aba fica em `sessionStorage` (`mfAbaId`, igual depois de recarregar a própria aba). Só a aba que começou o login entra; as outras avisam e recarregam a cada `LOGIN_AUTO_OUTRA_ABA_MS`. Se a aba que começou sumir, outra assume depois de `LOGIN_AUTO_OUTRA_ABA_LIMITE_S`.
-- **Janela de sessão expirada** (`#dlgRelogin`) por cima de uma página aberta: conferida a cada `LOGIN_AUTO_CONFERE_MS`. Quando dá para entrar sozinho, vai para a tela de login (`cacBase() + '/'`) depois de `LOGIN_AUTO_ESPERA_MS`.
+- **Sessão expirada na tela** (`erAvisoSessaoNaTela`), conferida a cada `LOGIN_AUTO_CONFERE_MS`: a janela `#dlgRelogin` por cima da página, a página `/AvisoSessao/AvisoSessao` ("Sua sessão de trabalho expirou. Por favor, refaça seu login no sistema.", que o ER abre ao recarregar com a sessão vencida) ou esse mesmo aviso dentro de `#divPrincipal` (ao abrir um menu). Quando dá para entrar sozinho, vai para a tela de login (`cacBase() + '/'`) depois de `LOGIN_AUTO_ESPERA_MS`. Na versão atual do ER (conferido em 11/11/2026) a janela `#dlgRelogin` continua na página, escondida, mas nada a abre: a sessão vencida aparece como a página de aviso. Até a v13.27.2 o painel só olhava a janela, e o login automático não disparava.
 - **"Sair" clicado pelo funcionário:** grava `erSaiuManual`, e o login automático não entra de novo (em nenhuma aba) até um novo login. A troca de conta do painel não conta, porque ela já tem um `trocaConta` antes de clicar em Sair.
 - **Depois de entrar:** aviso "Sessão do ER tinha expirado: entrei de novo com …". O `trocaConta` automático nunca vira o aviso de conta diferente da troca normal.

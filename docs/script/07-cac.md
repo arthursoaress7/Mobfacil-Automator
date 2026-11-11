@@ -71,7 +71,9 @@ A troca usa a mesma infraestrutura do módulo de Contas (seção CCBs/Contas).
 | "Nenhum registro selecionado" | o CPF não tem cadastro | "CAC: nenhum cliente encontrado"; **não** troca de conta |
 | "Informe corretamente o CPF / CNPJ ou as iniciais do nome..." | termo inválido | mostra o aviso do sistema; não troca de conta |
 | "Usuário sem direito de pesquisa por nome de cliente" | a conta só pesquisa pelo CPF | troca para a master (quando configurada), que pesquisa pelo nome |
-| outra coisa / erro HTTP / tela de login | sem acesso ou sessão expirada | como antes (troca, ou avisa) |
+| outra coisa / erro HTTP / tela de login / aviso "Sua sessão de trabalho expirou" | sem acesso ou sessão expirada | como antes (troca, ou avisa) |
+
+A sessão expirada é reconhecida por `erSemSessao` (também usada por `ehLogin`, pelo Relatório de Pendências e pela busca de cliente): tela de login ou a página `/AvisoSessao/AvisoSessao`, para onde o ER redireciona toda requisição depois que a sessão vence.
 
 Pelo CPF, a conta da Mesa faz a consulta inteira: pesquisa, `BuscaCartao`, `CentralCompras` e `DetalheCompra`. Quando o script trocou de conta para a consulta, o "nenhum cliente encontrado" também volta para a conta de antes (`cacFim`). Antes, ficava na master.
 

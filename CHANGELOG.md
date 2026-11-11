@@ -1,5 +1,21 @@
 # Changelog
 
+## [v13.29.0] — 2026-11-11
+
+### ✨ Novas funcionalidades
+
+- feat: Desbloqueios no arquivo principal e sessão expirada do ER atualizado (#40) (ea74405)
+- feat: Desbloqueios no arquivo principal (#39) (f978a6e)
+
+### 🐛 Correções
+
+- fix: reconhece a sessão expirada do ER atualizado (#37) (597f766)
+
+### 🔧 Outros
+
+- Merge pull request #36 from arthursoaress7/docs/sincronizar-versao (2875b4b)
+
+
 ## [v13.28.0] — 2026-11-11
 
 ### ✨ Novas funcionalidades

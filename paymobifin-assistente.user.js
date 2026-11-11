@@ -110,6 +110,14 @@
   };
   const cfg = k => GM_getValue(k, PADRAO[k]);
 
+  // ER sem sessão: a tela de login (#frmLogin / #txtSenha) ou a página de aviso de sessão expirada. Com a sessão vencida,
+  // o ER redireciona TODA requisição para /AvisoSessao/AvisoSessao (HTTP 200, sem a lista e sem os dados): "Sua sessão
+  // de trabalho expirou. Por favor, refaça seu login no sistema." + botão "Acessar o Sistema" (ReiniciaSistema()).
+  // Só o "refaça seu login" e o ReiniciaSistema são da página de aviso: a janela #dlgRelogin, escondida em toda página
+  // logada, também diz "sessão de trabalho expirou". O "ç" pode vir como &#231; ou &ccedil;: \S{1,8} cobre as formas.
+  const erSemSessao = t => /id=["']?frmLogin|id=["']?txtSenha|function\s+ReiniciaSistema|refa\S{1,8}a seu login/i.test(t || '');
+  const SESSAO_EXPIRADA = 'sessão do ER expirada';
+
   // sleep via Web Worker: abas em segundo plano deixam setTimeout lento (até 1 minuto por tick); o worker não.
   // Se o site bloquear o worker (CSP), cai no setTimeout normal. O setTimeout reserva (ms + 1,5 s) evita travar se o worker falhar.
   const sleep = (() => {
@@ -2412,8 +2420,16 @@
     /* ---- telas do sistema que algumas funções precisam (ver "NAVEGAÇÃO AUTOMÁTICA" no fim) ---- */
     const TELAS = {
       // (enquanto o painel aplica as datas do dia, a lista ainda é a padrão do sistema: espera a nova)
-      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') && !mesaFiltrando },
+      // recusa: o ER abriu a tela com um aviso no lugar da lista (ex.: conta que não é aprovadora da Mesa)
+      mesa: { nome: 'Mesa de Crédito', menu: 'MesaCredito', pronta: () => !!document.querySelector('#tabMesaCreditoLista') && !mesaFiltrando,
+        recusa: () => { const pr = document.querySelector('#divPrincipal'); const m = pr && pr.textContent.replace(/\s+/g, ' ').match(/Aprovador\s+\S+\s+n[ãa]o\s+cadastrad[oa]/i); return m ? m[0] : ''; } },
       fila: { nome: 'Fila de Propostas', menu: 'FilaPropostas', pronta: () => !!document.querySelector('#tabPropostasLista, #txtPropostasPesquisa') },
+    };
+    // por que a tela não vai abrir ('' = ainda pode abrir): sessão vencida ou aviso do ER no lugar da lista
+    const telaRecusada = tela => {
+      if (erAvisoSessaoNaTela()) return 'A sessão do ER expirou. Entre no ER de novo e tente outra vez.';
+      const r = tela.recusa ? tela.recusa() : '';
+      return r ? 'A ' + tela.nome + ' não abriu: o ER respondeu "' + r + '". Esta conta não usa a ' + tela.nome + '; entre com a conta da Mesa (Trocar de conta) e tente de novo.' : '';
     };
     let navOcupado = false;
     let mesaFiltrando = false;   // a Mesa está sendo refiltrada com as datas do dia (ver MESA DE CRÉDITO: DATAS DO DIA)
@@ -2433,7 +2449,11 @@
         if (typeof PAGINA.MostraConsulta === 'function') PAGINA.MostraConsulta(tela.menu);
         else link.click();
         const ate = Date.now() + 25000;
-        while (!tela.pronta() && Date.now() < ate) await sleep(250);
+        while (!tela.pronta() && Date.now() < ate) {
+          const recusa = telaRecusada(tela);
+          if (recusa) { msg(recusa); return false; }
+          await sleep(250);
+        }
         if (!tela.pronta()) { msg('A ' + tela.nome + ' não abriu a tempo. Abra pelo menu do sistema e tente de novo.'); return false; }
         await sleep(300);   // espera a tela terminar de carregar a lista
         const ate2 = Date.now() + 10000;
@@ -2910,12 +2930,14 @@
     async function buscarDetalhe(base, id) {
       const raiz = base.replace(/\/$/, '');
       const docs = [], info = [], rotulos = new Set();
+      let expirou = false;
       for (const a of DETALHES) {
         const nome = a.split('?')[0].split('/').pop();
         const ctl = new AbortController();
         const tm = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_REDE * 1000);
         try {
           const html = await (await fetch(raiz + a + id, { credentials: 'include', signal: ctl.signal })).text();
+          if (erSemSessao(html)) { expirou = true; info.push(nome + ': erro (sessão expirada)'); continue; }
           const doc = new DOMParser().parseFromString(html, 'text/html');
           docs.push(doc);
           info.push(nome + ': ' + html.length + ' bytes');
@@ -2925,6 +2947,13 @@
           });
         } catch (e) { info.push(nome + ': erro'); }
         finally { clearTimeout(tm); }
+      }
+      // sessão vencida: não grava a proposta "sem vendedor/valor" (no Diário viraria N/A); quem chamou para a fila
+      if (expirou) {
+        const dbg = GM_getValue('extraDbg', {});
+        dbg[id] = { paginas: info, sessaoExpirada: true };
+        GM_setValue('extraDbg', dbg);
+        return;
       }
       let vendedor = null, valor = null;
       for (const doc of docs) {
@@ -2971,6 +3000,7 @@
         const resp = await fetch(base.replace(/\/$/, '') + '/MesaCredito/MesaAnaliseCliente?lngProposta=' + encodeURIComponent(id), { credentials: 'include', signal: ctl.signal });
         if (!resp.ok) { r.motivo = 'aba Cliente respondeu HTTP ' + resp.status; return r; }
         html = await resp.text();
+        if (erSemSessao(html)) { r.motivo = SESSAO_EXPIRADA; return r; }
       } catch (e) {
         r.motivo = ctl.signal.aborted ? 'aba Cliente: tempo esgotado' : 'aba Cliente: erro de rede';
         return r;
@@ -3204,13 +3234,15 @@
       if (precisaDetalhe && !GM_getValue('extra', {})[id]) {
         etapa(id, 'detalhe da proposta');
         await buscarDetalhe(base, id);
-        const pg = (GM_getValue('extraDbg', {})[id] || {}).paginas || [];
-        etapa(id, 'detalhe da proposta', pg.some(x => /erro/.test(x)) ? 'erro ao abrir página' : 'ok');
+        const dbgDet = GM_getValue('extraDbg', {})[id] || {}, pg = dbgDet.paginas || [];
+        etapa(id, 'detalhe da proposta', dbgDet.sessaoExpirada ? SESSAO_EXPIRADA : pg.some(x => /erro/.test(x)) ? 'erro ao abrir página' : 'ok');
+        if (dbgDet.sessaoExpirada) return SESSAO_EXPIRADA;
       }
       if (m === 'coleta' && cfg('auditoriaCompleta') && cfg('lerAbaCliente')) {
         etapa(id, 'aba Cliente');
         const cli = await dadosCliente(base, id);
         etapa(id, 'aba Cliente', cli.ok ? 'ok' : cli.motivo);
+        if (cli.motivo === SESSAO_EXPIRADA) return SESSAO_EXPIRADA;
         const ex1 = GM_getValue('extra', {});
         ex1[id] = { ...(ex1[id] || {}), abaCliente: cli.ok, telefone: cli.telefone, email: cli.email, cpfCliente: cli.cpf, clienteAba: cli.nome || null };
         GM_setValue('extra', ex1);
@@ -3245,6 +3277,7 @@
       } finally { clearTimeout(tm); ctlAtual = null; }
 
       if (!html.trim()) return 'MobFacil indisponível';
+      if (erSemSessao(html)) return SESSAO_EXPIRADA;
       const src = (new DOMParser().parseFromString(html, 'text/html').querySelector('iframe') || {}).src;
       if (!src) return 'sem link do motor';
 
@@ -3269,6 +3302,7 @@
 
     async function rodar() {
       const ids = fila();
+      let sessaoCaiu = '';   // proposta em que o ER respondeu "sessão expirada": a fila pausa (não segue gravando falhas)
       try {
         for (const id of ids) {
           if (!GM_getValue('rodando', false)) break;
@@ -3284,6 +3318,7 @@
           }
           let erro = null;
           if (!ignoradas()[id]) erro = await coletar(id);
+          if (erro === SESSAO_EXPIRADA) { sessaoCaiu = id; GM_setValue('rodando', false); }
           if (!GM_getValue('rodando', false)) break;    // pausou no meio: NÃO marca como feita, será refeita
           if (erro) falhas[id] = erro;                  // falhou: não marca, "Continuar" tenta de novo
           else GM_setValue('feitas', [...feitas(), id]);
@@ -3302,6 +3337,10 @@
       atualizarUI();
 
       const total = fila().length;
+      if (sessaoCaiu) {
+        return msg('A sessão do ER expirou (proposta ' + sessaoCaiu + '). A fila foi pausada em ' + (total - pendentes().length) + ' de ' + total +
+          ' para não gravar dados em branco. Entre no ER de novo e clique em Continuar.');
+      }
       if (!concluiu) {
         return msg('Pausado em ' + (total - pendentes().length) + ' de ' + total +
           '. Clique em Continuar para seguir de onde parou.');
@@ -3598,6 +3637,10 @@
         if (feito || !String((settings && settings.url) || '').includes(trecho)) return;
         fim();
         const st = xhr ? xhr.status : 0;
+        // sessão vencida: o ER responde 200 com o aviso "Sua sessão de trabalho expirou" no lugar da lista/do detalhe
+        if (st === 200 && xhr && typeof xhr.responseText === 'string' && erSemSessao(xhr.responseText)) {
+          return reject(new ErroCCB('A sessão do ER expirou. Entre no ER de novo e clique em Baixar CCBs para continuar.', true));
+        }
         if (st === 200) resolve(); else reject(new ErroCCB('O sistema retornou uma resposta inesperada (' + st + ') em ' + trecho.split('/').pop() + '.', true));
       };
       const fim = () => { feito = true; clearTimeout(timer); try { jq(PAGINA.document).off('ajaxComplete', handler); } catch (_) {} };
@@ -4004,10 +4047,18 @@
       if (motivo) { if (motivo !== 'desligado') msg(motivo); return; }
       GM_setValue('trocaConta', { usuario, quando: Date.now(), etapa: 'login', auto: true, aba: ABA_ID });
     }
+    // sessão vencida na tela: a janela #dlgRelogin por cima da página, a página /AvisoSessao/AvisoSessao ("Sua sessão de
+    // trabalho expirou", que o ER abre ao recarregar) ou o mesmo aviso dentro da área principal (ao abrir um menu)
+    const erAvisoSessaoNaTela = () => {
+      const d = document.querySelector('#dlgRelogin');
+      if (d && (d.classList.contains('in') || getComputedStyle(d).display === 'block')) return true;
+      if (/\/AvisoSessao\//i.test(location.pathname)) return true;
+      const pr = document.querySelector('#divPrincipal');
+      return !!pr && erSemSessao(pr.textContent);
+    };
     let reloginIndo = false;
     setInterval(() => {
-      const d = document.querySelector('#dlgRelogin');
-      if (reloginIndo || !d || !(d.classList.contains('in') || getComputedStyle(d).display === 'block')) return;
+      if (reloginIndo || !erAvisoSessaoNaTela()) return;
       if (GM_getValue('trocaConta', null) || loginAutoConta().motivo) return;
       reloginIndo = true;
       msg('Sessão do ER expirada: indo para a tela de login para entrar de novo com ' + loginAutoConta().usuario + '...');
@@ -4964,7 +5015,7 @@
       } finally { clearTimeout(tm); }
     }
     const cacDoc = t => new DOMParser().parseFromString(t, 'text/html');
-    const ehLogin = t => /id=["']?frmLogin|id=["']?txtSenha/i.test(t || '');
+    const ehLogin = erSemSessao;   // tela de login ou aviso de sessão expirada (ver erSemSessao)
     // pares <dt>rótulo</dt><dd>valor</dd> de um fragmento
     const cacDl = doc => {
       const o = {};
@@ -5923,8 +5974,7 @@
     const tmLogado = () => {
       const u = usuarioLogado();
       if (!u) return null;
-      const relogin = document.querySelector('#dlgRelogin');
-      if (relogin && (relogin.classList.contains('in') || getComputedStyle(relogin).display === 'block')) return null;   // sessão expirada
+      if (erAvisoSessaoNaTela()) return null;   // sessão expirada
       return u;
     };
     // ativa os agendamentos "próximo expediente" (uma vez por dia; o mesmo agendamento nunca duas vezes)
@@ -8102,7 +8152,7 @@
       });
     }
     const erDoc = t => new DOMParser().parseFromString(t, 'text/html');
-    const erLogin = t => /id=["']?frmLogin|id=["']?txtSenha/i.test(t || '');
+    const erLogin = erSemSessao;   // tela de login ou aviso de sessão expirada (ver erSemSessao)
     const erTxt = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
     const erProprio = e => erTxt([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(''));
     // valor que vem logo depois do rótulo (ex.: "Digitador"), como na leitura do detalhe da proposta no painel

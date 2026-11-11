@@ -29,6 +29,10 @@ Abre automaticamente a tela do sistema que uma função precisa, sem que o usuá
 - Está na tela de login
 - A opção `navAuto` está desligada em Configurações
 
+Enquanto espera a tela abrir, o painel para na hora (sem esperar os 25 s) e diz o motivo quando (`telaRecusada`):
+- a sessão do ER expirou (o aviso "Sua sessão de trabalho expirou" aparece na área principal; ver `erAvisoSessaoNaTela`);
+- o ER abriu a tela com um aviso no lugar da lista. Na Mesa de Crédito: "Aprovador CONTA não cadastrado.", que é o que a conta master recebe (ela não é aprovadora da Mesa). A busca de cliente e os relatórios usam a Mesa, então precisam da conta da Mesa.
+
 ### Configuração
 
 Em Configurações → Painel e diagnóstico: marque/desmarque "Navegação automática".

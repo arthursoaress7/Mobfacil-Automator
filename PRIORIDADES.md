@@ -65,7 +65,7 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
 ### Tarefas
 
 - [ ] **P0.1 — Inventário e mapeamento das rotas do ER**  
-  **Status:** Em andamento (inventário preliminar no código feito em 11/11/2026, em `docs/PLANO-API-ER.md`)  
+  **Status:** Em andamento (11/11/2026: inventário preliminar das rotas do ER em `docs/PLANO-API-ER.md`; motor MobFacil mapeado em `docs/script/13-api-er.md`: `/api/visualizador` devolve em JSON todos os campos da coleta)  
   **Objetivo:** listar todas as rotas e leituras de tela usadas pelo script e, no DevTools, verificar quais telas do ER carregam dados por JSON (inclusive o motor MobFacil).  
   **Critérios de aceite:** `docs/script/13-api-er.md` com, para cada rota: método, parâmetros, formato da resposta (HTML/JSON), funções que a usam e dados extraídos.
 
@@ -83,7 +83,7 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
   **Objetivo:** busca de cliente, `dadosCliente`/aba Cliente, CAC, Fila de Propostas, CCBs (download), RD (`erReq`). Um PR por módulo.
 
 - [ ] **P0.6 — Motor MobFacil sem cliques** (Categoria B)  
-  **Objetivo:** se o mapeamento confirmar que a árvore do motor vem de uma resposta JSON, ler esse JSON em vez de navegar e clicar na árvore.
+  **Objetivo:** ler o JSON de `/api/visualizador` (confirmado em 11/11/2026) em vez de navegar e clicar na árvore, mantendo a árvore como plano B.
 
 - [ ] **P0.7 — Demais dependências da tela ao vivo**  
   **Objetivo:** avaliar caso a caso CCBs (`PAGINA.eval()`), login e troca de conta (Categoria B), navegação automática e "Ler da tela".

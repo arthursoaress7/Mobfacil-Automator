@@ -163,7 +163,7 @@ Ordem sugerida: aba Cliente (`dadosCliente`/`buscarDetalhe`) → busca de client
 
 ### Fase 6 — Motor sem cliques (P0.6) — Categoria B
 
-Só se a fase 1 encontrar um JSON com os dados da árvore. Ler esse JSON (requisição direta ou escuta da resposta do próprio motor) e alimentar `extrairDeLista` com ele, mantendo a leitura atual como plano B. Pode exigir `@connect` (Categoria B). Maior ganho de estabilidade e velocidade da coleta.
+**Confirmado em 11/11/2026:** `/api/visualizador` devolve em JSON todos os campos da coleta (ver `docs/script/13-api-er.md`). Ler esse JSON (requisição direta ou escuta da resposta do próprio motor) e alimentar `extrairDeLista` com ele, mantendo a leitura atual como plano B. Pode exigir `@connect` (Categoria B). Maior ganho de estabilidade e velocidade da coleta.
 
 ### Fase 7 — Outras dependências de tela (P0.7)
 
@@ -238,5 +238,5 @@ Não há testes automatizados. Em cada fase com código:
 
 | Fase | Status |
 |---|---|
-| 1 — Inventário e mapeamento | Em andamento (inventário preliminar feito) |
+| 1 — Inventário e mapeamento | Em andamento: inventário preliminar feito; motor MobFacil mapeado (`/api/visualizador`, JSON) em `docs/script/13-api-er.md` |
 | 2 a 9 | Pendente |

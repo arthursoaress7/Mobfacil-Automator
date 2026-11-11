@@ -86,6 +86,7 @@ docs/script/09-equipe.md
 docs/script/10-navegacao-busca.md
 docs/script/11-rd-encerramento.md
 docs/script/12-desbloqueios.md
+docs/script/13-api-er.md           ← rotas do ER e do motor (P0)
 docs/PLANO-API-ER.md               ← plano da P0 (acesso ao ER)
 README.md
 .github/SETUP.md                    ← configurações para o proprietário

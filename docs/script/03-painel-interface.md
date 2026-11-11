@@ -84,7 +84,7 @@ A fila é uma lista de IDs de propostas armazenada em `GM_getValue('fila')`. O f
 4. **Pausar** — interrompe e salva o estado
 5. **Copiar resultado** — gera o texto formatado para colar na planilha
 
-**Sessão do ER expirada no meio da fila:** com a sessão vencida, o ER responde toda leitura com a página de aviso (`/AvisoSessao/AvisoSessao`, HTTP 200; ver `erSemSessao`). O detalhe da proposta, a aba Cliente e o link do motor reconhecem esse aviso e devolvem `SESSAO_EXPIRADA`: a fila **pausa** na proposta atual, sem gravar nada dela (`extra` fica vazio e a proposta não entra em `feitas`), e avisa "A sessão do ER expirou (proposta N)... Entre no ER de novo e clique em Continuar". Antes da v13.27.3 o aviso era lido como uma página sem dados: no Diário as propostas saíam N/A e a fila terminava como concluída.
+**Sessão do ER expirada no meio da fila:** com a sessão vencida, o ER responde toda leitura com a página de aviso (`/AvisoSessao/AvisoSessao`, HTTP 200; ver `erSemSessao`). O detalhe da proposta, a aba Cliente e o link do motor reconhecem esse aviso e devolvem `SESSAO_EXPIRADA`: a fila **pausa** na proposta atual, sem gravar nada dela (`extra` fica vazio e a proposta não entra em `feitas`), e avisa "A sessão do ER expirou (proposta N)... Entre no ER de novo e clique em Continuar". Antes da v13.29.0 o aviso era lido como uma página sem dados: no Diário as propostas saíam N/A e a fila terminava como concluída.
 
 ### Modos de operação
 

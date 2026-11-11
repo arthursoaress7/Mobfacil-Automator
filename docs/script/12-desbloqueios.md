@@ -1,7 +1,7 @@
 # Módulo: Desbloqueios
 
 **Localização:** dentro do Atendimento, ao lado de Negociação, Renegociação e Mensagens  
-**Arquivo:** `automacaomobfacil.user.js`  
+**Arquivo:** `paymobifin-assistente.user.js` (até a v13.28.0 o código estava, por engano, só no arquivo-ponte `automacaomobfacil.user.js`; foi levado para o arquivo principal na v13.29.0)  
 **Contexto:** `ngCtx === 'desbloqueios'`
 
 ---

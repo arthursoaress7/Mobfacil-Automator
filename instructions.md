@@ -18,7 +18,7 @@ O **PaymobiFin - Assistente** é um userscript Tampermonkey que roda em dois sit
 
 **Arquivo-ponte:** `automacaomobfacil.user.js` é o nome antigo do script. Ficou congelado na v13.27.2 (cópia idêntica, já com `@downloadURL`/`@updateURL` apontando para o arquivo novo) só para migrar as instalações antigas: o Tampermonkey de quem instalou pelo endereço antigo baixa a 13.27.2 e passa a seguir o arquivo novo. **Não editar** — toda alteração vai em `paymobifin-assistente.user.js`. Remoção prevista em `PRIORIDADES.md` (P3.8).
 
-**Versão atual:** 13.22 (campo `@version` no cabeçalho do script — única fonte da versão)
+**Versão atual:** 13.27.2 (fonte de verdade: campo `@version` no cabeçalho do script — ver item 12)
 
 **Repositório:** `git@github.com:arthursoaress7/PaymobiFin-Assistente.git`  
 **Proprietário do repositório:** arthursoaress7 (pode ter permissões administrativas que o usuário atual não tem)
@@ -258,6 +258,7 @@ feat!: remover suporte ao formato antigo de exportação
 - [ ] O arquivo `docs/script/` correspondente foi atualizado se necessário?
 - [ ] `@downloadURL` e `@updateURL` não foram alterados?
 - [ ] `'use strict'` não foi removido?
+- [ ] Se o `@version` mudou, a versão atual foi atualizada nos locais listados no item 12?
 - [ ] Arquivos de workflows (`.github/workflows/`) não foram alterados? (Categoria B)
 
 ---
@@ -285,7 +286,24 @@ Quando uma verificação ou teste falhar:
 
 ## 12. Versionamento SemVer
 
-O campo `@version` no cabeçalho do script é a única fonte da versão. Não duplicar em nenhum outro lugar.
+O campo `@version` no cabeçalho de `paymobifin-assistente.user.js` é a fonte de verdade da versão.
+
+**Versão na documentação:**
+
+- A documentação só pode exibir a versão atual nestes locais:
+
+  | Arquivo | Local |
+  |---|---|
+  | `README.md` | Linha `**Versão atual:**` no topo |
+  | `instructions.md` | Linha `**Versão atual:**` do item 1 |
+  | `CLAUDE.md` | Linha `Versão atual` da tabela "Contexto rápido" |
+  | `docs/script/01-visao-geral.md` | Linha `**Versão atual:**` no cabeçalho |
+  | `docs/script/03-painel-interface.md` | Barra de título no desenho "Estrutura do painel" (`vX.Y.Z`) |
+
+- Sempre que o `@version` mudar, a IA ou o desenvolvedor atualiza todos esses locais no mesmo commit/PR.
+- A versão da documentação nunca pode divergir do `@version`.
+- Não acrescentar a versão atual em outros lugares; se for preciso, incluir o novo local nesta tabela no mesmo PR.
+- Referências históricas (ex.: "Concluído (v13.27.0)", "congelado na v13.27.2"), os exemplos de incremento abaixo e o `CHANGELOG.md` não são "versão atual" e não seguem esta regra.
 
 **Regras de incremento (aplicadas automaticamente pelo `release.yml`):**
 
@@ -494,6 +512,7 @@ Documentar novas chaves aqui antes de usar. Renomear sem migração quebra dados
 | `docs/script/<módulo>.md` | Mudança de comportamento, nova função |
 | `CHANGELOG.md` | Gerado automaticamente pelo `release.yml` |
 | `.github/SETUP.md` | Mudança nos workflows ou requisitos de configuração |
+| Locais de versão listados no item 12 | Sempre que o `@version` mudar (mesmo commit/PR) |
 
 ---
 
@@ -541,6 +560,7 @@ permissões insuficientes):
 - [ ] `docs/script/<módulo>.md` atualizado?
 - [ ] `instructions.md` atualizado se novo prefixo/chave criado?
 - [ ] `README.md` atualizado se comportamento visível mudou?
+- [ ] Se o `@version` mudou, a versão atual foi atualizada nos locais listados no item 12?
 
 **Ao finalizar, apresentar:**
 1. Arquivos alterados

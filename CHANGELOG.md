@@ -1,5 +1,16 @@
 # Changelog
 
+## [v13.28.0] — 2026-11-11
+
+### ✨ Novas funcionalidades
+
+- feat: adicionar funcionalidade de Desbloqueios no Atendimento (6c8b3bd)
+
+### 🔧 Outros
+
+- Merge pull request #35 from arthursoaress7/feature/desbloqueios-v2 (cf95bcf)
+
+
 ## [v13.27.1] — 2026-11-10
 
 ### 🐛 Correções

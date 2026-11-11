@@ -1,7 +1,7 @@
 # Visão Geral do Script — paymobifin-assistente.user.js
 
 **Arquivo:** `paymobifin-assistente.user.js` (até a v13.27.1 se chamava `automacaomobfacil.user.js`; esse nome ficou como ponte congelada para migrar as instalações antigas)  
-**Versão atual:** 12.1  
+**Versão atual:** 13.27.2  
 **Tipo:** Tampermonkey Userscript  
 **Sites alvo:**
 - `https://paymobi.ercard.com.br/*` — painel principal (ER)
@@ -102,3 +102,4 @@ Documentação completa das chaves: ver [README principal](../../README.md#9-arm
 - [09 - Equipe e Compartilhamento](./09-equipe.md)
 - [10 - Navegação Automática e Busca](./10-navegacao-busca.md)
 - [11 - RD Atendimento: Encerramento com IA](./11-rd-encerramento.md)
+- [12 - Desbloqueios](./12-desbloqueios.md)

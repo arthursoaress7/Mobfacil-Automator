@@ -76,6 +76,7 @@ PaymobiFin-Assistente/
         ├── 09-equipe.md
         ├── 10-navegacao-busca.md
         └── 11-rd-encerramento.md
+        └── 12-desbloqueios.md
 ```
 
 Documentação técnica de cada módulo em [`docs/script/`](./docs/script/).

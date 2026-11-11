@@ -321,6 +321,9 @@ O módulo de geração de acordos (`at*`) já possui:
   **Dependências:** nenhuma.  
   **Observações:** esta prioridade é alimentada continuamente conforme a equipe utiliza o sistema.
 
+  **Backlog:**
+  - Fazer o validate-pr.yml verificar se a versão da documentação bate com o @version — Categoria B, exige autorização.
+
 ---
 
 - [x] **P3.6 — Relatório de pendências (conta master)**

@@ -568,3 +568,16 @@ Ver `.github/SETUP.md` para o passo a passo completo.
 1. Push direto na `main` distribui para todos os usuários imediatamente (sem validação)
 2. Auto-merge não funciona sem "Allow auto-merge" habilitado
 3. Releases não são criadas automaticamente sem permissões de escrita
+
+---
+
+## 22. Como usar este documento (sem Claude Code)
+
+Se estiver usando Claude, Kiro ou outra IA via chat (não Claude Code), cole no início da conversa:
+
+1. `instructions.md` completo (este arquivo)
+2. `docs/script/<módulo>.md` do módulo envolvido
+3. O trecho relevante do código-fonte
+4. Descrição do que precisa
+
+O Claude Code e outras ferramentas que leem arquivos do projeto automaticamente devem ler este arquivo antes de iniciar qualquer trabalho.

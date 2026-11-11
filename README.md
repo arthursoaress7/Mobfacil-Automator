@@ -56,7 +56,6 @@ PaymobiFin-Assistente/
 ├── automacaomobfacil.user.js       ← nome antigo, congelado: só migra instalações antigas (não editar)
 ├── README.md                       ← este arquivo
 ├── instructions.md                 ← manual operacional para IAs e desenvolvedores
-├── CLAUDE.md                       ← entrada rápida para o Claude Code
 ├── .github/
 │   ├── SETUP.md                    ← configurações necessárias pelo proprietário
 │   └── workflows/

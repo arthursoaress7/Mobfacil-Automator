@@ -16,7 +16,7 @@ O **PaymobiFin - Assistente** é um userscript Tampermonkey que roda em dois sit
 
 **Arquivo de código:** `paymobifin-assistente.user.js` — único arquivo JavaScript, ~8.300 linhas, sem transpilador ou bundler.
 
-**Arquivo-ponte:** `automacaomobfacil.user.js` é o nome antigo do script. Ficou congelado na v13.27.2 (cópia idêntica, já com `@downloadURL`/`@updateURL` apontando para o arquivo novo) só para migrar as instalações antigas: o Tampermonkey de quem instalou pelo endereço antigo baixa a 13.27.2 e passa a seguir o arquivo novo. **Não editar** — toda alteração vai em `paymobifin-assistente.user.js`. Remoção prevista em `PRIORIDADES.md` (P3.8).
+**Arquivo-ponte:** `automacaomobfacil.user.js` é o nome antigo do script. Ficou congelado na v13.27.2 (cópia idêntica, já com `@downloadURL`/`@updateURL` apontando para o arquivo novo) só para migrar as instalações antigas: o Tampermonkey de quem instalou pelo endereço antigo baixa a 13.27.2 e passa a seguir o arquivo novo. **Não editar** — toda alteração vai em `paymobifin-assistente.user.js`. Remoção prevista em `PRIORIDADES.md` (P4.8).
 
 **Versão atual:** 13.29.0 (fonte de verdade: campo `@version` no cabeçalho do script — ver item 12)
 
@@ -28,8 +28,9 @@ O **PaymobiFin - Assistente** é um userscript Tampermonkey que roda em dois sit
 ## 2. Prioridades atuais
 
 1. **Manter o sistema funcionando** — preservar toda funcionalidade existente
-2. **Estabelecer padrões de desenvolvimento** — governança, versionamento, documentação
-3. **Não refatorar** — a divisão do monólito não está no escopo atual
+2. **Consolidar o acesso aos dados do ER** — uma camada única (`er`) que funcione como API para o resto do script e elimine a dependência da tela ao vivo (P0 do `PRIORIDADES.md`, decisão de 11/11/2026; regras no item 23)
+3. **Estabelecer padrões de desenvolvimento** — governança, versionamento, documentação
+4. **Não refatorar** — a divisão do monólito não está no escopo atual; a camada `er` fica dentro do monólito, numa seção própria
 
 Qualquer solicitação que contrarie estas prioridades requer autorização explícita.
 
@@ -89,6 +90,9 @@ A IA pode fazer diagnóstico e preparar proposta, mas **deve aguardar aprovaçã
 - Alteração da estrutura de diretórios
 - Exclusão de funcionalidades existentes
 - Alterações em mecanismos de autenticação
+- Desenho e implementação da camada base de acesso ao ER (P0.2, P0.3) e leitura do motor MobFacil por outra via (P0.6)
+- Qualquer requisição ao ER que altere dados (a camada `er` é somente leitura)
+- Alterações em `@connect`, `@grant` ou `@match` no cabeçalho do script
 - Alterações na estrutura de armazenamento (`GM_setValue/getValue`)
 - Modificações em mecanismos de segurança (criptografia, Pusher)
 - Alterações no `@downloadURL` ou `@updateURL` (impacta todos os usuários)
@@ -379,6 +383,7 @@ Ver `.github/SETUP.md` para o passo a passo. Resumo:
 - **`@updateURL` aponta para `main`** — qualquer merge na `main` distribui para todos os usuários.
 - **`PAGINA.eval()`** — usado no módulo CCBs. Frágil se o site adicionar CSP restritivo.
 - **Diagnósticos (`debug`)** — nunca incluem valores pessoais.
+- **Acesso ao ER (camada `er`)** — a autenticação é o cookie de sessão do ER. Nenhum cookie, cabeçalho de sessão ou resposta do ER é gravado em `GM_setValue`, exibido no painel, enviado pelo Pusher ou registrado em log/diagnóstico. Ao mapear rotas (DevTools, HAR), remover `Cookie` e dados pessoais de clientes antes de registrar ou compartilhar.
 
 ---
 
@@ -441,6 +446,7 @@ else if (window.top === window) iniciarPainel();
 | `bs` | Busca de cliente |
 | `pd` | Relatório de Pendências |
 | `rd` | RD Atendimento |
+| `er` | Acesso ao ER (sessão, base, requisições; camada consolidada na P0) |
 
 ### Seletor interno do painel
 
@@ -510,6 +516,8 @@ Documentar novas chaves aqui antes de usar. Renomear sem migração quebra dados
 | `instructions.md` | Novo módulo, novo prefixo, nova chave, nova regra |
 | `README.md` | Mudança visível ao usuário, nova dependência |
 | `docs/script/<módulo>.md` | Mudança de comportamento, nova função |
+| `docs/script/13-api-er.md` | Rota do ER mapeada, alterada ou migrada para a camada `er` (criado na P0.1) |
+| `docs/PLANO-API-ER.md` | Status das fases da P0 |
 | `CHANGELOG.md` | Gerado automaticamente pelo `release.yml` |
 | `.github/SETUP.md` | Mudança nos workflows ou requisitos de configuração |
 | Locais de versão listados no item 12 | Sempre que o `@version` mudar (mesmo commit/PR) |
@@ -588,3 +596,24 @@ Ver `.github/SETUP.md` para o passo a passo completo.
 1. Push direto na `main` distribui para todos os usuários imediatamente (sem validação)
 2. Auto-merge não funciona sem "Allow auto-merge" habilitado
 3. Releases não são criadas automaticamente sem permissões de escrita
+
+---
+
+## 23. Consolidação do acesso ao ER (P0)
+
+Decisão do responsável em 11/11/2026. Plano em `docs/PLANO-API-ER.md`; tarefas em `PRIORIDADES.md`, P0.
+
+**Contexto:** o ER (ASP.NET MVC) monta o HTML no servidor. O script já busca a maior parte dos dados direto nas rotas do ER com o cookie de sessão e lê o HTML devolvido com `DOMParser`; poucas rotas devolvem JSON. A P0 junta essas requisições em uma camada única e tira do caminho principal o que ainda depende da tela ao vivo.
+
+**Branch:** todo o trabalho da P0 acontece em `feature/api-er` (criada a partir de `development`). Sub-branches partem dela e voltam por PR; a `development` é trazida para ela periodicamente; a integração final é um PR `feature/api-er` → `development`. Os workflows não validam PRs para `feature/api-er`: as verificações do item 10 são feitas manualmente e registradas no PR.
+
+**Regras para a camada e para cada módulo migrado:**
+
+- Somente leitura.
+- Novas leituras de dados do ER passam por `erBuscar` e por um leitor da rota; não criar novas requisições soltas nem novos seletores espalhados nos módulos.
+- Resultado gerado pelo módulo idêntico ao de antes (comparar com casos reais antes do merge).
+- O caminho antigo continua disponível até a remoção formal (P0.8).
+- Estrutura inesperada na resposta gera aviso identificando a rota, nunca dado errado gravado.
+- Sessão expirada, tempo esgotado e conta sem acesso continuam avisando, nunca erro silencioso.
+- Nomes novos não podem colidir com as funções `er*` e com a chave `erBase` já existentes.
+- Rotas de outro domínio (motor MobFacil) que exijam `@connect` são Categoria B.

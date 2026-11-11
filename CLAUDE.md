@@ -36,8 +36,9 @@
 - **Não sobrescreva dados de armazenamento existentes** — siga o padrão de `salvar()`
 - **Dentro do painel, use `$()`, não `document.querySelector()`**
 - **Timeouts apenas em `CONFIG`** — nunca valores hard-coded fora dele
-- **Use o prefixo correto** para novas funções (`ng`, `at`, `lb`, `tm`, `cac`, `eq`, `hs`, `bs`, `rd`)
+- **Use o prefixo correto** para novas funções (`ng`, `at`, `lb`, `tm`, `cac`, `eq`, `hs`, `bs`, `pd`, `rd`, `er`)
 - **Alterações críticas (arquitetura, armazenamento, segurança, workflows) exigem autorização explícita**
+- **Prioridade atual (P0): consolidar o acesso ao ER** — trabalho na branch `feature/api-er`; leia `docs/PLANO-API-ER.md` e o item 23 do `instructions.md`
 
 ---
 
@@ -84,6 +85,8 @@ docs/script/08-ccbs-contas.md
 docs/script/09-equipe.md
 docs/script/10-navegacao-busca.md
 docs/script/11-rd-encerramento.md
+docs/script/12-desbloqueios.md
+docs/PLANO-API-ER.md               ← plano da P0 (acesso ao ER)
 README.md
 .github/SETUP.md                    ← configurações para o proprietário
 ```

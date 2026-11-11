@@ -29,7 +29,74 @@ O Claude deve respeitar integralmente o `instructions.md` e as regras de governa
 
 ---
 
-## P0 — Otimização dos lembretes
+## Mudança de plano (11/11/2026)
+
+**Decisão do responsável:** a prioridade máxima passa a ser **consolidar o acesso aos dados do ER** em uma camada única, que funcione como uma API para o resto do script, e eliminar a dependência da tela ao vivo (árvore DOM/React).
+
+**Contexto (analisado no código, v13.29.0):**
+- O ER é um sistema ASP.NET MVC que monta o HTML no servidor. O script **já** busca a maior parte dos dados direto nas rotas do ER, com a sessão (cookie) do usuário, e lê o HTML devolvido com `DOMParser`. Só uma rota usada devolve JSON (`/CentralAtendimento/BuscaCartao`).
+- Essas requisições estão espalhadas em pelo menos seis formas diferentes (`cacReq`, `erReq`, `bsFila`, `dadosCliente`, `buscarDetalhe`, coleta do Diário), cada uma com seu tratamento de erro, tempo e sessão.
+- Ainda dependem da tela ao vivo: o motor MobFacil (árvore React no iframe, com cliques), login, navegação automática, "Ler da tela" e `PAGINA.eval()` nos CCBs.
+- A atualização visual do ER de 05/11/2026 (P4.9) só quebrou a detecção de sessão expirada; a leitura via rotas continuou funcionando.
+
+**Objetivo:** cada módulo pede dados à camada (`erBuscar('cliente', { proposta })`) e recebe um objeto pronto, sem saber se veio de HTML, JSON ou, no futuro, da API oficial. Uma mudança no ER passa a ser corrigida em um ponto só e detectada com aviso.
+
+Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial do fornecedor e um site próprio ficam como evolução futura (P4.11).
+
+**Renumeração:** as prioridades anteriores desceram um nível (P0→P1 lembretes, P1→P2 mensagens, P2→P3 acordos, P3→P4 geral), com os subitens acompanhando (ex.: o antigo P3.8 agora é P4.8).
+
+---
+
+## P0 — Consolidação do acesso aos dados do ER
+
+**Status geral:** Em andamento (branch `feature/api-er`)  
+**Objetivo:** uma camada única de acesso ao ER, com leitores por rota que devolvem dados estruturados, e fim da dependência da tela ao vivo.
+
+### Princípios
+
+- **Somente leitura:** nenhuma requisição que altere dados no ER sem decisão explícita do responsável.
+- **Comportamento idêntico:** cada módulo migrado gera exatamente o mesmo resultado de antes (comparar com casos reais).
+- **Plano B:** o caminho atual continua disponível até a migração ser validada em uso real.
+- **Mudança detectada, não silenciosa:** se a resposta do ER não tiver a estrutura esperada, o painel avisa qual rota mudou, em vez de gravar dados errados.
+- **Sessão:** a autenticação é o cookie do ER (sem token). Nada de sessão é armazenado ou registrado em log.
+- **Dentro do monólito:** a camada fica em `paymobifin-assistente.user.js`, numa seção própria, consolidando as funções `er*` que já existem.
+- **Um módulo por vez:** cada migração em uma sub-branch com PR para `feature/api-er`.
+
+### Tarefas
+
+- [ ] **P0.1 — Inventário e mapeamento das rotas do ER**  
+  **Status:** Em andamento (inventário preliminar no código feito em 11/11/2026, em `docs/PLANO-API-ER.md`)  
+  **Objetivo:** listar todas as rotas e leituras de tela usadas pelo script e, no DevTools, verificar quais telas do ER carregam dados por JSON (inclusive o motor MobFacil).  
+  **Critérios de aceite:** `docs/script/13-api-er.md` com, para cada rota: método, parâmetros, formato da resposta (HTML/JSON), funções que a usam e dados extraídos.
+
+- [ ] **P0.2 — Desenho da camada** (Categoria B)  
+  **Objetivo:** definir `erBuscar`, o registro de rotas, os leitores por rota, o tratamento padrão de erros e sessão e os avisos de mudança.  
+  **Dependências:** P0.1. Exige autorização explícita antes de P0.3.
+
+- [ ] **P0.3 — Implementar a camada base** (Categoria B)  
+  **Objetivo:** camada funcionando sem nenhum módulo migrado; nenhum comportamento existente muda.
+
+- [ ] **P0.4 — Piloto: Relatório de Pendências**  
+  **Objetivo:** `pd` passa a usar a camada. Texto gerado idêntico ao atual (propostas 5017 e 4959 e fila de um dia real).
+
+- [ ] **P0.5 — Migrar as demais rotas HTML**  
+  **Objetivo:** busca de cliente, `dadosCliente`/aba Cliente, CAC, Fila de Propostas, CCBs (download), RD (`erReq`). Um PR por módulo.
+
+- [ ] **P0.6 — Motor MobFacil sem cliques** (Categoria B)  
+  **Objetivo:** se o mapeamento confirmar que a árvore do motor vem de uma resposta JSON, ler esse JSON em vez de navegar e clicar na árvore.
+
+- [ ] **P0.7 — Demais dependências da tela ao vivo**  
+  **Objetivo:** avaliar caso a caso CCBs (`PAGINA.eval()`), login e troca de conta (Categoria B), navegação automática e "Ler da tela".
+
+- [ ] **P0.8 — Remover caminhos duplicados**  
+  **Objetivo:** depois de validado em uso real, remover as funções de requisição antigas substituídas pela camada.
+
+- [ ] **P0.9 — Integrar `feature/api-er` em `development`**  
+  **Objetivo:** PR único da branch de funcionalidade para `development`, depois de todas as tarefas acima validadas.
+
+---
+
+## P1 — Otimização dos lembretes
 
 **Status geral:** Pendente  
 **Objetivo:** tornar o sistema de lembretes mais eficiente para comunicação e acompanhamento das atividades da equipe.
@@ -48,7 +115,7 @@ O módulo de lembretes (`lb*`) já possui:
 
 ---
 
-- [x] **P0.1 — Notificações para toda a equipe**
+- [x] **P1.1 — Notificações para toda a equipe**
 
   **Status:** Concluído (já implementado; validado no código em 09/11/2026, v13.26.4). Decisão do responsável: o pop-up local no dia do acompanhamento é suficiente, sem push pelo Pusher.  
   **Objetivo:** garantir que todos os integrantes da equipe sejam notificados sobre lembretes, não somente quem criou.
@@ -70,11 +137,11 @@ O módulo de lembretes (`lb*`) já possui:
   - Lembretes **não compartilhados** (checkbox desmarcada) só avisam o próprio navegador.
   - Só é avisado quem está com o ER aberto, porque o script só roda lá. Um push pelo Pusher também não alcançaria quem está offline, por isso não foi adotado. Mexer no Pusher seria Categoria B.
 
-  **Possível melhoria futura (não solicitada):** mostrar no pop-up quem criou cada lembrete e se ele é da equipe, e notificar uma vez por lembrete em vez de um resumo a cada 30 min. Registrar em P3.5 se a equipe quiser.
+  **Possível melhoria futura (não solicitada):** mostrar no pop-up quem criou cada lembrete e se ele é da equipe, e notificar uma vez por lembrete em vez de um resumo a cada 30 min. Registrar em P4.5 se a equipe quiser.
 
 ---
 
-- [ ] **P0.2 — Edição compartilhada**
+- [ ] **P1.2 — Edição compartilhada**
 
   **Status:** Concluído (já implementado)  
   **Objetivo:** qualquer usuário da equipe deve conseguir editar os lembretes, independentemente de quem os criou.
@@ -87,7 +154,7 @@ O módulo de lembretes (`lb*`) já possui:
 
 ---
 
-- [ ] **P0.3 — Card flutuante**
+- [ ] **P1.3 — Card flutuante**
 
   **Status:** Parcialmente implementado  
   **Objetivo:** os lembretes devem ser exibidos em um card móvel pela tela, permitindo acompanhar sem depender de uma aba específica.
@@ -108,7 +175,7 @@ O módulo de lembretes (`lb*`) já possui:
 
 ---
 
-## P1 — Otimização das mensagens
+## P2 — Otimização das mensagens
 
 **Status geral:** Pendente  
 **Objetivo:** melhorar as funcionalidades existentes de criação, preenchimento e envio de mensagens.
@@ -135,7 +202,7 @@ O módulo de mensagens (`ng*` e `at*`) já possui:
 
 ---
 
-- [ ] **P1.1 — Revisar os modelos de mensagens existentes**
+- [ ] **P2.1 — Revisar os modelos de mensagens existentes**
 
   **Status:** Pendente  
   **Objetivo:** avaliar se os 7 modelos e 11 modalidades atuais atendem às necessidades da equipe.  
@@ -146,7 +213,7 @@ O módulo de mensagens (`ng*` e `at*`) já possui:
 
 ---
 
-- [ ] **P1.2 — Melhorar o preenchimento automático dos campos**
+- [ ] **P2.2 — Melhorar o preenchimento automático dos campos**
 
   **Status:** Pendente  
   **Objetivo:** reduzir digitação manual identificando campos que poderiam ser preenchidos automaticamente a partir de dados já disponíveis.  
@@ -157,7 +224,7 @@ O módulo de mensagens (`ng*` e `at*`) já possui:
 
 ---
 
-- [ ] **P1.3 — Padronizar as mensagens utilizadas pela equipe**
+- [ ] **P2.3 — Padronizar as mensagens utilizadas pela equipe**
 
   **Status:** Pendente  
   **Objetivo:** garantir que todos os membros usem os mesmos modelos e formatos.  
@@ -168,7 +235,7 @@ O módulo de mensagens (`ng*` e `at*`) já possui:
 
 ---
 
-- [ ] **P1.4 — Identificar oportunidades de reduzir preenchimentos manuais e erros**
+- [ ] **P2.4 — Identificar oportunidades de reduzir preenchimentos manuais e erros**
 
   **Status:** Pendente  
   **Objetivo:** mapear onde os erros mais acontecem e onde a automação pode ajudar.  
@@ -179,7 +246,7 @@ O módulo de mensagens (`ng*` e `at*`) já possui:
 
 ---
 
-## P2 — Otimização da geração de acordos
+## P3 — Otimização da geração de acordos
 
 **Status geral:** Pendente  
 **Objetivo:** melhorar o processo de geração e formalização de acordos.
@@ -204,7 +271,7 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P2.1 — Revisar o fluxo atual de geração de acordos**
+- [ ] **P3.1 — Revisar o fluxo atual de geração de acordos**
 
   **Status:** Pendente  
   **Objetivo:** mapear o fluxo completo e identificar gargalos.  
@@ -215,18 +282,18 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P2.2 — Identificar oportunidades de automatizar cálculos e preenchimentos**
+- [ ] **P3.2 — Identificar oportunidades de automatizar cálculos e preenchimentos**
 
   **Status:** Pendente  
   **Objetivo:** reduzir etapas manuais no preenchimento do acordo e do plano de parcelas.  
   **Comportamento esperado:** lista de campos que poderiam ser calculados ou preenchidos automaticamente.  
   **Critérios de aceite:** melhorias identificadas com viabilidade técnica.  
-  **Dependências:** análise do fluxo atual (P2.1).  
+  **Dependências:** análise do fluxo atual (P3.1).  
   **Observações:** o script já calcula vencimentos, situações, rótulos e saldo. Possíveis melhorias: cálculo de juros no restante, preenchimento automático de "procedimento na régua" e "recebeu boletos" baseado na modalidade.
 
 ---
 
-- [ ] **P2.3 — Melhorar a consistência das informações geradas**
+- [ ] **P3.3 — Melhorar a consistência das informações geradas**
 
   **Status:** Pendente  
   **Objetivo:** garantir que os dados do acordo, do plano de parcelas e da planilha estejam sempre consistentes.  
@@ -237,29 +304,29 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P2.4 — Reduzir erros e etapas manuais**
+- [ ] **P3.4 — Reduzir erros e etapas manuais**
 
   **Status:** Pendente  
   **Objetivo:** diminuir erros de digitação e etapas desnecessárias.  
   **Comportamento esperado:** menos cliques e menos digitação para concluir um registro.  
   **Critérios de aceite:** lista de etapas que podem ser eliminadas ou combinadas.  
-  **Dependências:** análise do fluxo (P2.1).  
+  **Dependências:** análise do fluxo (P3.1).  
   **Observações:** `atSugerir()` já combina 3 preenchimentos. Possível: auto-gerar textos ao montar o plano, auto-copiar ao concluir.
 
 ---
 
-- [ ] **P2.5 — Documentar melhorias necessárias identificadas na análise do código**
+- [ ] **P3.5 — Documentar melhorias necessárias identificadas na análise do código**
 
   **Status:** Pendente  
   **Objetivo:** registrar tecnicamente o que foi encontrado para referência futura.  
   **Comportamento esperado:** documento com as melhorias e suas prioridades.  
   **Critérios de aceite:** documento atualizado em `docs/script/04-atendimento.md` se necessário.  
-  **Dependências:** conclusão das análises P2.1 a P2.4.  
+  **Dependências:** conclusão das análises P3.1 a P3.4.  
   **Observações:** não criar documento novo — atualizar o existente.
 
 ---
 
-## P3 — Otimização geral do sistema
+## P4 — Otimização geral do sistema
 
 **Status geral:** Pendente  
 **Objetivo:** aperfeiçoar funcionalidades já existentes no PayMobi.
@@ -268,7 +335,7 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P3.1 — Identificar funcionalidades com lentidão ou dificuldade de uso**
+- [ ] **P4.1 — Identificar funcionalidades com lentidão ou dificuldade de uso**
 
   **Status:** Pendente  
   **Objetivo:** mapear pontos onde a experiência é lenta ou confusa.  
@@ -279,7 +346,7 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P3.2 — Identificar tarefas repetitivas que podem ser automatizadas**
+- [ ] **P4.2 — Identificar tarefas repetitivas que podem ser automatizadas**
 
   **Status:** Pendente  
   **Objetivo:** listar operações manuais repetitivas que o script poderia fazer sozinhas.  
@@ -290,18 +357,18 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P3.3 — Melhorar a experiência de uso**
+- [ ] **P4.3 — Melhorar a experiência de uso**
 
   **Status:** Pendente  
   **Objetivo:** ajustes de usabilidade no painel e nos fluxos.  
   **Comportamento esperado:** interface mais fluida e intuitiva.  
   **Critérios de aceite:** melhorias validadas pela equipe.  
-  **Dependências:** itens identificados em P3.1 e P3.2.  
+  **Dependências:** itens identificados em P4.1 e P4.2.  
   **Observações:** a Nova UI já melhorou muito a experiência. Foco em detalhes que ainda incomodam.
 
 ---
 
-- [ ] **P3.4 — Corrigir problemas identificados**
+- [ ] **P4.4 — Corrigir problemas identificados**
 
   **Status:** Pendente  
   **Objetivo:** corrigir bugs e comportamentos inadequados.  
@@ -312,7 +379,7 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [ ] **P3.5 — Registrar oportunidades futuras de melhoria**
+- [ ] **P4.5 — Registrar oportunidades futuras de melhoria**
 
   **Status:** Pendente  
   **Objetivo:** manter um backlog de ideias que surgirem do uso.  
@@ -326,7 +393,7 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
-- [x] **P3.6 — Relatório de pendências (conta master)**
+- [x] **P4.6 — Relatório de pendências (conta master)**
 
   **Status:** Concluído (v13.27.0, 09/11/2026)  
   **Objetivo:** gerar, sem copiar à mão da Fila de Pendências, a lista das propostas com pendência em aberto no formato usado pela equipe (Proposta, Pendência, Cliente, Vendedor, Autorização, Data, Loja).  
@@ -335,7 +402,7 @@ O módulo de geração de acordos (`at*`) já possui:
   **Dependências:** conta master com acesso à Fila de Pendências.  
   **Observações:** detalhes técnicos em `docs/script/03-painel-interface.md` (Relatório de Pendências).
 
-- [x] **P3.7 — Nome do arquivo do script**
+- [x] **P4.7 — Nome do arquivo do script**
 
   **Status:** Concluído (v13.27.2, 09/11/2026)  
   **Objetivo:** o arquivo principal passa de `automacaomobfacil.user.js` para `paymobifin-assistente.user.js`, nome que bate com o que aparece no Tampermonkey ("PaymobiFin - Assistente").  
@@ -343,7 +410,7 @@ O módulo de geração de acordos (`at*`) já possui:
   **Critérios de aceite:** os workflows (validação e release) leem o arquivo novo; a validação confere que os endereços de atualização apontam para o arquivo novo e bloqueia alterações no arquivo-ponte.  
   **Observações:** alteração Categoria B (endereços de atualização e workflows), autorizada pelo responsável.
 
-- [ ] **P3.8 — Remover o arquivo-ponte `automacaomobfacil.user.js`**
+- [ ] **P4.8 — Remover o arquivo-ponte `automacaomobfacil.user.js`**
 
   **Status:** Aguardando (não antes de 09/12/2026)  
   **Objetivo:** apagar o nome antigo depois que todas as instalações já migraram para `paymobifin-assistente.user.js`.  
@@ -351,7 +418,7 @@ O módulo de geração de acordos (`at*`) já possui:
   **Riscos:** quem ainda estiver no endereço antigo deixa de receber atualizações sem aviso.  
   **Observações:** alteração Categoria B (afeta a distribuição); exige autorização explícita.
 
-- [x] **P3.9 — Compatibilidade com a atualização do ER (sessão expirada)**
+- [x] **P4.9 — Compatibilidade com a atualização do ER (sessão expirada)**
 
   **Status:** Concluído (v13.29.0, 11/11/2026)  
   **Objetivo:** recuperar o funcionamento do painel depois da atualização do ER (visual novo, CSS de 05/11/2026), sem mudar o que continua funcionando.  
@@ -360,12 +427,18 @@ O módulo de geração de acordos (`at*`) já possui:
   **Critérios de aceite (atendidos no ER real):** Diário com a sessão vencida pausa sem gravar dados (a versão anterior marcava as 3 propostas como feitas e copiava tudo N/A); Pendências e CCBs avisam a sessão expirada; o login automático leva à tela de login; nenhuma página normal é confundida com sessão expirada.  
   **Limitações:** a entrada automática com senha salva não foi testada (exige digitar senha no ER real); o RD (app.tallos.com.br) não foi aberto, só os endereços do ER que ele usa.
 
-- [x] **P3.10 — Desbloqueios no arquivo principal**
+- [x] **P4.10 — Desbloqueios no arquivo principal**
 
   **Status:** Concluído (v13.29.0, 11/11/2026)  
   **Objetivo:** a aba Desbloqueios do Atendimento (#35, release v13.28.0) foi feita no arquivo-ponte `automacaomobfacil.user.js`, que ninguém mais recebe, e sem mudar o `@version`: não chegou a nenhum usuário.  
   **Comportamento:** o mesmo código do #35, sem alteração, levado para `paymobifin-assistente.user.js`; o arquivo-ponte voltou a ser a cópia congelada da 13.27.2. Documentação do módulo em `docs/script/12-desbloqueios.md`.  
   **Critérios de aceite:** a aba Desbloqueios aparece no Atendimento, "Aplicar cliente atual" preenche os campos do cliente e "Copiar linha da planilha" gera a linha de 15 colunas.
+
+- [ ] **P4.11 — API oficial do ER e site próprio (evolução futura)**
+
+  **Status:** Ideia registrada (11/11/2026) — não iniciar antes de P0 concluída  
+  **Objetivo:** não depender do front do ER. Opções: API oficial do fornecedor (exige autorização da gestão e processos administrativos) e um site próprio do PayMobi.  
+  **Observações:** a camada de P0 é a peça trocável: com a API oficial, muda só a fonte dos dados. Um site em outro domínio não consegue chamar as rotas internas do ER com a sessão do usuário (CORS e cookies), então precisaria da API oficial ou de uma ponte (userscript/extensão). Avaliar LGPD antes de guardar dados de clientes fora do navegador. Categoria B.
 
 ---
 
@@ -373,10 +446,12 @@ O módulo de geração de acordos (`at*`) já possui:
 
 | # | Dúvida | Contexto |
 |---|---|---|
-| 1 | ~~Notificação no vencimento deve ser push ativo para todos, ou popup local já é suficiente?~~ **Decidido (09/11/2026): o pop-up local é suficiente.** | P0.1 — o pop-up do dia já aparece para todos os membros que têm o lembrete compartilhado |
-| 2 | O card flutuante deve ser permanente (mesmo sem devidos) ou só quando há lembretes do dia? | P0.3 — hoje o popup só aparece com devidos |
-| 3 | O card flutuante deve ser arrastável ou fixo em um canto? | P0.3 — hoje é fixo |
-| 4 | O card flutuante deve mostrar todos os lembretes ativos ou só os devidos hoje? | P0.3 — hoje só mostra devidos |
-| 5 | Devemos impedir que alguém exclua um lembrete compartilhado que não criou? | P0.2 — hoje qualquer um pode excluir |
-| 6 | Os modelos personalizados (`negModelos`) devem ser compartilhados entre a equipe? | P1.3 — hoje são por navegador |
-| 7 | Há campos do acordo que poderiam ser preenchidos automaticamente a partir do ER? | P2.2 — hoje muitos campos são manuais |
+| 1 | ~~Notificação no vencimento deve ser push ativo para todos, ou popup local já é suficiente?~~ **Decidido (09/11/2026): o pop-up local é suficiente.** | P1.1 — o pop-up do dia já aparece para todos os membros que têm o lembrete compartilhado |
+| 2 | O card flutuante deve ser permanente (mesmo sem devidos) ou só quando há lembretes do dia? | P1.3 — hoje o popup só aparece com devidos |
+| 3 | O card flutuante deve ser arrastável ou fixo em um canto? | P1.3 — hoje é fixo |
+| 4 | O card flutuante deve mostrar todos os lembretes ativos ou só os devidos hoje? | P1.3 — hoje só mostra devidos |
+| 5 | Devemos impedir que alguém exclua um lembrete compartilhado que não criou? | P1.2 — hoje qualquer um pode excluir |
+| 6 | Os modelos personalizados (`negModelos`) devem ser compartilhados entre a equipe? | P2.3 — hoje são por navegador |
+| 7 | Há campos do acordo que poderiam ser preenchidos automaticamente a partir do ER? | P3.2 — hoje muitos campos são manuais |
+| 8 | ~~O ER autentica por cookie ou por token?~~ **Respondido no código (11/11/2026): cookie de sessão.** | P0 — as rotas são chamadas com `credentials: 'include'` |
+| 9 | O uso das rotas internas do ER é compatível com o contrato e os termos de uso? | P0 / P4.11 — confirmar com a gestão quando possível |

@@ -76,7 +76,7 @@ Sem resposta do Gemini (tempo esgotado, rede, HTTP 5xx ou modelo inexistente): a
 
 **Sem o ER não analisa.** Antes de "1. Analisar" e de cada "Analisar (IA)", `erConferir()` busca na Mesa um nome que não existe. A resposta "nenhuma proposta" significa que o ER está respondendo, e esse ok vale `RD_ER_OK_S`. Sem endereço do ER, sessão expirada, conta que não é aprovadora da Mesa ou ER fora do ar: não analisa nada e diz o motivo, porque a planilha sairia sem proposta, vendedor e filial. Se o ER cair no meio da análise das vencidas (`erForaDoAr`), a análise para, a conversa que ficou sem o ER é desmarcada, e o próximo "1. Analisar" refaz todas as que ficaram sem o ER.
 
-A sessão expirada é reconhecida por `erLogin` (= `erSemSessao`): tela de login ou a página de aviso `/AvisoSessao/AvisoSessao` ("Sua sessão de trabalho expirou"), que o ER devolve com HTTP 200 para toda consulta depois que a sessão vence. Até a v13.27.2 esse aviso caía em "resposta do ER sem a lista de propostas"; agora o motivo é "sessão do ER expirada".
+A sessão expirada é reconhecida por `erLogin` (= `erSemSessao`): tela de login ou a página de aviso `/AvisoSessao/AvisoSessao` ("Sua sessão de trabalho expirou"), que o ER devolve com HTTP 200 para toda consulta depois que a sessão vence. Antes da v13.29.0 esse aviso caía em "resposta do ER sem a lista de propostas"; agora o motivo é "sessão do ER expirada".
 
 Durante a análise, com a **sessão do ER deste navegador** (o script usa `GM_xmlhttpRequest` com `@connect paymobi.ercard.com.br`):
 

@@ -353,12 +353,19 @@ O módulo de geração de acordos (`at*`) já possui:
 
 - [x] **P3.9 — Compatibilidade com a atualização do ER (sessão expirada)**
 
-  **Status:** Concluído (v13.27.3, 11/11/2026)  
+  **Status:** Concluído (v13.29.0, 11/11/2026)  
   **Objetivo:** recuperar o funcionamento do painel depois da atualização do ER (visual novo, CSS de 05/11/2026), sem mudar o que continua funcionando.  
   **Análise (ER real, só leitura):** Mesa de Crédito, Ler da tela, navegação automática com datas do dia, Relatório Diário (valor, vendedor, IMEI), Auditoria no motor MobFacil, CCBs (até antes do download), busca de cliente (proposta, CPF, nome), Aplicar cliente atual, CAC, Relatório de Pendências, tela de login e modo escuro sobre o ER continuam com a mesma estrutura e funcionando. O que mudou: com a sessão vencida, o ER não abre mais a janela `#dlgRelogin`; redireciona toda requisição para `/AvisoSessao/AvisoSessao` ("Sua sessão de trabalho expirou").  
   **Correções:** `erSemSessao` reconhece esse aviso (Diário, Auditoria, aba Cliente, CAC, Pendências, busca, CCBs, RD); a fila pausa com aviso em vez de gravar N/A e concluir; o login automático volta a disparar; a navegação automática diz na hora quando a sessão expirou ou quando a conta não é aprovadora da Mesa ("Aprovador CONTA não cadastrado").  
   **Critérios de aceite (atendidos no ER real):** Diário com a sessão vencida pausa sem gravar dados (a versão anterior marcava as 3 propostas como feitas e copiava tudo N/A); Pendências e CCBs avisam a sessão expirada; o login automático leva à tela de login; nenhuma página normal é confundida com sessão expirada.  
   **Limitações:** a entrada automática com senha salva não foi testada (exige digitar senha no ER real); o RD (app.tallos.com.br) não foi aberto, só os endereços do ER que ele usa.
+
+- [x] **P3.10 — Desbloqueios no arquivo principal**
+
+  **Status:** Concluído (v13.29.0, 11/11/2026)  
+  **Objetivo:** a aba Desbloqueios do Atendimento (#35, release v13.28.0) foi feita no arquivo-ponte `automacaomobfacil.user.js`, que ninguém mais recebe, e sem mudar o `@version`: não chegou a nenhum usuário.  
+  **Comportamento:** o mesmo código do #35, sem alteração, levado para `paymobifin-assistente.user.js`; o arquivo-ponte voltou a ser a cópia congelada da 13.27.2. Documentação do módulo em `docs/script/12-desbloqueios.md`.  
+  **Critérios de aceite:** a aba Desbloqueios aparece no Atendimento, "Aplicar cliente atual" preenche os campos do cliente e "Copiar linha da planilha" gera a linha de 15 colunas.
 
 ---
 

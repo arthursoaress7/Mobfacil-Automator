@@ -3,7 +3,7 @@
 // @name:pt-BR   PaymobiFin - Assistente
 // @name:pt      PaymobiFin - Assistente
 // @namespace    mobfacil-planilha
-// @version      13.27.3
+// @version      13.29.0
 // @author       Arthur
 // @description  PaymobiFin - Assistente: atendimento (negociação e renegociação), histórico da equipe, lembretes, relatórios, CCBs e troca rápida de contas
 // @include      /^https?:\/\/paymobi\.ercard\.com\.br(:\d+)?\/.*/
@@ -29,7 +29,7 @@
   'use strict';
 
   // versão: lida do cabeçalho (@version) pelo Tampermonkey; o número só existe num lugar
-  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.27.3');
+  const VERSAO = 'v' + ((typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || '13.29.0');
   const TITULO = 'PaymobiFin - Assistente';
   const CONFIG = {
     TEMPO_MAX: 120,         // s máximos por proposta (janela principal)
@@ -1883,7 +1883,7 @@
 
         <div data-pag="neg">
           <div class="mf-ui-seg mf-at-seg">
-            <button data-at="negociacao">Negociação</button><button data-at="renegociacao">Renegociação</button><button data-at="mensagens">Mensagens</button>
+            <button data-at="negociacao">Negociação</button><button data-at="renegociacao">Renegociação</button><button data-at="desbloqueios">Desbloqueios</button><button data-at="mensagens">Mensagens</button>
           </div>
           <div id="mf-at-form">
             <details class="mf-grupo" id="mf-at-g-cliente" data-grupo="at-cliente" open><summary>Cliente</summary>
@@ -1961,6 +1961,21 @@
               </div>
               <div class="mf-info" style="margin-top:6px">Os mesmos dados do Atendimento: o que foi digitado lá já aparece aqui. Nada é enviado.</div>
             </details>
+          </div>
+          <div id="mf-at-desbloqueio" style="display:none">
+            <details class="mf-grupo" data-grupo="at-desbloqueio" open><summary>Desbloqueio</summary>
+              <div class="mf-linha" style="flex-wrap:wrap;gap:6px;margin:2px 0 6px">
+                <button id="mf-at-desb-aplicar" class="cinza mf-bs-mini" title="Preenche com o cliente da busca do topo.">Aplicar cliente atual</button>
+              </div>
+              <div id="mf-at-desb-campos" class="mf-grade"></div>
+            </details>
+            <div class="mf-sec">
+              <div class="mf-grade">
+                <button id="mf-at-desb-copiar" class="verde mf-cheia">Copiar linha da planilha</button>
+                <button id="mf-at-desb-novo" class="cinza mf-cheia">Novo desbloqueio</button>
+              </div>
+              <div class="mf-info" style="margin-top:6px">Busque o cliente no topo e clique "Aplicar cliente atual" para preencher Proposta, Nome, CPF, IMEI, Data, Loja e Vendedor. Os demais campos são preenchidos manualmente.</div>
+            </div>
           </div>
         </div>
 
@@ -4290,8 +4305,8 @@
     const ngModalidade = () => (GM_getValue('negModalidade', 'mensal') in NG_MODALIDADES ? GM_getValue('negModalidade', 'mensal') : 'mensal');
     // contexto: 'negociacao' / 'renegociacao' (Atendimento: sempre o acordo da modalidade) ou 'mensagens' (todos os modelos)
     let ngCtx = GM_getValue('atModelo', 'negociacao');
-    if (!['negociacao', 'renegociacao', 'mensagens'].includes(ngCtx)) ngCtx = 'negociacao';
-    const ngNoAtendimento = () => ngCtx !== 'mensagens';
+    if (!['negociacao', 'renegociacao', 'mensagens', 'desbloqueios'].includes(ngCtx)) ngCtx = 'negociacao';
+    const ngNoAtendimento = () => ngCtx !== 'mensagens' && ngCtx !== 'desbloqueios';
     const ngChave = () => ngNoAtendimento() ? (ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : 'acordo')
       : (ngModeloAtual() === 'acordo' && ngModalidade() !== 'geral' ? 'acordo:' + ngModalidade() : ngModeloAtual());
     const ngDef = () => NG_ALL[ngChave()];
@@ -5562,6 +5577,15 @@
       responsavel: { rot: 'Responsável pela negociação', tipo: 'texto' },
       formalizou: { rot: 'Formalizou o acordo?', tipo: 'select', opcoes: [['SIM', 'SIM'], ['NÃO', 'NÃO']] },
       obs_reneg: { rot: 'Observação (todas as linhas)', tipo: 'texto', dica: 'Ex.: Boletos no App' },
+      // ---- Desbloqueios ----
+      tipo_desbloqueio: { rot: 'Tipo de desbloqueio', tipo: 'texto' },
+      data_desbloqueio: { rot: 'Data do desbloqueio', tipo: 'data' },
+      motivo_desbloqueio: { rot: 'Motivo', tipo: 'area' },
+      adicionado_regua: { rot: 'Adicionado à régua', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO']] },
+      cumpriu_acordo: { rot: 'Cumpriu acordo?', tipo: 'select', opcoes: [['', '(em branco)'], ['SIM', 'SIM'], ['NÃO', 'NÃO']] },
+      tipo_atendimento_desb: { rot: 'Tipo de atendimento', tipo: 'select', opcoes: [['RD', 'RD'], ['Paymobi', 'Paymobi'], ['Recupere', 'Recupere']], padrao: 'RD' },
+      desb_parcelas_atraso: { rot: 'Parcelas em atraso', tipo: 'num' },
+      obs_desbloqueio: { rot: 'Observação', tipo: 'area' },
       plano_entrada_valor: { rot: 'Entrada (linha 1)', tipo: 'moeda' },
       plano_entrada_data: { rot: 'Data da entrada', tipo: 'data' },
       plano_qtd: { rot: 'Nº de parcelas', tipo: 'num' },
@@ -5588,6 +5612,12 @@
       ['Vencimento', 'p:venc'], ['Observação', 'obs_reneg'], ['Número Contrato Novo', 'contrato_novo'], ['Procedimento feito na regua', 'regua'],
       ['Recebeu Boletos?', 'recebeu_boletos'], ['Negociação Concluída?', 'concluida']];
     const AT_SITUACOES = ['Efetivado (Entrada)', 'Em Aberto', 'Pendente', 'Efetivado', 'Efetivado (Quitação)', 'Pendente (ATRASO)', 'Pendente (QUEBRA DE ACORDO)'];
+    // ---- Desbloqueios: campos e colunas da planilha ----
+    const AT_DESBLOQUEIO = ['proposta', 'nome', 'cpf', 'tipo_desbloqueio', 'imei', 'data_proposta', 'data_desbloqueio', 'filial', 'atendente', 'motivo_desbloqueio', 'adicionado_regua', 'cumpriu_acordo', 'tipo_atendimento_desb', 'desb_parcelas_atraso', 'obs_desbloqueio'];
+    const AT_COL_DESBLOQUEIO = [['Proposta', 'proposta'], ['Nome', 'nome'], ['CPF', 'cpf'], ['Tipo Desbloqueio', 'tipo_desbloqueio'],
+      ['IMEI', 'imei'], ['Data da proposta', 'data_proposta'], ['Data do desbloqueio', 'data_desbloqueio'], ['Loja', 'filial'], ['Vendedor', 'atendente'],
+      ['Motivo', 'motivo_desbloqueio'], ['Adicionado à régua', 'adicionado_regua'], ['Cumpriu Acordo?', 'cumpriu_acordo'],
+      ['Tipo de atendimento', 'tipo_atendimento_desb'], ['Parcelas em atraso', 'desb_parcelas_atraso'], ['Observação', 'obs_desbloqueio']];
     let atPlano = [];   // linhas da Renegociação (em memória, como o resto da ficha)
     const atIso = br => { const m = String(br || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; };
     const atNomeEquipe = () => String(GM_getValue('equipeNome', '') || '').trim();
@@ -5599,10 +5629,16 @@
       campos.forEach(c => g.appendChild(ngCampoEl(c, NG_CAMPOS[c].rot, obrig.includes(c))));
     }
     function atDesenhar() {
-      const at = ngNoAtendimento(), reneg = ngCtx === 'renegociacao';
+      const at = ngNoAtendimento(), reneg = ngCtx === 'renegociacao', desb = ngCtx === 'desbloqueios';
       painel.querySelectorAll('.mf-at-seg button').forEach(b => b.classList.toggle('ativa', b.dataset.at === ngCtx));
-      $('#mf-at-form').style.display = at ? '' : 'none';
-      $('#mf-at-mensagens').style.display = at ? 'none' : '';
+      $('#mf-at-form').style.display = desb ? 'none' : (at ? '' : 'none');
+      $('#mf-at-mensagens').style.display = at ? 'none' : (desb ? 'none' : '');
+      $('#mf-at-desbloqueio').style.display = desb ? '' : 'none';
+      if (desb) {
+        if (ngValores.tipo_atendimento_desb == null) ngValores.tipo_atendimento_desb = 'RD';
+        atDesbBloco(AT_DESBLOQUEIO);
+        return;
+      }
       // o mesmo bloco de campos da modalidade serve às duas telas
       (at ? $('#mf-at-modal') : $('#mf-ng-slot')).appendChild($('#mf-ng-campos'));
       if (at) {
@@ -5742,6 +5778,12 @@
     /* ---- cópia para a planilha ---- */
     const atTexto = k => ({ pedido: $('#mf-ng-f-pedido').value, acordo: $('#mf-ng-f-acordo').value, parcela: $('#mf-ng-f-parcela').value }[k] || '').replace(/\s*\n\s*/g, ' ').trim();
     function atValidar() {
+      if (ngCtx === 'desbloqueios') {
+        const obrig = ['proposta', 'nome'];
+        const falta = obrig.filter(k => !ngValor(k)).map(k => NG_CAMPOS[k].rot);
+        painel.querySelectorAll('#mf-at-desb-campos [data-campo]').forEach(i => i.classList.toggle('mf-erro', falta.includes(NG_CAMPOS[i.dataset.campo].rot)));
+        return falta;
+      }
       const obrig = ngCtx === 'renegociacao' ? ['proposta', 'nome', 'responsavel'] : ['proposta', 'nome'];
       const falta = obrig.filter(k => !ngValor(k)).map(k => NG_CAMPOS[k].rot);
       painel.querySelectorAll('#mf-at-form [data-campo]').forEach(i => i.classList.toggle('mf-erro', falta.includes(NG_CAMPOS[i.dataset.campo].rot)));
@@ -5755,6 +5797,7 @@
       return falta;
     }
     function atLinhas() {
+      if (ngCtx === 'desbloqueios') return [AT_COL_DESBLOQUEIO.map(([, k]) => ngValor(k))];
       if (ngCtx === 'renegociacao') return atPlano.map(l => AT_COL_RENEG.map(([, k]) => {
         if (k.startsWith('t:')) return atTexto(k.slice(2));
         if (k === 'p:valor') return ngReais(l.valor);
@@ -5767,6 +5810,10 @@
     $('#mf-at-copiar').onclick = () => {
       const falta = atValidar();
       if (falta.length) return msg('Preencha antes de copiar:\n- ' + falta.join('\n- '));
+      if (ngCtx === 'desbloqueios') {
+        GM_setClipboard(textoTab(atLinhas()), 'text');
+        return msg('Linha copiada (' + AT_COL_DESBLOQUEIO.length + ' colunas, Proposta → Observação). Cole na coluna Proposta da aba Desbloqueios. Campos vazios vão em branco.');
+      }
       if (ngCtx === 'renegociacao' && !atPlano.length) return msg('Monte as parcelas (bloco Renegociação) antes de copiar.');
       if (!atTexto('pedido') && !atTexto('acordo') && !ngGerarTextos(true) && !confirm('Os textos "Pedido" e "Acordo Realizado" não puderam ser gerados (faltam dados do acordo). Copiar a linha com eles em branco?')) return;
       const linhas = atLinhas();
@@ -5821,6 +5868,39 @@
       msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + n + ' campo(s)). O número de contato não vem da proposta: digite o que o cliente usou.');
     }
     $('#mf-at-aplicar').onclick = atAplicarCliente;
+
+    /* ---- Desbloqueios: renderização e handlers ---- */
+    function atDesbBloco(campos) {
+      const g = $('#mf-at-desb-campos'); g.innerHTML = '';
+      const obrig = ['proposta', 'nome'];
+      campos.forEach(c => g.appendChild(ngCampoEl(c, NG_CAMPOS[c].rot, obrig.includes(c))));
+    }
+    function atDesbAplicarCliente() {
+      const st = bsGet();
+      if (!st || !st.cliente) return msg('Busque um cliente antes (campo "Buscar cliente" no topo).');
+      const c = st.cliente.campos;
+      const novos = { nome: c.nome, proposta: c.proposta, cpf: c.cpf, imei: c.imei, data_proposta: atIso(c.dataProposta), filial: c.filial, atendente: c.vendedor };
+      const conflitos = Object.entries(novos).filter(([k, v]) => v && String(ngValores[k] || '').trim() && String(ngValores[k]).trim() !== String(v));
+      if (conflitos.length && !confirm(conflitos.length + ' campo(s) já preenchido(s) serão substituídos pelos dados do cliente atual. Continuar?')) return;
+      let n = 0;
+      Object.entries(novos).forEach(([k, v]) => { if (v) { ngValores[k] = v; n++; } });
+      atDesenhar();
+      mostrarAba('neg');
+      msg('Dados de ' + (c.nome || 'cliente') + ' aplicados (' + n + ' campo(s)).');
+    }
+    $('#mf-at-desb-aplicar').onclick = atDesbAplicarCliente;
+    $('#mf-at-desb-copiar').onclick = () => {
+      const falta = atValidar();
+      if (falta.length) return msg('Preencha antes de copiar:\n- ' + falta.join('\n- '));
+      GM_setClipboard(textoTab(atLinhas()), 'text');
+      msg('Linha copiada (' + AT_COL_DESBLOQUEIO.length + ' colunas, Proposta → Observação). Cole na coluna Proposta da aba Desbloqueios. Campos vazios vão em branco.');
+    };
+    $('#mf-at-desb-novo').onclick = () => {
+      const tem = AT_DESBLOQUEIO.some(k => String(ngValores[k] || '').trim());
+      if (tem && !confirm('Começar um novo desbloqueio? Os dados digitados serão apagados.')) return;
+      AT_DESBLOQUEIO.forEach(k => delete ngValores[k]);
+      atDesenhar(); msg('Pronto para um novo desbloqueio.');
+    };
     atDesenhar();
 
 

@@ -81,7 +81,21 @@ Pelo CPF, a conta da Mesa faz a consulta inteira: pesquisa, `BuscaCartao`, `Cent
 
 ## Posição Geral
 
-Quando `cacPosicaoGeral = true`, o módulo abre a Posição Geral do cliente. O sistema do ER registra um protocolo de visualização automaticamente ao abrir essa tela (comportamento nativo do ER, não do script).
+Quando `cacPosicaoGeral = true` (padrão), o módulo lê a Posição Geral do cliente (`POST /CentralAtendimento/CentralInicio`), que traz a Filial (Origem), a data de adesão e a lista de contratos. Desligado, lê os contratos por `GET /CentralAtendimento/CentralCompras` e a Filial pode ficar N/A.
+
+## Protocolo de atendimento
+
+Analisado em 11 e 12/11/2026 com gravações (HAR) da tela do CAC:
+
+- **O protocolo nasce no `BuscaCartao`**, não na Posição Geral. A resposta de `GET /CentralAtendimento/BuscaCartao` já traz `lngProtocoloAtendimento`; a tela mostra esse número no botão azul "Protocolo: N" (rodapé da janela do cliente) e o repassa ao `CentralInicio`.
+- **Cada `BuscaCartao` gera um número novo**, inclusive ao abrir o mesmo cliente duas vezes seguidas. A numeração é única para todo o ER (colegas usando o CAC também consomem números).
+- **A tela do ER encerra o protocolo** ao fechar a janela do cliente (`GET /CentralAtendimento/CentralFinalizaProtocolo?strProtocolo=N`).
+- **O painel chama o `BuscaCartao` em toda consulta** (com a Posição Geral ligada ou desligada), com a mesma requisição da tela, e **nunca encerra o protocolo**. Conclusão (por equivalência das requisições, ainda não testada isoladamente pelo painel): cada consulta CAC pelo painel deixa um protocolo de atendimento aberto no ER.
+- O botão azul "Protocolo" abre o formulário de envio do protocolo ao cliente (`CentralEnvioProtocolo`); o envio em si é `EfetivaEnvioProtocolo` (SMS ou e-mail). O painel não usa nenhum dos dois.
+
+Tratamento: em decisão (ver `PRIORIDADES.md`). Encerrar o protocolo pelo painel altera dados no ER e exige autorização explícita.
+
+**Teste de confirmação pelo painel:** no ER, abrir um cliente no CAC e anotar N; fechar. Em seguida fazer uma consulta CAC pelo painel. Em seguida abrir um cliente no ER: N + 2 confirma. Fazer tudo em menos de um minuto para evitar números consumidos por colegas.
 
 ---
 

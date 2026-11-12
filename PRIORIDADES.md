@@ -454,6 +454,20 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
+- [ ] **P4.13 — Testes automatizados e cobertura mínima no CI (evolução futura)**
+
+  **Status:** Ideia registrada (12/11/2026)  
+  **Objetivo:** bloquear o merge quando algum teste falhar e, depois, exigir cobertura mínima (ex.: 80%) nas partes testáveis do script.  
+  **Como (em etapas):**
+  1. Estrutura de testes em Node (sem build) e exemplos de resposta do ER/motor tirados dos HARs da P0, com dados pessoais trocados por fictícios.
+  2. Testes dos leitores da camada `er` (P0) e de cálculos puros já existentes (vencimentos, conversão de valores).
+  3. `validate-pr.yml` rodando os testes também em PRs para `development` (Categoria B: workflow).
+  4. Cobertura mínima aplicada só à seção da camada `er` e ao que for extraído para ela (80% do arquivo inteiro não é realista: boa parte é interface e cliques no ER).  
+  **Dependências:** P0.3 (camada `er` no nível de cima do script, testável); proteção de branch com o teste como verificação obrigatória (configuração do proprietário, ver `.github/SETUP.md`).  
+  **Observações:** o script precisa de um gancho mínimo que exponha a camada só quando roda nos testes (nunca no navegador).
+
+---
+
 - [ ] **P4.11 — API oficial do ER e site próprio (evolução futura)**
 
   **Status:** Ideia registrada (11/11/2026) — não iniciar antes de P0 concluída  

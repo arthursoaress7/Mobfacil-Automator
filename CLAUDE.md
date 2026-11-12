@@ -32,7 +32,7 @@
 - **Não edite `automacaomobfacil.user.js`** — é o nome antigo, congelado na 13.27.2 só para migrar instalações antigas; o código vai em `paymobifin-assistente.user.js`
 - **Nunca commitar em `main` ou `development` diretamente** — sempre via branch + PR
 - **Branch temporária parte de `development`**, não de `main`
-- **PR de trabalho vai para `development`** — `development` → `main` é PR separado, após testes
+- **PR de trabalho vai para `development`** — a `main` recebe só pelo PR de release (`release/proxima`), integrado pelo responsável
 - **Não sobrescreva dados de armazenamento existentes** — siga o padrão de `salvar()`
 - **Dentro do painel, use `$()`, não `document.querySelector()`**
 - **Timeouts apenas em `CONFIG`** — nunca valores hard-coded fora dele
@@ -54,8 +54,9 @@ git add <arquivos>
 git commit -m "tipo: descrição"
 git push -u origin tipo/descricao-curta
 
-# abrir PR → development (não main)
-# development → main só após testes, por PR manual
+# abrir PR → development (não main): a validação faz o merge automático (Categoria A)
+# a main recebe pelo PR de release (release/proxima), integrado pelo responsável
+# não mudar @version nas branches de tarefa: o PR de release calcula a versão
 ```
 
 ---

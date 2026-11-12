@@ -187,4 +187,38 @@ Base: `https://paymobi.ercard.com.br:9191/ErCardWeb/` (o ER usa barra dupla: `Er
 | `/VendasLojistas/PreencheProdutosUsuario` | POST | — | **JSON** `[{ Produto, Abreviatura, Nome, Segmento... }]` |
 | `/Notificacoes/VerificaQtdNotificacoes` | GET | — | Texto com o número de notificações (consulta periódica da tela) |
 
-Ainda não mapeadas com HAR: Fila de Pendências, Fila de Propostas, Central de Atendimento (CAC).
+### Fila de Propostas (HAR de 11/11/2026)
+
+| Rota | Método | Parâmetros | Resposta |
+|---|---|---|---|
+| `/FilaPropostas/FilaPropostas` | POST | — | HTML da tela |
+| `/FilaPropostas/PreencheProdutosUsuario` | POST | — | **JSON** `[{ Produto, Abreviatura, Nome, Segmento... }]` |
+| `/FilaPropostas/FilaPropostasLista` | GET | `strDados` = JSON com os filtros (`strDataInicial`, `strDataFinal`, `strLojista`, `strLoja`, `strProduto`, `strSituacao`, `strSituacaoDocumentos`, `strPagamento`, `strStatusAssinatura`, `strTipoData`, `strAnalista`...) | HTML com a lista |
+| `/FilaPropostas/DetalheProposta` | GET | `lngProposta` | HTML do detalhe |
+
+O código dos CCBs hoje aciona `DetalhePropostaCadastro` e `DetalhePropostaDocumentos` pelos objetos da página (`PAGINA.objFilaPropostas...`) e espera a resposta (`aguardarResposta`). Essas rotas não apareceram neste HAR: mapear numa leitura de CCB.
+
+### Central de Atendimento — CAC (HAR de 11/11/2026, pesquisa pelo CPF)
+
+Sequência da tela do ER ao abrir um cliente:
+
+| Ordem | Rota | Método | Parâmetros | Resposta |
+|---|---|---|---|---|
+| 1 | `/CentralAtendimento/CentralAtendimento` | POST | — | HTML da tela |
+| 2 | `/CentralAtendimento/CentralPesquisaCliente` | GET | `strCliente` (CPF) | HTML com a tabela de clientes |
+| 3 | `/CentralAtendimento/BuscaCartao` | GET | `strProduto`, `strCartao` | **JSON** (lista com 1 objeto): `strResultado`, `strCpfCnpjCliente`, `strNomeCliente`, `strSituacaoCartao`, limites, `lngProtocoloAtendimento`, `strValidarDadosCliente`, `lstProdutos`... |
+| 4 | `/CentralAtendimento/CentralInicio` | POST | `strProduto`, `strCartao`, `lngProtocolo` | HTML da **Posição Geral** (dados do cliente, score, contratos) |
+| 5 | `/CentralAtendimento/DetalheCompra` | GET | `strAutorizacao` | HTML do contrato (parcelas) |
+| 6 | `/CentralAtendimento/CentralPagamentos` | GET | `strProduto`, `strCartao`, `lngAutorizacao` | HTML dos pagamentos do contrato |
+| 7 | `/Dataprev/Consulta` | GET | — | HTML (carregado junto com o contrato) |
+| 8 | `/Dataprev/ConsultaContrato` | POST | `lngProposta`, `lngAutorizacao`, `strContrato` | **JSON** `{ Mensagem }` |
+| 9 | `/CentralAtendimento/CentralFinalizaProtocolo` | GET | `strProtocolo` | HTML (encerra o atendimento) |
+
+**Protocolo de atendimento (atenção à regra "somente leitura"):**
+- `BuscaCartao` já devolve um `lngProtocoloAtendimento`, antes de qualquer outra tela. Não está confirmado se o protocolo é criado nessa chamada ou só ao abrir a Posição Geral (`CentralInicio`), como diz `docs/script/07-cac.md`.
+- `CentralFinalizaProtocolo` **altera estado no ER** (encerra o protocolo). A camada `er` não pode chamá-la.
+- O script chama `BuscaCartao` em toda consulta CAC e `CentralInicio` só com `cacPosicaoGeral` ligado. Antes de migrar o CAC (P0.5), confirmar na tela de protocolos do ER se uma consulta só com `BuscaCartao` + `CentralCompras` + `DetalheCompra` gera protocolo.
+
+`CentralCompras` (usada pelo script quando a Posição Geral está desligada) não apareceu neste HAR.
+
+Ainda não mapeadas com HAR: Fila de Pendências (conta master), CAC pela pesquisa por nome (conta master), `DetalhePropostaCadastro`/`DetalhePropostaDocumentos` e `CentralCompras`.

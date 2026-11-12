@@ -86,9 +86,19 @@ jobs:
           if [ -n "$N" ]; then
             gh pr edit "$N" --title "$TITULO" --body-file /tmp/release_corpo.md
             echo "PR #$N atualizado: $TITULO"
-          else
-            gh pr create --head "$RAMO" --base main --title "$TITULO" --body-file /tmp/release_corpo.md
+          elif gh pr create --head "$RAMO" --base main --title "$TITULO" --body-file /tmp/release_corpo.md; then
             echo "PR de release criado: $TITULO"
+          else
+            # sem permissão para o Actions criar PRs (configuração do proprietário pendente):
+            # a branch já está publicada; o PR é aberto à mão
+            echo "::warning::O GitHub não permitiu ao Actions abrir o PR. Abra à mão: release/proxima -> main, título '$TITULO'."
+            {
+              echo "## ⚠️ Abrir o PR de release à mão"
+              echo ""
+              echo "A branch \`release/proxima\` está pronta. Abra o PR para a \`main\` com o título **$TITULO**:"
+              echo "https://github.com/${{ github.repository }}/compare/main...release/proxima?expand=1"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
           {
             echo "## PR de release"

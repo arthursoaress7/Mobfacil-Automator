@@ -96,7 +96,15 @@ jobs:
             echo "PR de sincronização já aberto: #$N"
             exit 0
           fi
-          gh pr create --head main --base development \
+          if gh pr create --head main --base development \
             --title "chore: sincroniza main na development" \
-            --body "Gerado automaticamente depois do merge na main, para a development voltar a conter tudo o que está na main (ex.: o commit do PR de release). Integrado sozinho pela validação (merge commit)."
-          echo "## PR de sincronização aberto" >> "$GITHUB_STEP_SUMMARY"
+            --body "Gerado automaticamente depois do merge na main, para a development voltar a conter tudo o que está na main (ex.: o commit do PR de release). Integrado sozinho pela validação (merge commit)."; then
+            echo "## PR de sincronização aberto" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::O GitHub não permitiu ao Actions abrir o PR de sincronização. Abra à mão: main -> development."
+            {
+              echo "## ⚠️ Abrir o PR de sincronização à mão"
+              echo ""
+              echo "https://github.com/${{ github.repository }}/compare/development...main?expand=1 — título: **chore: sincroniza main na development**"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

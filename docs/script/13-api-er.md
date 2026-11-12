@@ -217,9 +217,9 @@ Sequência da tela do ER ao abrir um cliente:
 | 9 | `/CentralAtendimento/CentralFinalizaProtocolo` | GET | `strProtocolo` | HTML (encerra o atendimento) |
 
 **Protocolo de atendimento (atenção à regra "somente leitura"):**
-- **O número do protocolo nasce no `BuscaCartao`**: a resposta já traz `lngProtocoloAtendimento`, que a tela repassa ao `CentralInicio`. Nos HARs de 11/11 (01h53) e 12/11 (10h39) os números foram consecutivos (`…253` e `…254`), um por `BuscaCartao`. Isso indica que **cada `BuscaCartao` abre um protocolo de atendimento**, e não só a Posição Geral, como diz `docs/script/07-cac.md`. Falta confirmar na tela de protocolos do ER (ver `PRIORIDADES.md`, P4.12).
+- **O número do protocolo nasce no `BuscaCartao`**: a resposta já traz `lngProtocoloAtendimento`, que a tela repassa ao `CentralInicio`. Nos HARs de 11/11 (01h53) e 12/11 (10h39) os números foram consecutivos (`…253` e `…254`), um por `BuscaCartao`. Em 12/11/2026, o mesmo cliente aberto duas vezes seguidas na tela gerou `…255` e `…256`. **Cada `BuscaCartao` abre um protocolo de atendimento**; a tela o encerra ao fechar a janela, o painel não (ver `PRIORIDADES.md`, P4.12, e `docs/script/07-cac.md`).
 - `CentralFinalizaProtocolo` **altera estado no ER** (encerra o protocolo). A camada `er` não pode chamá-la.
-- O script chama `BuscaCartao` em toda consulta CAC e `CentralInicio` só com `cacPosicaoGeral` ligado. Antes de migrar o CAC (P0.5), confirmar na tela de protocolos do ER se uma consulta só com `BuscaCartao` + `CentralCompras` + `DetalheCompra` gera protocolo.
+- O script chama `BuscaCartao` em toda consulta CAC e `CentralInicio` só com `cacPosicaoGeral` ligado. Desligar a Posição Geral **não** evita o protocolo. A migração do CAC (P0.5) deve seguir o tratamento decidido no P4.12; o leitor `BuscaCartao` da camada `er` precisa ser marcado como "abre protocolo".
 
 `CentralCompras` (usada pelo script quando a Posição Geral está desligada) não apareceu neste HAR.
 

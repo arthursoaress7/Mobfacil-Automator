@@ -436,10 +436,19 @@ O módulo de geração de acordos (`at*`) já possui:
 
 - [ ] **P4.12 — Investigar protocolos de atendimento abertos pela consulta CAC**
 
-  **Status:** Pendente (identificado em 12/11/2026 no mapeamento da P0)  
-  **Problema:** nos HARs da P0, o número do protocolo de atendimento já vem na resposta de `/CentralAtendimento/BuscaCartao`, antes da Posição Geral, e os números são consecutivos a cada consulta. A consulta CAC do painel chama `BuscaCartao` em **toda** consulta (`cacAbrir`) e nunca chama `CentralFinalizaProtocolo`. Se cada `BuscaCartao` abre um protocolo, o painel pode estar deixando protocolos de atendimento abertos no ER a cada consulta.  
-  **Como verificar:** anotar o número do último protocolo; fazer uma consulta CAC pelo painel com "Posição Geral" desligada; ver na tela de protocolos do ER se surgiu um protocolo novo e em que situação ficou.  
-  **Critérios de aceite:** comportamento confirmado e documentado em `docs/script/07-cac.md`; se gerar protocolo, decidir com o responsável o tratamento (aviso, outra rota ou finalização) antes de qualquer mudança.  
+  **Status:** Diagnóstico concluído (12/11/2026); tratamento aguardando decisão do responsável. Dica da opção e `docs/script/07-cac.md` corrigidos no PR #42.  
+  **Diagnóstico (HARs de 11 e 12/11/2026):**
+  - O número do protocolo nasce no `BuscaCartao` (a tela o mostra no botão azul "Protocolo: N" e o repassa ao `CentralInicio`).
+  - Cada `BuscaCartao` gera um número novo, inclusive para o mesmo cliente aberto duas vezes seguidas (`…255` e `…256`). A numeração é única para todo o ER.
+  - A tela do ER encerra o protocolo ao fechar a janela do cliente (`CentralFinalizaProtocolo`).
+  - O painel chama `BuscaCartao` em toda consulta (`cacAbrir`), com a mesma requisição da tela, e nunca encerra o protocolo.
+  - **Conclusão:** cada consulta CAC pelo painel deixa um protocolo de atendimento aberto no ER, com a opção "Abrir a Posição Geral" ligada ou desligada. Obtida por equivalência das requisições; o teste isolado pelo painel ficou inconclusivo porque um colega usou o CAC durante o teste.  
+  **Teste de confirmação (opcional):** no ER, abrir um cliente no CAC e anotar N; fechar; logo em seguida, uma consulta CAC pelo painel; logo em seguida, abrir um cliente no ER. N + 2 confirma. Tudo em menos de um minuto.  
+  **Decisão pendente (tratamento):**
+  1. Só avisar a equipe e manter como está.
+  2. O painel encerrar o protocolo ao fim da consulta, como a tela faz (Categoria B: altera dados no ER).
+  3. Procurar uma rota do CAC que traga os dados sem abrir protocolo (nenhuma encontrada nos HARs).  
+  **Critérios de aceite:** tratamento escolhido pelo responsável, implementado (se houver) e documentado em `docs/script/07-cac.md`.  
   **Observações:** chamar `CentralFinalizaProtocolo` altera dados no ER: só com autorização explícita.
 
 ---

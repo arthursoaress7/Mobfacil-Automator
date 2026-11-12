@@ -5,6 +5,29 @@
 
 ---
 
+## Camada `er` (P0.3)
+
+Seção "ACESSO AO ER" no nível de cima de `paymobifin-assistente.user.js`. Uso:
+
+```js
+const r = await erBuscar('pendencias');                    // { ok: true, dados: [{ aut, pend, nome, data }] }
+if (!r.ok) { /* r.motivo: sessao | conta (r.precisa) | tempo | rede | http | estrutura | sem_base | bloqueada | cancelada */ }
+const conta = await erConta();                             // 'mesa' | 'master' | null
+if (erModuloAtivo('pd')) { /* caminho novo */ }            // GM erModulos; padrão: tudo desligado
+```
+
+| Rota (nome) | Caminho | Conta | Dados |
+|---|---|---|---|
+| `mesasUsuario` | `POST /MesaCredito/PreencheMesasUsuario` | qualquer | `[{ mesa, descricao }]` (`[]` na master) |
+| `pendencias` | `GET /FilaPendencias/FilaPendenciasLista` | master | `[{ aut, pend, nome, data }]` (mesmo resultado de `pdLista`) |
+| `pendenciaDetalhe` | `GET /FilaPendencias/DetalheCompra` (`aut`, `pend`) | master | `{ 'nro da proposta': ..., 'usuário': ..., ... }` (pares rótulo/valor) |
+
+Bloqueadas: `CentralFinalizaProtocolo`, `CentralEnvioProtocolo`, `EfetivaEnvioProtocolo`, `CentralProtocoloSms`, `CentralAdesao*` e rotas de login/logout. Detalhes do desenho em [`docs/PROPOSTA-CAMADA-ER.md`](../PROPOSTA-CAMADA-ER.md).
+
+**Teste manual no ER:** no console, `sessionStorage.setItem('mfErTeste', '1')` e recarregue a página. Depois: `await PaymobiEr.conta()`, `await PaymobiEr.buscar('pendencias')`, `PaymobiEr.falhas()`.
+
+---
+
 ## Autenticação
 
 | Sistema | Como autentica | Fonte |

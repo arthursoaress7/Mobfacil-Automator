@@ -1,6 +1,6 @@
 # Proposta P0.2 — Camada de acesso ao ER (`er`)
 
-> **Status:** **aprovada pelo responsável em 12/11/2026** (todas as decisões da seção 12). Implementação: P0.3.
+> **Status:** **aprovada pelo responsável em 12/11/2026** (todas as decisões da seção 12). Implementação: P0.3 (ver "Ajustes na implementação", no fim).
 > Base: código v13.29.0 e mapeamento em [`docs/script/13-api-er.md`](./script/13-api-er.md). Plano geral em [`docs/PLANO-API-ER.md`](./PLANO-API-ER.md).
 > Esta proposta não altera código. A implementação é a P0.3, só depois da aprovação.
 
@@ -208,3 +208,20 @@ Ganho: sem cliques, sem espera de animação, sem plano B da pesquisa. A página
 | 6 | Chaves novas | `erModulos` e `erFalhas` |
 | 7 | CAC | Migrar mantendo o comportamento atual até a decisão do P4.12 |
 | 8 | Ordem | P0.3 camada base → P0.4 piloto Pendências → motor (P0.6) logo depois, por ser o maior ganho |
+
+---
+
+## Ajustes na implementação (P0.3, 12/11/2026)
+
+Dois pontos da seção 11 foram feitos de forma mais incremental, sem mudar as decisões aprovadas:
+
+1. **Rotas entram com a migração de cada módulo.** A P0.3 registra só `mesasUsuario` (identificar a conta) e as duas rotas do piloto (`pendencias`, `pendenciaDetalhe`). As demais rotas da tabela da seção 4 entram no PR que migra o módulo correspondente, com os testes da rota. Motivo: evitar leitores copiados que ninguém usa nem testa, e manter um único lugar de leitura por rota durante a migração.
+2. **A seção "Acesso ao ER (teste)" em Configurações entra com o piloto (P0.4).** Sem módulo migrado, ela não teria nenhuma opção. A chave `erModulos` já existe em `PADRAO` (tudo desligado).
+
+Acréscimos:
+- Motivos `cancelada` (o módulo cancelou o lote pelo `sinal`) e `rota_desconhecida`.
+- `sessao`, `conta` e `cancelada` não entram em `erFalhas` nem geram aviso: são situações normais, tratadas pelo módulo.
+- Aviso: `console.warn('[PaymobiFin] er', ...)` e o evento `mf-er-aviso` na janela, que o painel poderá mostrar no piloto.
+- Teste manual sem alterar o script: no console do ER, `sessionStorage.setItem('mfErTeste', '1')` e recarregar a página expõe `PaymobiEr.buscar(nome, params)`, `.conta()`, `.rotas()` e `.falhas()` até a aba ser fechada (só leitura).
+- `CONFIG.ER_FALHAS_DIAS` (14): dias de histórico de `erFalhas`.
+

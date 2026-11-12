@@ -22,6 +22,12 @@ if (erModuloAtivo('pd')) { /* caminho novo */ }            // GM erModulos; padr
 | `pendencias` | `GET /FilaPendencias/FilaPendenciasLista` | master | `[{ aut, pend, nome, data }]` (mesmo resultado de `pdLista`) |
 | `pendenciaDetalhe` | `GET /FilaPendencias/DetalheCompra` (`aut`, `pend`) | master | `{ 'nro da proposta': ..., 'usuário': ..., ... }` (pares rótulo/valor) |
 
+**Módulos migrados (usam a camada quando ligados em Configurações > Acesso ao ER):**
+
+| Módulo | Chave em `erModulos` | Rotas | Plano B | Desde |
+|---|---|---|---|---|
+| Relatório de Pendências (`pd`) | `pd` (e `pdComparar` para comparar) | `pendencias`, `pendenciaDetalhe` | `pdLista`, `pdDetalhe` | P0.4 |
+
 Bloqueadas: `CentralFinalizaProtocolo`, `CentralEnvioProtocolo`, `EfetivaEnvioProtocolo`, `CentralProtocoloSms`, `CentralAdesao*` e rotas de login/logout. Detalhes do desenho em [`docs/PROPOSTA-CAMADA-ER.md`](../PROPOSTA-CAMADA-ER.md).
 
 **Teste manual no ER:** no console, `sessionStorage.setItem('mfErTeste', '1')` e recarregue a página (aparece "[PaymobiFin] er teste ativo"). Depois: `dispatchEvent(new CustomEvent('mf-er-teste', { detail: 'conta' }))` (ou `'pendencias'`, `'mesasUsuario'`, `'falhas'`, `'rotas'`); o resultado sai no console como "[PaymobiFin] er teste". É por evento porque o Tampermonkey pode isolar o script da página, e um objeto criado na janela não ficaria visível no console.

@@ -79,6 +79,7 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
   **Objetivo:** camada funcionando sem nenhum módulo migrado; nenhum comportamento existente muda.
 
 - [ ] **P0.4 — Piloto: Relatório de Pendências**  
+  **Status:** Implementado na sub-branch `feature/er-pendencias` (12/11/2026), em revisão. Opção em Configurações > Acesso ao ER (desligada), plano B e modo comparação. 18 testes locais: mesma lista, mesmos detalhes e mesmas mensagens do método atual. Falta o teste no ER.  
   **Objetivo:** `pd` passa a usar a camada. Texto gerado idêntico ao atual (propostas 5017 e 4959 e fila de um dia real).
 
 - [ ] **P0.5 — Migrar as demais rotas HTML**  

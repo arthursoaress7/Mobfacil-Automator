@@ -2319,6 +2319,11 @@
             <label class="mf-opc"><input type="checkbox" id="mf-cac-voltar"><span><b>Voltar para a conta anterior depois</b></span></label>
             <label class="mf-opc" title="Toda consulta CAC (na tela do ER ou pelo painel) abre um protocolo de atendimento no ER, com esta opção ligada ou desligada. Ligado: lê também a Posição Geral, que traz a Filial (Origem). Desligado: lê só os contratos (a Filial pode ficar N/A)."><input type="checkbox" id="mf-cac-posicao"><span><b>Abrir a Posição Geral</b><small>Traz a Filial (Origem).</small></span></label>
           </details>
+          <details class="mf-grupo" data-grupo="er"><summary>Acesso ao ER (teste)</summary>
+            <div class="mf-info" style="margin-bottom:4px">Leitura dos dados do ER pela camada nova (P0). Desligado: usa o método atual.</div>
+            <label class="mf-opc" title="O Relatório de Pendências lê a Fila de Pendências pela camada nova. Se a camada não reconhecer a resposta do ER, usa o método atual sozinho."><input type="checkbox" id="mf-er-pd"><span><b>Relatório de Pendências pela camada nova</b><small>O texto gerado é o mesmo.</small></span></label>
+            <label class="mf-opc" title="Gera também pelo método atual e avisa no status se algo ficar diferente. Faz o dobro de consultas ao ER."><input type="checkbox" id="mf-er-pd-comparar"><span><b>Comparar com o método atual</b><small>Para testar: faz o dobro de consultas.</small></span></label>
+          </details>
           <details class="mf-grupo" data-grupo="negociacoes"><summary>Gerador de negociações</summary>
             <div class="mf-info" style="margin-bottom:4px">Modelo de texto</div>
             <select id="mf-ng-cfg-modelo"></select>
@@ -5538,6 +5543,17 @@
     ligarOpcao('#mf-cac-troca', 'cacTrocaAuto');
     ligarOpcao('#mf-cac-voltar', 'cacVoltarConta');
     ligarOpcao('#mf-cac-posicao', 'cacPosicaoGeral');
+    // Acesso ao ER (teste): cada opção liga um módulo em erModulos (objeto); comparar só vale com o módulo ligado
+    const erCfgSync = () => { const v = cfg('erModulos') || {}; $('#mf-er-pd').checked = !!v.pd; $('#mf-er-pd-comparar').checked = !!v.pdComparar; $('#mf-er-pd-comparar').disabled = !v.pd; };
+    const ligarErModulo = (sel, mod) => $(sel).addEventListener('change', () => {
+      const v = Object.assign({}, cfg('erModulos') || {});
+      if ($(sel).checked) v[mod] = true; else delete v[mod];
+      if (!v.pd) delete v.pdComparar;
+      GM_setValue('erModulos', v); erCfgSync();
+    });
+    ligarErModulo('#mf-er-pd', 'pd');
+    ligarErModulo('#mf-er-pd-comparar', 'pdComparar');
+    erCfgSync();
     desenharMaster();
     cacRetomar();
 
@@ -5603,10 +5619,46 @@
     async function pdDetalhe(l) {
       const r = await cacReq('/FilaPendencias/DetalheCompra', { strAutorizacao: l.aut, strPendencia: (l.pend.match(/\d+/) || [''])[0], strTipoConsulta: 'P' });
       if (r.erro || !r.ok || ehLogin(r.texto)) return null;
-      const d = pdDl(cacDoc(r.texto));
-      return { proposta: (d['nro da proposta'] || '').replace(/\D/g, ''), vendedor: pdVendedor(d['usuário']), loja: pdLoja(d['lojista'], d['loja']),
-        nome: (d['nome'] || '').replace(/\s*\(\d+\)\s*$/, '').trim(), data: d['data da operação'] || '' };
+      return pdDetalheDe(pdDl(cacDoc(r.texto)));
     }
+    // pares rótulo/valor do detalhe -> campos do relatório (o mesmo para o método atual e para a camada er)
+    const pdDetalheDe = d => ({ proposta: (d['nro da proposta'] || '').replace(/\D/g, ''), vendedor: pdVendedor(d['usuário']), loja: pdLoja(d['lojista'], d['loja']),
+      nome: (d['nome'] || '').replace(/\s*\(\d+\)\s*$/, '').trim(), data: d['data da operação'] || '' });
+
+    /* P0.4 — Relatório de Pendências pela camada er (Configurações > Acesso ao ER, opção desligada por padrão).
+       Mesma saída de pdLista/pdDetalhe. Se a camada não reconhecer a resposta do ER (motivo 'estrutura'),
+       usa o método atual (plano B) e o status avisa. */
+    let pdPlanoB = false;
+    const pdCamada = () => erModuloAtivo('pd');
+    async function pdListaEr() {
+      const r = await erBuscar('pendencias', { desde: PD_DESDE, ate: pdHoje() });
+      if (r.ok) return { linhas: r.dados };
+      if (r.motivo === 'sessao') return { erro: 'sessão do ER expirada: entre de novo' };
+      if (r.motivo === 'tempo' || r.motivo === 'rede') return { erro: 'o ER não respondeu (' + (r.motivo === 'tempo' ? 'tempo esgotado' : 'erro de rede') + ')' };
+      if (r.motivo === 'conta') return r.status === 401 || r.status === 403
+        ? { erro: 'o ER respondeu com erro (HTTP ' + r.status + ')', semAcesso: true }
+        : { erro: 'a resposta não trouxe a Fila de Pendências', semAcesso: true };
+      if (r.motivo === 'http') return { erro: 'o ER respondeu com erro (HTTP ' + r.status + ')', semAcesso: false };
+      pdPlanoB = true;
+      return pdLista();
+    }
+    async function pdDetalheEr(l) {
+      const r = await erBuscar('pendenciaDetalhe', { aut: l.aut, pend: (l.pend.match(/\d+/) || [''])[0] });
+      if (r.ok) return pdDetalheDe(r.dados);
+      if (r.motivo === 'estrutura') { pdPlanoB = true; return pdDetalhe(l); }
+      return null;
+    }
+    const pdListaUsar = () => (pdCamada() ? pdListaEr() : pdLista());
+    const pdDetalheUsar = l => (pdCamada() ? pdDetalheEr(l) : pdDetalhe(l));
+    // modo comparação (teste): lê também pelo método atual e conta as diferenças (no console, só autorização e nome do campo)
+    const pdComparando = () => pdCamada() && erModuloAtivo('pdComparar');
+    const pdNotaCamada = (comparar, difs) => {
+      if (!pdCamada()) return '';
+      let t = ' Lido pela camada nova' + (pdPlanoB ? ' (parte pelo método atual: a camada não reconheceu a resposta do ER)' : '') + '.';
+      if (comparar) t += difs.length ? ' Comparação: ' + difs.length + ' diferença(s) com o método atual (autorizações no console).' : ' Comparação: igual ao método atual.';
+      return t;
+    };
+    const pdDifCampos = (a, b) => Object.keys(Object.assign({}, a, b)).filter(k => String((a || {})[k] ?? '') !== String((b || {})[k] ?? ''));
     function pdMostrar(st) {
       const res = $('#mf-pd-res');
       res.style.display = st && st.texto ? '' : 'none';
@@ -5628,9 +5680,16 @@
         return trocarPara(master);
       }
       pdRodando = true; $('#mf-pd-gerar').disabled = true;
+      pdPlanoB = false;
+      const comparar = pdComparando(), difs = [];
       try {
         pdStatus('Lendo a Fila de Pendências...');
-        const lista = await pdLista();
+        const lista = await pdListaUsar();
+        if (comparar && !lista.erro) {
+          const antiga = await pdLista();
+          const chave = x => (x.linhas || []).map(l => [l.aut, l.pend, l.nome, l.data].join('|')).sort().join('\n');
+          if (antiga.erro || chave(antiga) !== chave(lista)) difs.push('lista');
+        }
         if (lista.erro) {
           const dica = lista.semAcesso && !ehMaster ? (master ? ' Entre na conta master (' + rotuloConta(master) + ') e gere de novo.' : ' As pendências ficam na conta master: escolha a conta master em Configurações > Consulta CAC ou entre nela e gere de novo.') : '';
           return pdStatus('Não deu para gerar: ' + lista.erro + '.' + dica);
@@ -5646,15 +5705,20 @@
         let semDetalhe = 0;
         for (const [i, l] of linhas.entries()) {
           pdStatus('Lendo o detalhe ' + (i + 1) + ' de ' + linhas.length + ' (autorização ' + l.aut + ')...');
-          const d = await pdDetalhe(l);
+          const d = await pdDetalheUsar(l);
           if (!d) semDetalhe++;
+          if (comparar) {
+            const dAntigo = await pdDetalhe(l);
+            const campos = pdDifCampos(d, dAntigo);
+            if (campos.length) { difs.push(l.aut); console.warn('[PaymobiFin] pendências: comparação diferente na autorização', l.aut, 'campos:', campos.join(', ')); }
+          }
           blocos.push(['Proposta: ' + ((d && d.proposta) || 'N/A'), 'Pendência: ' + (l.pend || 'N/A'), 'Cliente: ' + (l.nome || (d && d.nome) || 'N/A'),
             'Vendedor: ' + ((d && d.vendedor) || 'N/A'), 'Autorização: ' + l.aut, 'Data: ' + (l.data || (d && d.data) || 'N/A'), 'Loja: ' + ((d && d.loja) || 'N/A')].join('\n'));
           if (i < linhas.length - 1) await sleep(CONFIG.PD_PAUSA_MS);
         }
         const st = { etapa: 'resultado', texto: blocos.join('\n' + PD_SEPARADOR + '\n'), qtd: linhas.length, em: Date.now() };
         pdSSSet(st); pdMostrar(st);
-        pdStatus(linhas.length + ' proposta(s) com pendência em aberto. ' + (semDetalhe ? semDetalhe + ' sem o detalhe (proposta, vendedor e loja ficaram N/A). ' : '') + 'Gerado às ' + new Date().toLocaleTimeString().slice(0, 5) + '.');
+        pdStatus(linhas.length + ' proposta(s) com pendência em aberto. ' + (semDetalhe ? semDetalhe + ' sem o detalhe (proposta, vendedor e loja ficaram N/A). ' : '') + 'Gerado às ' + new Date().toLocaleTimeString().slice(0, 5) + '.' + pdNotaCamada(comparar, difs));
       } catch (e) {
         console.warn('[PaymobiFin] pendências', e && e.message);
         pdStatus('Não deu para gerar: ' + (e && e.message || 'erro inesperado') + '.');

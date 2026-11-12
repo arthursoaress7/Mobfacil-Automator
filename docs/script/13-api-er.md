@@ -27,6 +27,7 @@ if (erModuloAtivo('pd')) { /* caminho novo */ }            // GM erModulos; padr
 | Módulo | Chave em `erModulos` | Rotas | Plano B | Desde |
 |---|---|---|---|---|
 | Relatório de Pendências (`pd`) | `pd` (e `pdComparar` para comparar) | `pendencias`, `pendenciaDetalhe` | `pdLista`, `pdDetalhe` | P0.4 |
+| Coleta do motor (`iniciarMotor`) | `motor` (e `motorComparar`) | `motor` (`POST /api/visualizador`, origem do iframe) | navegação pela árvore | P0.6 |
 
 Bloqueadas: `CentralFinalizaProtocolo`, `CentralEnvioProtocolo`, `EfetivaEnvioProtocolo`, `CentralProtocoloSms`, `CentralAdesao*` e rotas de login/logout. Detalhes do desenho em [`docs/PROPOSTA-CAMADA-ER.md`](../PROPOSTA-CAMADA-ER.md).
 

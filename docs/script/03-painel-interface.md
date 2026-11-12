@@ -172,7 +172,7 @@ A aba de Configurações é montada por `atualizarConfigUI()` e expõe todas as 
 | `cacTrocaAuto` | `true` | Troca para conta master automaticamente na CAC |
 | `cacVoltarConta` | `true` | Volta para conta anterior após CAC |
 | `cacPosicaoGeral` | `true` | Abre Posição Geral na CAC |
-| `erModulos` | `{}` | Acesso ao ER (teste): `pd` = Relatório de Pendências pela camada `er`; `pdComparar` = comparar com o método atual |
+| `erModulos` | `{}` | Acesso ao ER (teste): `pd` = Relatório de Pendências pela camada `er`; `pdComparar` = comparar com o método atual; `motor` = coleta pelo JSON do motor; `motorComparar` = comparar a coleta |
 | `navAuto` | `true` | Navegação automática de tela |
 | `equipeAtiva` | `false` | Compartilhamento com a equipe (Pusher) |
 

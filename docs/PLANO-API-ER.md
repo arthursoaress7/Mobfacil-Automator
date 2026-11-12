@@ -245,4 +245,5 @@ Não há testes automatizados. Em cada fase com código:
 | 2 — Desenho | **Aprovado** (12/11/2026): `docs/PROPOSTA-CAMADA-ER.md` |
 | 3 — Camada base | Implementada em `feature/er-camada-base` (12/11/2026), em revisão |
 | 4 — Piloto Pendências | Implementado em `feature/er-pendencias` (12/11/2026), em revisão |
-| 5 a 9 | Pendente |
+| 6 — Motor sem cliques | Implementado em `feature/er-motor` (12/11/2026), em revisão |
+| 5, 7 a 9 | Pendente |

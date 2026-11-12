@@ -22,6 +22,19 @@ Campos coletados:
 
 ---
 
+## Leitura pelo JSON do motor (P0.6, opcional)
+
+Com **"Coleta do motor pela camada nova"** ligada (Configurações > Acesso ao ER, `erModulos.motor`; desligada por padrão), o `iniciarMotor`, logo depois de "começou" e **antes de qualquer clique**, chama `erBuscar('motor')`:
+
+- `POST /api/visualizador` na mesma origem do iframe, corpo `{ token, flagUltimos: false }`; o token é o caminho do link do iframe (o ER gera um a cada abertura da análise).
+- `motorDadosDeJson(json)` devolve os mesmos campos de `extrair()` (`qtd`, `val`, `score`, `consultas`, `cpf`, `reprov` e, no modo rendas, `rendaBiro`, `rendaInf`, `nome`), com as mesmas prioridades de `extrairDeLista`, a execução mais recente de cada fluxo (como `podarExecucoes`), valores por `num()` e o motivo por `reprovDeTexto()` (a mesma regra usada no texto da página).
+- Confere o `IdProposta` com a proposta da coleta. Se bater, grava (`salvar`, que só preenche campos vazios). Se o modo já estiver completo, termina com "fim (lido do JSON do motor, sem cliques)".
+- Falhou, outra proposta ou faltou campo: segue a navegação pela árvore descrita abaixo (plano B), sem mudança.
+
+Com **"Comparar a coleta com o método atual"** (`erModulos.motorComparar`): lê o JSON mas **não grava**; a coleta segue pela árvore e, no fim (`concluir()`), o diagnóstico registra "comparação JSON: igual" ou "diferente em <campos>" (console: `[PaymobiFin] motor: comparação JSON diferente...`, só os nomes dos campos).
+
+Todas as saídas do `iniciarMotor` passam por `concluir()`, que faz a comparação (quando ligada) e grava `fim`.
+
 ## Leitura da árvore
 
 A árvore do MobFacil é um componente React virtualizado (antd/rc-tree). Isso significa que **apenas os nós visíveis na tela existem no DOM** — o restante está somente na memória do React.

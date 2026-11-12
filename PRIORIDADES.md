@@ -86,6 +86,7 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
   **Objetivo:** busca de cliente, `dadosCliente`/aba Cliente, CAC, Fila de Propostas, CCBs (download), RD (`erReq`). Um PR por módulo.
 
 - [ ] **P0.6 — Motor MobFacil sem cliques** (Categoria B)  
+  **Status:** Implementado na sub-branch `feature/er-motor` (12/11/2026), em revisão. Opção A (dentro do iframe, sem `@connect`), árvore como plano B, modo comparação. 23 testes locais do leitor (respostas do motor de 11/11) e paridade com `extrairDeLista`. P0.4 integrado na `feature/api-er`. Falta o teste no ER.  
   **Objetivo:** ler o JSON de `/api/visualizador` (confirmado em 11/11/2026) em vez de navegar e clicar na árvore, mantendo a árvore como plano B.
 
 - [ ] **P0.7 — Demais dependências da tela ao vivo**  

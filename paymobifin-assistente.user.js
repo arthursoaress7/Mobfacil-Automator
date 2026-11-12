@@ -103,7 +103,7 @@
     tmExpedienteAuto: true,          // Timers: inicia os agendamentos "próximo expediente" ao entrar no ER
     cacTrocaAuto: true,              // Consulta CAC: troca sozinho para a conta master quando a atual não tem acesso
     cacVoltarConta: true,            // Consulta CAC: volta para a conta anterior depois da consulta
-    cacPosicaoGeral: true,           // Consulta CAC: abre a Posição Geral (o sistema registra protocolo, como na tela)            // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
+    cacPosicaoGeral: true,           // Consulta CAC: lê a Posição Geral (Filial). O protocolo nasce no BuscaCartao, ligado ou não            // auditoria completa: telefone e e-mail pela aba Cliente da análise       // trocar de conta sem a janela de confirmação do script
     mesaHoje: true,                  // Mesa de Crédito abre com as datas de hoje (ou as que você escolheu hoje)
     navAuto: true,                   // abre sozinho a tela do sistema que a função precisa (Mesa de Crédito, Fila de Propostas)
     equipeAtiva: false,              // sincronização da equipe (Pusher): só liga quando o funcionário configura
@@ -2100,7 +2100,7 @@
             <label class="mf-lb-rot">Conta master (acessa o CAC e a Fila de Pendências)<select id="mf-cac-master"></select></label>
             <label class="mf-opc"><input type="checkbox" id="mf-cac-troca"><span><b>Trocar automaticamente para a conta master</b><small>Quando a conta atual não acessar o CAC. Encerra a sessão em todas as abas.</small></span></label>
             <label class="mf-opc"><input type="checkbox" id="mf-cac-voltar"><span><b>Voltar para a conta anterior depois</b></span></label>
-            <label class="mf-opc" title="Como na tela do CAC, abrir a Posição Geral registra um protocolo de atendimento. Desligado: lê só os contratos (a Filial pode ficar N/A)."><input type="checkbox" id="mf-cac-posicao"><span><b>Abrir a Posição Geral</b><small>Traz a Filial (Origem); o sistema registra protocolo.</small></span></label>
+            <label class="mf-opc" title="Toda consulta CAC (na tela do ER ou pelo painel) abre um protocolo de atendimento no ER, com esta opção ligada ou desligada. Ligado: lê também a Posição Geral, que traz a Filial (Origem). Desligado: lê só os contratos (a Filial pode ficar N/A)."><input type="checkbox" id="mf-cac-posicao"><span><b>Abrir a Posição Geral</b><small>Traz a Filial (Origem).</small></span></label>
           </details>
           <details class="mf-grupo" data-grupo="negociacoes"><summary>Gerador de negociações</summary>
             <div class="mf-info" style="margin-bottom:4px">Modelo de texto</div>
@@ -4983,8 +4983,9 @@
          1. GET  /CentralAtendimento/CentralPesquisaCliente?strCliente=...  -> #tabCentralClientes (CPF, Nome, Produto, Conta...)
             cada linha chama Atendimento('produto', 'conta')
          2. GET  /CentralAtendimento/BuscaCartao?strProduto&strCartao       -> JSON do cliente (situação, protocolo, confirmação)
+            (o sistema abre um protocolo de atendimento nesta chamada, como na tela; o painel não o encerra)
          3. POST /CentralAtendimento/CentralInicio (opcional)              -> Posição Geral (Origem, Data de Adesão, contratos)
-            (como na tela, o sistema registra um protocolo de atendimento; pode ser desligado em Configurações)
+            (usa o protocolo aberto no passo 2; pode ser desligada em Configurações)
             sem ela: GET /CentralAtendimento/CentralCompras (lista de contratos)
          4. GET  /CentralAtendimento/DetalheCompra?strAutorizacao=N         -> Detalhes da Transação + tabela de parcelas
        Nada é alterado no CAC (nenhuma "Operação"). Se o sistema pedir confirmação de identidade, a consulta para.

@@ -144,10 +144,13 @@ Proposta inicial, a ajustar com o mapeamento:
 | `erConferir(nome, dados, campos)` | Valida campos obrigatórios; se faltar, devolve `{ ok: false, motivo: 'estrutura mudou' }` |
 | Aviso | Mensagem no painel identificando a rota, uma vez por sessão |
 | Ativação por módulo | Preferência `erModulos` (ver abaixo), desligada por padrão |
+| Conta exigida | Cada rota em `ER_ROTAS` declara a conta: `mesa`, `master` ou `qualquer`. A camada reconhece as respostas de conta errada (`Aprovador ... não cadastrado`, `Usuário sem direito ...`) e devolve `{ ok: false, motivo: 'conta', precisa: 'master' }`. A troca continua com o módulo Contas (`trocarPara` + retomada), como `cacRetomar`/`pdRetomar` já fazem; a camada não troca de conta sozinha |
 
 **Armazenamento proposto (aprovar junto):** `erModulos` (módulos ligados na camada nova), `erFalhas` (contagem de falhas por rota e dia, sem dados pessoais). Nenhuma resposta ou dado de sessão é armazenado.
 
-**Retorno padrão:** `{ ok: true, dados }` ou `{ ok: false, motivo }`, com motivos padronizados (sessão expirada, tempo esgotado, erro de rede, HTTP N, estrutura mudou, sem acesso).
+**Retorno padrão:** `{ ok: true, dados }` ou `{ ok: false, motivo }`, com motivos padronizados (sessão expirada, tempo esgotado, erro de rede, HTTP N, estrutura mudou, conta errada).
+
+**Contas:** o ER tem uma conta por sessão. A conta **Mesa** faz as operações de crédito (Mesa de Crédito, motor) e a **master** os atendimentos (Fila de Pendências, CAC completo). Ver `docs/script/13-api-er.md`, "Contas e permissões".
 
 ### Fase 3 — Camada base (P0.3) — Categoria B
 

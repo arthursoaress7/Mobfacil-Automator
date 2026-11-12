@@ -12,6 +12,22 @@
 | ER (`paymobi.ercard.com.br:9191/ErCardWeb/`) | Cookie `ASP.NET_SessionId`. Cookie anti-falsificação `__RequestVerificationToken_*`, normalmente exigido em POST de formulário | Requisição real em 11/11/2026 (`/Notificacoes/VerificaQtdNotificacoes`) e código |
 | Motor MobFacil (`enviamotor.mobfacil.com.br`) | Token de 32 caracteres hexadecimais enviado no **corpo JSON** da requisição (`{ "token": "...", "flagUltimos": false }`); a resposta ecoa `"parametro": "TokenJWT"`. Sem cookie nem cabeçalho de autenticação. O token é o caminho do link do iframe devolvido por `/MesaCredito/MesaAnaliseMobFacil` (`https://enviamotor.mobfacil.com.br/<token>`), e **cada chamada dessa rota gera um token novo** | HAR de 11/11/2026 (6 aberturas do motor) |
 
+### Contas e permissões
+
+O ER tem uma sessão por navegador, de **uma conta por vez**, e cada conta enxerga rotas diferentes. Trocar de conta é sair e entrar de novo (módulo Contas: `trocarPara`, login automático com a senha salva).
+
+| Conta | Uso | Rotas (conhecidas) | Fonte |
+|---|---|---|---|
+| **Mesa** (aprovadora da Mesa de Crédito) | Operações de crédito | Mesa de Crédito (`MesaCreditoLista`, `MesaAnaliseProposta`, `DetalheProposta`, `MesaAnaliseCliente`, `MesaAnaliseMobFacil`, `MesaAnaliseDocumentos`), motor MobFacil, documentos. CAC **pelo CPF** | `docs/script/07-cac.md`, `10-navegacao-busca.md`, `11-rd-encerramento.md`, HAR de 11/11/2026 |
+| **Master** | Atendimentos | Fila de Pendências (`FilaPendenciasLista`, `DetalheCompra`), CAC completo (inclusive pesquisa **por nome**) | `docs/script/03-painel-interface.md`, `07-cac.md` |
+| A confirmar | — | Fila de Propostas (CCBs) | — |
+
+Respostas de "conta errada" já tratadas pelo script:
+- Mesa de Crédito com a master: `Aprovador CONTA não cadastrado.`
+- CAC por nome com a Mesa: `Usuário sem direito de pesquisa por nome de cliente`.
+
+Hoje cada módulo resolve a conta sozinho (`cacTrocaAuto`/`cacRetomar`, `pdRetomar`, aviso do RD). A camada `er` deve saber qual conta cada rota exige e devolver um motivo padronizado (`conta errada: precisa da master`) para o módulo decidir se troca.
+
 Observações:
 - O servidor do ER é IIS 10 + ASP.NET MVC 5.2. As rotas devolvem principalmente HTML montado no servidor.
 - `access-control-allow-origin: *` em respostas do ER não permite uso a partir de outro domínio com a sessão: o navegador não envia cookies para respostas com `*`.

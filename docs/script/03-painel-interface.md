@@ -151,6 +151,7 @@ Seção **Pendências** na aba Relatórios: lista as propostas com pendência em
 5. **Copiar** — copia o texto (`GM_setClipboard`). O último relatório fica na caixa enquanto a aba estiver aberta (`sessionStorage`), inclusive depois da troca de conta.
 6. **Limpar** — o botão "Limpar" e o "Resetar" da coleta apagam o relatório da caixa e do `sessionStorage` (`pdLimpar`). Nada muda no ER.
 7. **Seção recolhível** — o título "Pendências" abre e fecha a seção (`pdDobra`). Vem **fechada** e lembra a última escolha (GM `pdRecolhido`). Fechada, o título continua mostrando a quantidade do último relatório. Gerar depois da troca para a master abre a seção.
+8. **Camada `er` (teste, P0.4)** — com "Relatório de Pendências pela camada nova" ligado em Configurações > Acesso ao ER (`erModulos.pd`), a lista e os detalhes vêm de `erBuscar('pendencias')` e `erBuscar('pendenciaDetalhe')` (`pdListaEr`, `pdDetalheEr`), com o mesmo texto e as mesmas mensagens de erro. Se a camada não reconhecer a resposta do ER (motivo `estrutura`), usa `pdLista`/`pdDetalhe` (plano B) e o status avisa. Com "Comparar com o método atual" (`erModulos.pdComparar`), lê também pelo método atual e o status diz se houve diferença; o console mostra só a autorização e o nome dos campos diferentes. Desligado (padrão): exatamente como antes.
 
 ---
 
@@ -171,6 +172,7 @@ A aba de Configurações é montada por `atualizarConfigUI()` e expõe todas as 
 | `cacTrocaAuto` | `true` | Troca para conta master automaticamente na CAC |
 | `cacVoltarConta` | `true` | Volta para conta anterior após CAC |
 | `cacPosicaoGeral` | `true` | Abre Posição Geral na CAC |
+| `erModulos` | `{}` | Acesso ao ER (teste): `pd` = Relatório de Pendências pela camada `er`; `pdComparar` = comparar com o método atual |
 | `navAuto` | `true` | Navegação automática de tela |
 | `equipeAtiva` | `false` | Compartilhamento com a equipe (Pusher) |
 

@@ -244,4 +244,5 @@ Não há testes automatizados. Em cada fase com código:
 | 1 — Inventário e mapeamento | Em andamento: inventário preliminar feito; motor MobFacil mapeado (`/api/visualizador`, JSON) em `docs/script/13-api-er.md` |
 | 2 — Desenho | **Aprovado** (12/11/2026): `docs/PROPOSTA-CAMADA-ER.md` |
 | 3 — Camada base | Implementada em `feature/er-camada-base` (12/11/2026), em revisão |
-| 4 a 9 | Pendente |
+| 4 — Piloto Pendências | Implementado em `feature/er-pendencias` (12/11/2026), em revisão |
+| 5 a 9 | Pendente |

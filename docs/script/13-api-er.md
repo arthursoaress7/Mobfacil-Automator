@@ -20,11 +20,13 @@ O ER tem uma sessão por navegador, de **uma conta por vez**, e cada conta enxer
 |---|---|---|---|
 | **Mesa** (aprovadora da Mesa de Crédito) | Operações de crédito | Mesa de Crédito (`MesaCreditoLista`, `MesaAnaliseProposta`, `DetalheProposta`, `MesaAnaliseCliente`, `MesaAnaliseMobFacil`, `MesaAnaliseDocumentos`), motor MobFacil, documentos. CAC **pelo CPF** | `docs/script/07-cac.md`, `10-navegacao-busca.md`, `11-rd-encerramento.md`, HAR de 11/11/2026 |
 | **Master** | Atendimentos | Fila de Pendências (`FilaPendenciasLista`, `DetalheCompra`), CAC completo (inclusive pesquisa **por nome**) | `docs/script/03-painel-interface.md`, `07-cac.md` |
-| A confirmar | — | Fila de Propostas (CCBs) | — |
+| Mesa e master | — | Fila de Propostas (CCBs), CAC pelo CPF | HAR de 12/11/2026 (conta master) |
 
 Respostas de "conta errada" já tratadas pelo script:
 - Mesa de Crédito com a master: `Aprovador CONTA não cadastrado.`
 - CAC por nome com a Mesa: `Usuário sem direito de pesquisa por nome de cliente`.
+
+**Identificar a conta sem abrir telas:** `POST /MesaCredito/PreencheMesasUsuario` devolve JSON. Na conta Mesa vem a lista de mesas (`[{ "strMesa": "1", "strDescricao": "PADRÃO" }]`); na master vem `[]`, e a `MesaCreditoLista` responde `Aprovador <USUÁRIO> não cadastrado.` (HAR de 12/11/2026). É uma consulta leve que a camada pode usar para saber se a conta atual é aprovadora da Mesa.
 
 Hoje cada módulo resolve a conta sozinho (`cacTrocaAuto`/`cacRetomar`, `pdRetomar`, aviso do RD). A camada `er` deve saber qual conta cada rota exige e devolver um motivo padronizado (`conta errada: precisa da master`) para o módulo decidir se troca.
 
@@ -215,7 +217,7 @@ Sequência da tela do ER ao abrir um cliente:
 | 9 | `/CentralAtendimento/CentralFinalizaProtocolo` | GET | `strProtocolo` | HTML (encerra o atendimento) |
 
 **Protocolo de atendimento (atenção à regra "somente leitura"):**
-- `BuscaCartao` já devolve um `lngProtocoloAtendimento`, antes de qualquer outra tela. Não está confirmado se o protocolo é criado nessa chamada ou só ao abrir a Posição Geral (`CentralInicio`), como diz `docs/script/07-cac.md`.
+- **O número do protocolo nasce no `BuscaCartao`**: a resposta já traz `lngProtocoloAtendimento`, que a tela repassa ao `CentralInicio`. Nos HARs de 11/11 (01h53) e 12/11 (10h39) os números foram consecutivos (`…253` e `…254`), um por `BuscaCartao`. Isso indica que **cada `BuscaCartao` abre um protocolo de atendimento**, e não só a Posição Geral, como diz `docs/script/07-cac.md`. Falta confirmar na tela de protocolos do ER (ver `PRIORIDADES.md`, P4.12).
 - `CentralFinalizaProtocolo` **altera estado no ER** (encerra o protocolo). A camada `er` não pode chamá-la.
 - O script chama `BuscaCartao` em toda consulta CAC e `CentralInicio` só com `cacPosicaoGeral` ligado. Antes de migrar o CAC (P0.5), confirmar na tela de protocolos do ER se uma consulta só com `BuscaCartao` + `CentralCompras` + `DetalheCompra` gera protocolo.
 
@@ -235,4 +237,4 @@ Códigos de pendência (da tela): 02 Conferência CPF · 03 Conferência identid
 
 Situação (`strTipoPendencia`): `T` todas pendentes · `A` aberta · `P` pendente · `R` retorno · `B` baixada · `C` cancelada · vazio = todas.
 
-Ainda não mapeadas com HAR: CAC pela pesquisa por nome (conta master), `DetalhePropostaCadastro`/`DetalhePropostaDocumentos` e `CentralCompras`.
+Ainda não mapeadas com HAR: CAC pela pesquisa por nome, `DetalhePropostaCadastro`/`DetalhePropostaDocumentos` e `CentralCompras`.

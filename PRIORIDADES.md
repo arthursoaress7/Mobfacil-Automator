@@ -434,6 +434,16 @@ O módulo de geração de acordos (`at*`) já possui:
   **Comportamento:** o mesmo código do #35, sem alteração, levado para `paymobifin-assistente.user.js`; o arquivo-ponte voltou a ser a cópia congelada da 13.27.2. Documentação do módulo em `docs/script/12-desbloqueios.md`.  
   **Critérios de aceite:** a aba Desbloqueios aparece no Atendimento, "Aplicar cliente atual" preenche os campos do cliente e "Copiar linha da planilha" gera a linha de 15 colunas.
 
+- [ ] **P4.12 — Investigar protocolos de atendimento abertos pela consulta CAC**
+
+  **Status:** Pendente (identificado em 12/11/2026 no mapeamento da P0)  
+  **Problema:** nos HARs da P0, o número do protocolo de atendimento já vem na resposta de `/CentralAtendimento/BuscaCartao`, antes da Posição Geral, e os números são consecutivos a cada consulta. A consulta CAC do painel chama `BuscaCartao` em **toda** consulta (`cacAbrir`) e nunca chama `CentralFinalizaProtocolo`. Se cada `BuscaCartao` abre um protocolo, o painel pode estar deixando protocolos de atendimento abertos no ER a cada consulta.  
+  **Como verificar:** anotar o número do último protocolo; fazer uma consulta CAC pelo painel com "Posição Geral" desligada; ver na tela de protocolos do ER se surgiu um protocolo novo e em que situação ficou.  
+  **Critérios de aceite:** comportamento confirmado e documentado em `docs/script/07-cac.md`; se gerar protocolo, decidir com o responsável o tratamento (aviso, outra rota ou finalização) antes de qualquer mudança.  
+  **Observações:** chamar `CentralFinalizaProtocolo` altera dados no ER: só com autorização explícita.
+
+---
+
 - [ ] **P4.11 — API oficial do ER e site próprio (evolução futura)**
 
   **Status:** Ideia registrada (11/11/2026) — não iniciar antes de P0 concluída  

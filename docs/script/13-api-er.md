@@ -24,7 +24,7 @@ if (erModuloAtivo('pd')) { /* caminho novo */ }            // GM erModulos; padr
 
 Bloqueadas: `CentralFinalizaProtocolo`, `CentralEnvioProtocolo`, `EfetivaEnvioProtocolo`, `CentralProtocoloSms`, `CentralAdesao*` e rotas de login/logout. Detalhes do desenho em [`docs/PROPOSTA-CAMADA-ER.md`](../PROPOSTA-CAMADA-ER.md).
 
-**Teste manual no ER:** no console, `sessionStorage.setItem('mfErTeste', '1')` e recarregue a página. Depois: `await PaymobiEr.conta()`, `await PaymobiEr.buscar('pendencias')`, `PaymobiEr.falhas()`.
+**Teste manual no ER:** no console, `sessionStorage.setItem('mfErTeste', '1')` e recarregue a página (aparece "[PaymobiFin] er teste ativo"). Depois: `dispatchEvent(new CustomEvent('mf-er-teste', { detail: 'conta' }))` (ou `'pendencias'`, `'mesasUsuario'`, `'falhas'`, `'rotas'`); o resultado sai no console como "[PaymobiFin] er teste". É por evento porque o Tampermonkey pode isolar o script da página, e um objeto criado na janela não ficaria visível no console.
 
 ---
 

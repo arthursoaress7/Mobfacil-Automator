@@ -316,11 +316,22 @@
   // o módulo usa a camada? (Configurações > Acesso ao ER; tudo desligado por padrão)
   const erModuloAtivo = m => { const v = cfg('erModulos'); return !!(v && v[m]); };
 
-  // Teste manual (P0.3), só leitura: no console do ER, sessionStorage.setItem('mfErTeste', '1') e recarregue a página.
-  // Aparece PaymobiEr.buscar('pendencias'), .conta(), .rotas(), .falhas(). Some ao fechar a aba.
+  // Teste manual (P0.3), só leitura. No console do ER: sessionStorage.setItem('mfErTeste', '1') e recarregue a página.
+  // Depois: dispatchEvent(new CustomEvent('mf-er-teste', { detail: 'conta' }))   (ou 'pendencias', 'mesasUsuario', 'falhas', 'rotas')
+  // O resultado aparece no console como "[PaymobiFin] er teste". Usa evento (e não um objeto na janela) porque o Tampermonkey
+  // pode isolar o script da página; o texto do evento atravessa esse isolamento. Some ao fechar a aba.
   try {
-    if (PAGINA.sessionStorage && PAGINA.sessionStorage.getItem('mfErTeste') === '1') {
-      PAGINA.PaymobiEr = { buscar: (n, p) => erBuscar(n, p || {}), conta: () => erConta({ renovar: true }), rotas: () => Object.keys(ER_ROTAS), falhas: () => GM_getValue('erFalhas', {}) };
+    if (window.top === window && PAGINA.sessionStorage && PAGINA.sessionStorage.getItem('mfErTeste') === '1') {
+      window.addEventListener('mf-er-teste', async e => {
+        const pedido = typeof e.detail === 'string' ? e.detail : 'conta';
+        let r;
+        if (pedido === 'conta') r = await erConta({ renovar: true });
+        else if (pedido === 'falhas') r = GM_getValue('erFalhas', {});
+        else if (pedido === 'rotas') r = Object.keys(ER_ROTAS);
+        else r = await erBuscar(pedido);
+        console.log('[PaymobiFin] er teste', pedido, JSON.stringify(r, null, 2));
+      });
+      console.log('[PaymobiFin] er teste ativo. Ex.: dispatchEvent(new CustomEvent("mf-er-teste", { detail: "conta" }))');
     }
   } catch (_) {}
 

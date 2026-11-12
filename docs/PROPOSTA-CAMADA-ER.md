@@ -222,6 +222,6 @@ Acréscimos:
 - Motivos `cancelada` (o módulo cancelou o lote pelo `sinal`) e `rota_desconhecida`.
 - `sessao`, `conta` e `cancelada` não entram em `erFalhas` nem geram aviso: são situações normais, tratadas pelo módulo.
 - Aviso: `console.warn('[PaymobiFin] er', ...)` e o evento `mf-er-aviso` na janela, que o painel poderá mostrar no piloto.
-- Teste manual sem alterar o script: no console do ER, `sessionStorage.setItem('mfErTeste', '1')` e recarregar a página expõe `PaymobiEr.buscar(nome, params)`, `.conta()`, `.rotas()` e `.falhas()` até a aba ser fechada (só leitura).
+- Teste manual sem alterar o script: no console do ER, `sessionStorage.setItem('mfErTeste', '1')` e recarregar a página liga um teste por evento (`dispatchEvent(new CustomEvent('mf-er-teste', { detail: 'conta' }))`, ou `'pendencias'`, `'mesasUsuario'`, `'falhas'`, `'rotas'`), com o resultado no console, até a aba ser fechada (só leitura). Primeiro foi um objeto `PaymobiEr` na janela, que não aparece quando o Tampermonkey isola o script da página.
 - `CONFIG.ER_FALHAS_DIAS` (14): dias de histórico de `erFalhas`.
 

@@ -158,6 +158,7 @@
 
   /* Registro das rotas. Cada rota: caminho, metodo (GET|POST), formato (html|json), conta (mesa|master|qualquer),
      params(p) opcional, vazio (texto de "nenhum resultado" -> dados: []) opcional e ler(doc|json, p) -> dados.
+     origem: 'motor' = rota do motor MobFacil (chamada de dentro do iframe, na mesma origem); corpoJson: corpo em JSON.
      ler lança erEstrutura('...') quando falta o essencial. Novas rotas entram junto com a migração de cada módulo. */
   const ER_ROTAS = {
     // conta da Mesa: lista de mesas do usuário; master (não aprovadora da Mesa): []
@@ -190,6 +191,17 @@
         }).filter(l => l.aut);
       },
     },
+    // análise de crédito do motor MobFacil (P0.6): o mesmo JSON que a árvore exibe. Só dentro do iframe do motor.
+    // O token é o caminho do link do iframe (gerado pelo ER a cada abertura da análise).
+    motor: {
+      origem: 'motor', caminho: '/api/visualizador', metodo: 'POST', formato: 'json', conta: 'mesa', corpoJson: true,
+      params: () => ({ token: location.pathname.replace(/^\/+|\/+$/g, ''), flagUltimos: false }),
+      ler: j => {
+        if (!j || j.codigo_retorno !== 0) throw erEstrutura('o motor respondeu "' + erLimpo(j && j.mensagem_retorno) + '"');
+        if (!j.data || !j.data['Exibir fluxos']) throw erEstrutura('a resposta do motor veio sem "Exibir fluxos"');
+        return motorDadosDeJson(j);
+      },
+    },
     // "Manutenção de Pendência" de uma autorização (só lida): pares rótulo/valor; o módulo escolhe os campos
     pendenciaDetalhe: {
       caminho: '/FilaPendencias/DetalheCompra', metodo: 'GET', formato: 'html', conta: 'master',
@@ -204,7 +216,9 @@
 
   // endereço do ER: no próprio ER, o do sistema (como cacBase); no RD, o guardado pelo painel (GM erBase)
   const erNoRD = () => location.hostname === 'app.tallos.com.br';
-  const erEndereco = () => {
+  const erNoMotor = () => /(^|\.)enviamotor\.mobfacil\.com\.br$/i.test(location.hostname);
+  const erEndereco = (origem) => {
+    if (origem === 'motor') return erNoMotor() ? location.origin : '';
     if (erNoRD()) return String(GM_getValue('erBase', '') || '').replace(/\/+$/, '');
     if (!/(^|\.)paymobi\.ercard\.com\.br$/i.test(location.hostname)) return '';
     const v = (document.getElementById('txtCaminhoSistema') || {}).value;
@@ -214,9 +228,9 @@
   };
 
   // requisição: fetch com a sessão do ER (no ER) ou GM_xmlhttpRequest (no RD); tempo máximo CONFIG.TIMEOUT_REDE
-  function erTransporte(url, metodo, corpo, sinal) {
-    const cab = { 'X-Requested-With': 'XMLHttpRequest' };
-    if (metodo === 'POST') cab['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+  function erTransporte(url, metodo, corpo, sinal, json) {
+    const cab = json ? { 'Content-Type': 'application/json' } : { 'X-Requested-With': 'XMLHttpRequest' };
+    if (metodo === 'POST' && !json) cab['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
     const alvo = metodo === 'POST' || !corpo ? url : url + '?' + corpo;
     if (erNoRD()) {
       return new Promise(resolve => {
@@ -279,10 +293,11 @@
       return r;
     };
     if (!['GET', 'POST'].includes(rota.metodo) || ER_BLOQUEADAS.some(rx => rx.test(rota.caminho))) return falha('bloqueada', { detalhe: rota.caminho });
-    const base = erEndereco();
-    if (!base) return falha('sem_base', { detalhe: 'endereço do ER desconhecido (abra o ER uma vez neste navegador)' });
-    const corpo = new URLSearchParams(rota.params ? rota.params(params) : params).toString();
-    const r = await erTransporte(base + rota.caminho, rota.metodo, corpo, opcoes.sinal);
+    const base = erEndereco(rota.origem);
+    if (!base) return falha('sem_base', { detalhe: rota.origem === 'motor' ? 'a rota do motor só funciona dentro do iframe do motor' : 'endereço do ER desconhecido (abra o ER uma vez neste navegador)' });
+    const p = rota.params ? rota.params(params) : params;
+    const corpo = rota.corpoJson ? JSON.stringify(p) : new URLSearchParams(p).toString();
+    const r = await erTransporte(base + rota.caminho, rota.metodo, corpo, opcoes.sinal, !!rota.corpoJson);
     if (r.erro) return falha(r.erro);
     if (erSemSessao(r.texto)) return falha('sessao', { status: r.status, detalhe: SESSAO_EXPIRADA });
     const errada = ER_CONTA_ERRADA.find(c => c.rx.test(r.texto));
@@ -583,6 +598,57 @@
     return { qtd, val, score, consultas, cpf };
   }
 
+  // motivos "(Pn) Reprovar: ..." de um texto, juntos com " ¦ " ('' = nenhum). Usado pela página e pelo JSON do motor.
+  function reprovDeTexto(texto) {
+    // cada motivo termina no "(atual=...)", "(score=...)" ou "(situação=...)" e NUNCA atravessa o motivo seguinte
+    // (antes um motivo de score seguido de um de valor virava uma mensagem só, e o score sem "atual=" se perdia)
+    let ms = texto.match(/\(P\d+\)\s*Reprovar\s*:(?:(?!\(P\d+\)\s*Reprovar).){0,200}?\((?:atual|score|situa[çc][ãa]o)\s*=\s*[^)]*\)/gi);
+    if (!ms) ms = texto.match(/\(P\d+\)\s*Reprovar\s*:.{0,150}?(?=\s*\(P\d+\)|\s*Exibir|\s*$)/gi);
+    return [...new Set((ms || []).map(x => x.trim()))].join(' ¦ ');
+  }
+
+  /* P0.6 — os mesmos dados de extrair(), lidos do JSON de /api/visualizador (o que a árvore exibe).
+     Segue as mesmas prioridades de extrairDeLista: restritivos do P1 (calculaRisco, depois pendenciaFinanceira),
+     score (valorScore, score do scoreCadastroPositivo, resumo), consultas (P2, qualquer, P1), CPF do fluxo.
+     Execução de cada fluxo = a mais recente (como podarExecucoes). Valores passam por num(), como os da árvore. */
+  function motorDadosDeJson(j) {
+    const fl = j.data['Exibir fluxos'] || {};
+    const recente = lista => (Array.isArray(lista) && lista.length ? lista.reduce((a, b) => (chaveData(b && b.Timestamp) > chaveData(a && a.Timestamp) ? b : a)) : null);
+    const execs = Object.keys(fl).map(k => ({ k, e: recente(fl[k]) })).filter(x => x.e && typeof x.e === 'object');
+    const fluxo = n => (execs.find(x => new RegExp('^fluxos_P' + n + '$', 'i').test(x.k)) || {}).e || null;
+    const p1 = fluxo(1), p2 = fluxo(2), todos = execs.map(x => x.e);
+    const spc = e => { try { return e.Biros.SPCBrasil.result.return_object.resultado || null; } catch (_) { return null; } };
+    const regra = (e, k) => (e && e.RegrasDeNegocios && e.RegrasDeNegocios[k]) || null;
+    const primeiro = (lista, f) => { for (const e of lista) { const v = f(e); if (v != null) return v; } return null; };
+    const restritivos = lista => ({
+      qtd: primeiro(lista, e => num((regra(e, 'calculaRisco') || {}).QuantidadeRestritivos)) ?? primeiro(lista, e => num((((spc(e) || {}).pendenciaFinanceira || {}).resumo || {}).quantidadeTotal)),
+      val: primeiro(lista, e => num((regra(e, 'calculaRisco') || {}).ValorRestritivos)) ?? primeiro(lista, e => num((((spc(e) || {}).pendenciaFinanceira || {}).resumo || {}).valorTotal)),
+    });
+    let { qtd, val } = restritivos(p1 ? [p1] : []);
+    if (qtd == null || val == null) { const g = restritivos(todos); if (qtd == null) qtd = g.qtd; if (val == null) val = g.val; }
+    const scp = e => (spc(e) || {}).scoreCadastroPositivo || {};
+    let score = primeiro(todos, e => num((regra(e, 'classificacaoRiscoDeCredito') || {}).valorScore)) ??
+      primeiro(todos, e => num(((scp(e).detalheScoreCadastroPositivo || [])[0] || {}).score)) ??
+      primeiro(todos, e => num((scp(e).resumo || {}).quantidadeTotal));
+    const cons = e => num((((spc(e) || {}).consultaRealizada || {}).resumo || {}).quantidadeTotal);
+    const consultas = (p2 && cons(p2)) ?? primeiro(todos, cons) ?? (p1 && cons(p1));
+    const cpfDig = String((p1 || todos[0] || {}).Cpf || '').replace(/\D/g, '');
+    const resumo = j.data['Resumo proposta'] || {};
+    const motivos = [].concat(resumo.motivoStatus || [], ...todos.map(e => e.MotivoStatus || [])).filter(x => typeof x === 'string');
+    const reprov = reprovDeTexto(motivos.join(' '));
+    if (score == null && reprov) { const ms = reprov.match(/score\s*=\s*(\d+(?:[.,]\d+)?)/i); if (ms) score = num(ms[1]); }
+    const r = { id: String((p1 || todos[0] || {}).IdProposta || ''), qtd, val, score, consultas, cpf: cpfDig.length === 11 ? cpfDig : null, reprov };
+    // modo "rendas" (como extrair): renda do birô (RendaCalculo, P1 primeiro), renda informada e nome da proposta
+    if (GM_getValue('modo', 'coleta') === 'rendas') {
+      const rendaB = e => { const v = (regra(e, 'validaRendavalores') || {}).RendaCalculo; if (v == null || v === '') return null; const t = String(v).trim(); return /^-?\d+(\.\d+)?$/.test(t) ? t.replace('.', ',') : num(t); };
+      r.rendaBiro = (p1 && rendaB(p1)) ?? primeiro(todos, rendaB) ?? '';   // '' = a proposta não tem RendaCalculo (conta como lido, como na árvore)
+      const inp = (e, nome) => { const x = (((e || {}).DadosProposta || {}).Submit || {}).Inputs || []; const i = x.find(y => y && y.Name === nome); return i ? i.Value : null; };
+      r.rendaInf = num(primeiro(p1 ? [p1, ...todos] : todos, e => inp(e, 'PROP_RENDA_PESSOAL')));
+      r.nome = primeiro(p1 ? [p1, ...todos] : todos, e => inp(e, 'PROP_NOME')) || null;
+    }
+    return r;
+  }
+
   // Relatório de Rendas: o nó "RendaCalculo: 1724.27" da árvore é a renda do birô. Pega o primeiro com número válido.
   // O valor vem do JSON (o ponto é DECIMAL): num() leria "900.125" como milhar, por isso este tratamento à parte.
   function rendaDeLista(lista) {
@@ -637,11 +703,7 @@
     // null = cartão de resultado ainda não carregou; '' = carregou e não tem mensagem de reprovação
     let reprov = null;
     if (/Fluxo processado\s*:/i.test(texto)) {
-      // cada motivo termina no "(atual=...)", "(score=...)" ou "(situação=...)" e NUNCA atravessa o motivo seguinte
-      // (antes um motivo de score seguido de um de valor virava uma mensagem só, e o score sem "atual=" se perdia)
-      let ms = texto.match(/\(P\d+\)\s*Reprovar\s*:(?:(?!\(P\d+\)\s*Reprovar).){0,200}?\((?:atual|score|situa[çc][ãa]o)\s*=\s*[^)]*\)/gi);
-      if (!ms) ms = texto.match(/\(P\d+\)\s*Reprovar\s*:.{0,150}?(?=\s*\(P\d+\)|\s*Exibir|\s*$)/gi);
-      reprov = [...new Set((ms || []).map(x => x.trim()))].join(' ¦ ');
+      reprov = reprovDeTexto(texto);
     }
     // reprovada por score: a própria mensagem traz o valor, ex.: "(score=351)"
     if (r.score == null && reprov) {
@@ -1066,6 +1128,36 @@
         return rr;
       };
 
+      /* P0.6 — coleta pelo JSON do motor (Configurações > Acesso ao ER, desligada por padrão).
+         Lê /api/visualizador antes de abrir a árvore; se trouxer tudo o que o modo pede, termina sem cliques.
+         O que faltar segue pelo caminho atual da árvore (plano B). Com "comparar", não grava o JSON: a coleta
+         segue pela árvore e, no fim, registra se o JSON daria o mesmo resultado (só os nomes dos campos). */
+      const motorCamada = erModuloAtivo('motor'), motorComparar = motorCamada && erModuloAtivo('motorComparar');
+      let motorJson = null;
+      const concluir = () => {
+        if (motorComparar && motorJson) {
+          const d = dadosAtuais();
+          const difs = campos().filter(k => d[k] != null && String(motorJson[k] ?? '(ausente)') !== String(d[k]));
+          snapshot(r.id, difs.length ? 'comparação JSON: diferente em ' + difs.join(', ') : 'comparação JSON: igual', null);
+          if (difs.length) console.warn('[PaymobiFin] motor: comparação JSON diferente na proposta', r.id, 'campos:', difs.join(', '));
+        }
+        GM_setValue('fim', r.id);
+      };
+      if (motorCamada) {
+        const rj = await erBuscar('motor');
+        if (rj.ok && rj.dados.id === r.id) {
+          motorJson = rj.dados;
+          if (!motorComparar) salvar(Object.assign({}, rj.dados, { id: r.id }));
+          log.push('json: lido' + (motorComparar ? ' (comparação)' : ''));
+        } else log.push('json: ' + (rj.ok ? 'outra proposta (' + (rj.dados.id || '?') + ')' : rj.motivo));
+        snapshot(r.id, log[log.length - 1], null);
+        if (!motorComparar && completo(dadosAtuais())) {
+          snapshot(r.id, 'fim (lido do JSON do motor, sem cliques)', null);
+          concluir();
+          return;
+        }
+      }
+
       // antes de abrir qualquer caminho: a memória da árvore pode já ter tudo
       lerEGravar();
 
@@ -1098,7 +1190,7 @@
         // 4) CPF pela árvore, se o cartão não trouxe
         if (dadosAtuais().cpf == null && Date.now() < prazo) await rodar('fluxo', CONFIG.CAMINHO_SEG);
         snapshot(r.id, 'fim (' + (log.join(' | ') || 'lido da memória') + ')', null);
-        GM_setValue('fim', r.id);
+        concluir();
         return;
       }
       // modo "reprovadas": se o motivo não depende da árvore (renda, idade...), a mensagem do MobFacil basta
@@ -1111,7 +1203,7 @@
         }
         if (rp != null) {   // lida a mensagem (com todos os motivos), não precisa da árvore
           snapshot(r.id, rp === '' ? 'fim (SEM mensagem de reprovação do MobFacil)' : 'fim (reprovação lida da mensagem, sem árvore)', null);
-          GM_setValue('fim', r.id);
+          concluir();
           return;
         }
       }
@@ -1120,7 +1212,7 @@
       if (modoAtual === 'aprovadas') {
         if (!completo(dadosAtuais())) await rodar('fluxo', CONFIG.CAMINHO_SEG);
         snapshot(r.id, 'fim (' + (log.join(' | ') || 'lido da memória') + ')', null);
-        GM_setValue('fim', r.id);
+        concluir();
         return;
       }
 
@@ -1183,7 +1275,7 @@
       }
 
       snapshot(r.id, 'fim (' + (log.join(' | ') || 'lido sem abrir caminhos') + ')', buscaOk);
-      GM_setValue('fim', r.id);
+      concluir();
     }, CONFIG.POLL_MOTOR);
   }
 
@@ -2323,6 +2415,8 @@
             <div class="mf-info" style="margin-bottom:4px">Leitura dos dados do ER pela camada nova (P0). Desligado: usa o método atual.</div>
             <label class="mf-opc" title="O Relatório de Pendências lê a Fila de Pendências pela camada nova. Se a camada não reconhecer a resposta do ER, usa o método atual sozinho."><input type="checkbox" id="mf-er-pd"><span><b>Relatório de Pendências pela camada nova</b><small>O texto gerado é o mesmo.</small></span></label>
             <label class="mf-opc" title="Gera também pelo método atual e avisa no status se algo ficar diferente. Faz o dobro de consultas ao ER."><input type="checkbox" id="mf-er-pd-comparar"><span><b>Comparar com o método atual</b><small>Para testar: faz o dobro de consultas.</small></span></label>
+            <label class="mf-opc" title="A coleta lê a análise de crédito direto do motor MobFacil (o mesmo conteúdo da árvore), sem clicar na árvore. Se faltar algum dado, abre a árvore como hoje."><input type="checkbox" id="mf-er-motor"><span><b>Coleta do motor pela camada nova</b><small>Lê a análise sem clicar na árvore.</small></span></label>
+            <label class="mf-opc" title="A coleta continua pela árvore e, no fim de cada proposta, registra no diagnóstico se a leitura direta daria o mesmo resultado (só os nomes dos campos, no console)."><input type="checkbox" id="mf-er-motor-comparar"><span><b>Comparar a coleta com o método atual</b><small>Para testar: a coleta segue pela árvore.</small></span></label>
           </details>
           <details class="mf-grupo" data-grupo="negociacoes"><summary>Gerador de negociações</summary>
             <div class="mf-info" style="margin-bottom:4px">Modelo de texto</div>
@@ -5544,15 +5638,22 @@
     ligarOpcao('#mf-cac-voltar', 'cacVoltarConta');
     ligarOpcao('#mf-cac-posicao', 'cacPosicaoGeral');
     // Acesso ao ER (teste): cada opção liga um módulo em erModulos (objeto); comparar só vale com o módulo ligado
-    const erCfgSync = () => { const v = cfg('erModulos') || {}; $('#mf-er-pd').checked = !!v.pd; $('#mf-er-pd-comparar').checked = !!v.pdComparar; $('#mf-er-pd-comparar').disabled = !v.pd; };
+    const erCfgSync = () => {
+      const v = cfg('erModulos') || {};
+      $('#mf-er-pd').checked = !!v.pd; $('#mf-er-pd-comparar').checked = !!v.pdComparar; $('#mf-er-pd-comparar').disabled = !v.pd;
+      $('#mf-er-motor').checked = !!v.motor; $('#mf-er-motor-comparar').checked = !!v.motorComparar; $('#mf-er-motor-comparar').disabled = !v.motor;
+    };
     const ligarErModulo = (sel, mod) => $(sel).addEventListener('change', () => {
       const v = Object.assign({}, cfg('erModulos') || {});
       if ($(sel).checked) v[mod] = true; else delete v[mod];
       if (!v.pd) delete v.pdComparar;
+      if (!v.motor) delete v.motorComparar;
       GM_setValue('erModulos', v); erCfgSync();
     });
     ligarErModulo('#mf-er-pd', 'pd');
     ligarErModulo('#mf-er-pd-comparar', 'pdComparar');
+    ligarErModulo('#mf-er-motor', 'motor');
+    ligarErModulo('#mf-er-motor-comparar', 'motorComparar');
     erCfgSync();
     desenharMaster();
     cacRetomar();

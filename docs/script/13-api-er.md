@@ -221,4 +221,18 @@ Sequência da tela do ER ao abrir um cliente:
 
 `CentralCompras` (usada pelo script quando a Posição Geral está desligada) não apareceu neste HAR.
 
-Ainda não mapeadas com HAR: Fila de Pendências (conta master), CAC pela pesquisa por nome (conta master), `DetalhePropostaCadastro`/`DetalhePropostaDocumentos` e `CentralCompras`.
+### Fila de Pendências (HAR de 11/11/2026)
+
+| Rota | Método | Parâmetros | Resposta |
+|---|---|---|---|
+| `/FilaPendencias/FilaPendencias` | POST | — | HTML da tela (filtros e listas de códigos) |
+| `/FilaPendencias/FilaPendenciasLista` | GET | `strPendencia`, `strTipoRepasse=R`, `strTipoPendencia=T`, `strProduto`, `strLojista`, `strLoja`, `strDataInicial`, `strDataFinal`, `strTipoData=S`, `strCliente`, `lngAutorizacao`, `lngProposta`, `strPromotora`, `strPromotoraFilial`, `strAgrupamento=N`, `strReembolso`, `strTipoBloqueio`, `strTipoDocumento`, `strConveniada`, `strPlano` | HTML com a tabela: Pend, Sit, Autorização, Nome, CPF, Lojista, Loja, Data Compra, Valor |
+| `/FilaPendencias/DetalheCompra` | GET | `strAutorizacao`, `strPendencia`, `strTipoConsulta=P` | HTML do detalhe (do código atual; não aberto neste HAR) |
+
+Diferença em relação ao script (`pdLista`): a tela envia `strPendencia` com todos os códigos (`10,07,15,04,05,02,03,11,12,16,09,19,17,18,14,06,08`) e `strProduto=0001`; o script envia os dois vazios ("todos") e data inicial `01/01/2020`. Os dois funcionam (o relatório foi validado no ER real). Se um dia o ER passar a exigir esses campos, o leitor da rota é o único ponto a ajustar.
+
+Códigos de pendência (da tela): 02 Conferência CPF · 03 Conferência identidade · 04 Conferência comprovante de renda · 05 Conferência comprovante de residência · 06 Termo de adesão assinado · 07 CCB assinada · 08 Termo de seguro assinado · 09 NF do lojista · 10 Ativação da licença · 11 Contrato social · 12 Declaração de faturamento · 14 Registro de boletos · 15 Comprovação NF de entrega · 16 Gravames · 17 PF ficha cadastral · 18 PJ ficha cadastral · 19 Nota fiscal ou conhecimento de transporte.
+
+Situação (`strTipoPendencia`): `T` todas pendentes · `A` aberta · `P` pendente · `R` retorno · `B` baixada · `C` cancelada · vazio = todas.
+
+Ainda não mapeadas com HAR: CAC pela pesquisa por nome (conta master), `DetalhePropostaCadastro`/`DetalhePropostaDocumentos` e `CentralCompras`.

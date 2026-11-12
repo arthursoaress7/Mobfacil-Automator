@@ -242,4 +242,5 @@ Não há testes automatizados. Em cada fase com código:
 | Fase | Status |
 |---|---|
 | 1 — Inventário e mapeamento | Em andamento: inventário preliminar feito; motor MobFacil mapeado (`/api/visualizador`, JSON) em `docs/script/13-api-er.md` |
-| 2 a 9 | Pendente |
+| 2 — Desenho | Proposta em revisão: `docs/PROPOSTA-CAMADA-ER.md` |
+| 3 a 9 | Pendente |

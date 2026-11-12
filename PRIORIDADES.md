@@ -64,12 +64,13 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
 
 ### Tarefas
 
-- [ ] **P0.1 — Inventário e mapeamento das rotas do ER**  
-  **Status:** Em andamento (11/11/2026: inventário preliminar das rotas do ER em `docs/PLANO-API-ER.md`; motor MobFacil mapeado em `docs/script/13-api-er.md`: `/api/visualizador` devolve em JSON todos os campos da coleta)  
+- [x] **P0.1 — Inventário e mapeamento das rotas do ER**  
+  **Status:** Concluído para o desenho (12/11/2026). Pendências menores (CAC por nome, detalhe de autorização, rotas de detalhe dos CCBs) ficam para a migração de cada módulo. Histórico: (11/11/2026: inventário preliminar das rotas do ER em `docs/PLANO-API-ER.md`; motor MobFacil mapeado em `docs/script/13-api-er.md`: `/api/visualizador` devolve em JSON todos os campos da coleta)  
   **Objetivo:** listar todas as rotas e leituras de tela usadas pelo script e, no DevTools, verificar quais telas do ER carregam dados por JSON (inclusive o motor MobFacil).  
   **Critérios de aceite:** `docs/script/13-api-er.md` com, para cada rota: método, parâmetros, formato da resposta (HTML/JSON), funções que a usam e dados extraídos.
 
 - [ ] **P0.2 — Desenho da camada** (Categoria B)  
+  **Status:** Proposta em revisão (12/11/2026): [`docs/PROPOSTA-CAMADA-ER.md`](./docs/PROPOSTA-CAMADA-ER.md)  
   **Objetivo:** definir `erBuscar`, o registro de rotas, os leitores por rota, o tratamento padrão de erros e sessão e os avisos de mudança.  
   **Dependências:** P0.1. Exige autorização explícita antes de P0.3.
 

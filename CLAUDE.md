@@ -88,6 +88,7 @@ docs/script/11-rd-encerramento.md
 docs/script/12-desbloqueios.md
 docs/script/13-api-er.md           ← rotas do ER e do motor (P0)
 docs/PLANO-API-ER.md               ← plano da P0 (acesso ao ER)
+docs/PROPOSTA-CAMADA-ER.md         ← desenho da camada er (P0.2)
 README.md
 .github/SETUP.md                    ← configurações para o proprietário
 ```

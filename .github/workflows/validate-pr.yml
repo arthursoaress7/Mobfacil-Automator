@@ -1,22 +1,35 @@
 name: Validate PR
 
-# Executa em todo Pull Request aberto contra a main.
-# Valida se a alteração é segura para merge automático (rotineira).
-# Bloqueia automaticamente quando arquivos ou padrões protegidos são detectados.
+# Valida todo PR para main, development e feature/*. Em PRs rotineiros (Categoria A)
+# para development ou feature/*, faz o merge automático depois que a validação passa.
+#
+# - PR para a main: só de development, release/proxima ou hotfix/*. Nunca tem merge automático.
+# - Categoria B (workflows, scripts de CI, package.json, arquivo-ponte): a validação passa,
+#   mas o merge automático não acontece — o responsável integra manualmente.
+# - Rótulo "sem-auto-merge" no PR: desliga o merge automático daquele PR.
+#
+# Token: o merge automático usa o secret RELEASE_TOKEN (PAT). Sem ele, usa o GITHUB_TOKEN,
+# mas aí o merge na development não dispara o workflow "Preparar release".
 
 on:
   pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+    branches: [main, development, 'feature/**']
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
+
+concurrency:
+  group: validate-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   validate:
     name: Validar alterações
     runs-on: ubuntu-latest
+    outputs:
+      categoria: ${{ steps.protected.outputs.categoria }}
 
     steps:
       - name: Checkout
@@ -24,189 +37,172 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ----------------------------------------------------------------
-      # 1. Verificar arquivos alterados no PR
-      # ----------------------------------------------------------------
+      # 1. Arquivos alterados
       - name: Listar arquivos alterados
         id: changed
         run: |
-          BASE=${{ github.event.pull_request.base.sha }}
-          HEAD=${{ github.event.pull_request.head.sha }}
-          FILES=$(git diff --name-only "$BASE" "$HEAD")
-          echo "Arquivos alterados:"
-          echo "$FILES"
-          echo "files<<EOF" >> $GITHUB_OUTPUT
-          echo "$FILES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          echo "Arquivos alterados:"; echo "$FILES"
+          {
+            echo "files<<EOF"
+            echo "$FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      # ----------------------------------------------------------------
-      # 2. Detectar arquivos protegidos
-      #    Qualquer alteração nesses arquivos = Categoria B (crítica)
-      #    → bloqueia o merge automático
-      # ----------------------------------------------------------------
-      - name: Verificar arquivos protegidos
+      # 2. Categoria: infraestrutura = B (sem merge automático)
+      - name: Classificar categoria
         id: protected
+        env:
+          FILES: ${{ steps.changed.outputs.files }}
         run: |
-          FILES="${{ steps.changed.outputs.files }}"
-
-          PROTECTED_PATTERNS=(
-            "paymobifin-assistente.user.js"  # código principal
-          )
-
-          # Campos sensíveis dentro do script que não devem ser alterados
-          # sem autorização — verificados pelo workflow de lint do script
-          CRITICAL=false
+          CATEGORIA=A
           REASON=""
-
-          for PATTERN in "${PROTECTED_PATTERNS[@]}"; do
-            if echo "$FILES" | grep -qF "$PATTERN"; then
-              # O script pode ser alterado em tarefas rotineiras.
-              # O que é crítico são campos específicos dentro dele.
-              # A verificação detalhada fica no job 'lint-script'.
-              echo "Arquivo de código detectado: $PATTERN"
-            fi
-          done
-
-          # Arquivos de configuração de infraestrutura são Categoria B
           INFRA_PATTERNS=(
             ".github/workflows/"
+            ".github/scripts/"
             "package.json"
             "package-lock.json"
-            "automacaomobfacil.user.js"  # arquivo-ponte das atualizações antigas (congelado)
+            "automacaomobfacil.user.js"
           )
-
           for PATTERN in "${INFRA_PATTERNS[@]}"; do
             if echo "$FILES" | grep -qF "$PATTERN"; then
-              CRITICAL=true
+              CATEGORIA=B
               REASON="Alteração em arquivo de infraestrutura: $PATTERN"
               break
             fi
           done
+          echo "categoria=$CATEGORIA" >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON" >> "$GITHUB_OUTPUT"
+          echo "Categoria: $CATEGORIA $REASON"
 
-          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-          echo "reason=$REASON" >> $GITHUB_OUTPUT
-
-          if [ "$CRITICAL" = "true" ]; then
-            echo "⛔ ALTERAÇÃO CRÍTICA detectada: $REASON"
-            echo "Este PR requer autorização explícita do responsável antes do merge."
-          else
-            echo "✅ Nenhum arquivo de infraestrutura protegido alterado."
-          fi
-
-      # ----------------------------------------------------------------
-      # 3. Verificar padrão do título do PR (Conventional Commits)
-      # ----------------------------------------------------------------
+      # 3. Título (Conventional Commits)
       - name: Verificar título do PR
-        id: title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
           PATTERN="^(feat|fix|docs|refactor|chore|perf|test|build|ci)(\(.+\))?(!)?: .+"
-
           if echo "$TITLE" | grep -qE "$PATTERN"; then
             echo "✅ Título segue Conventional Commits: $TITLE"
-            echo "valid=true" >> $GITHUB_OUTPUT
           else
             echo "❌ Título fora do padrão: $TITLE"
             echo "Formato esperado: tipo: descrição  (ex.: fix: corrigir leitura de propostas)"
-            echo "valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-      # ----------------------------------------------------------------
-      # 4. Verificar se o PR tem conflitos
-      # ----------------------------------------------------------------
+      # 4. Origem dos PRs para a main
+      - name: Verificar origem (PR para a main)
+        if: github.event.pull_request.base.ref == 'main'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          case "$HEAD_REF" in
+            development|release/proxima|hotfix/*) echo "✅ Origem permitida para a main: $HEAD_REF" ;;
+            *)
+              echo "❌ PR para a main só a partir de development, release/proxima ou hotfix/*. Origem: $HEAD_REF"
+              echo "Abra o PR para a development (ou feature/*); a main recebe pelo PR de release."
+              exit 1 ;;
+          esac
+
+      # 5. Conflitos
       - name: Verificar conflitos
         run: |
-          MERGEABLE="${{ github.event.pull_request.mergeable }}"
-          if [ "$MERGEABLE" = "false" ]; then
-            echo "❌ PR tem conflitos com a main. Resolva antes do merge."
+          if [ "${{ github.event.pull_request.mergeable }}" = "false" ]; then
+            echo "❌ PR tem conflitos. Resolva antes do merge."
             exit 1
           fi
-          echo "✅ PR sem conflitos."
+          echo "✅ PR sem conflitos conhecidos."
 
-      # ----------------------------------------------------------------
-      # 5. Lint básico do script (sem executar — apenas análise estática)
-      # ----------------------------------------------------------------
+      # 6. Integridade do script
       - name: Lint do script
-        id: lint
         if: contains(steps.changed.outputs.files, 'paymobifin-assistente.user.js')
         run: |
           FILE="paymobifin-assistente.user.js"
 
-          echo "Verificando integridade do script..."
-
-          # O @version deve existir e ter formato semver
           VERSION=$(grep -oP '(?<=@version\s{6})\S+' "$FILE" || true)
-          if [ -z "$VERSION" ]; then
-            echo "❌ @version não encontrado no cabeçalho do script."
-            exit 1
-          fi
-          echo "✅ @version encontrado: $VERSION"
+          if [ -z "$VERSION" ]; then echo "❌ @version não encontrado."; exit 1; fi
+          echo "✅ @version: $VERSION"
 
-          # @downloadURL e @updateURL devem apontar para este arquivo na main:
-          # é por eles que o Tampermonkey de todos os usuários busca atualizações
           URL_OFICIAL="https://github.com/arthursoaress7/PaymobiFin-Assistente/raw/refs/heads/main/$FILE"
           URLS=$(awk '$2 ~ /^@(downloadURL|updateURL)$/ { print $2 " " $3 }' "$FILE")
           QTD_OK=$(echo "$URLS" | awk -v u="$URL_OFICIAL" '$2 == u' | wc -l)
-
           if [ "$QTD_OK" -ne 2 ] || [ "$(echo "$URLS" | wc -l)" -ne 2 ]; then
-            echo "❌ @downloadURL ou @updateURL fora do endereço oficial."
-            echo "  Esperado: $URL_OFICIAL"
-            echo "  Encontrado:"
+            echo "❌ @downloadURL ou @updateURL fora do endereço oficial (Categoria B)."
             echo "$URLS"
-            echo "Alteração nos URLs de distribuição requer autorização explícita (Categoria B)."
             exit 1
           fi
-          echo "✅ @downloadURL e @updateURL apontam para o endereço oficial."
+          echo "✅ @downloadURL e @updateURL no endereço oficial."
 
-          # 'use strict' deve estar presente
-          if ! grep -q "'use strict'" "$FILE"; then
-            echo "❌ 'use strict' não encontrado no script."
-            exit 1
-          fi
-          echo "✅ 'use strict' presente."
+          grep -q "'use strict'" "$FILE" || { echo "❌ 'use strict' não encontrado."; exit 1; }
+          grep -qP '^\(function \(\)' "$FILE" || { echo "❌ IIFE não encontrada."; exit 1; }
+          echo "✅ 'use strict' e IIFE presentes."
 
-          # A IIFE deve estar presente
-          if ! grep -qP '^\(function \(\)' "$FILE"; then
-            echo "❌ IIFE não encontrada no início do script."
-            exit 1
-          fi
-          echo "✅ Estrutura IIFE presente."
+          node --check "$FILE" || { echo "❌ Erro de sintaxe no script."; exit 1; }
+          echo "✅ Sintaxe válida (node --check)."
 
-      # ----------------------------------------------------------------
-      # 6. Resumo final e classificação
-      # ----------------------------------------------------------------
-      - name: Classificar PR
+      # 7. Versão da documentação = @version (item 12 do instructions.md)
+      - name: Conferir versão na documentação
         run: |
-          CRITICAL="${{ steps.protected.outputs.critical }}"
-          TITLE="${{ github.event.pull_request.title }}"
+          V=$(grep -oP '(?<=@version\s{6})\S+' paymobifin-assistente.user.js)
+          ERRO=0
+          conferir() { grep -qF "$2" "$1" || { echo "❌ $1 sem a versão $V (esperado: $2)"; ERRO=1; }; }
+          conferir README.md "**Versão atual:** $V"
+          conferir instructions.md "**Versão atual:** $V"
+          conferir CLAUDE.md "| Versão atual | $V |"
+          conferir docs/script/01-visao-geral.md "**Versão atual:** $V"
+          conferir docs/script/03-painel-interface.md "PaymobiFin - Assistente  v$V"
+          [ "$ERRO" = 0 ] && echo "✅ Documentação na versão $V."
+          exit $ERRO
 
-          echo "## Resultado da validação" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**PR:** $TITLE" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+      - name: Resumo
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          CATEGORIA: ${{ steps.protected.outputs.categoria }}
+          REASON: ${{ steps.protected.outputs.reason }}
+        run: |
+          {
+            echo "## Resultado da validação"
+            echo ""
+            echo "**PR:** $TITLE → \`$BASE\`"
+            echo ""
+            if [ "$BASE" = "main" ]; then
+              echo "### 🔒 PR para a main: merge manual pelo responsável"
+            elif [ "$CATEGORIA" = "B" ]; then
+              echo "### ⛔ Categoria B — $REASON"
+              echo "Validação OK, mas **sem merge automático**: aguardando o responsável."
+            else
+              echo "### ✅ Categoria A — merge automático"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$CRITICAL" = "true" ]; then
-            echo "### ⛔ Categoria B — Alteração crítica" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Motivo:** ${{ steps.protected.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Este PR **não pode ser integrado automaticamente**." >> $GITHUB_STEP_SUMMARY
-            echo "Aguardando autorização explícita do responsável." >> $GITHUB_STEP_SUMMARY
+  auto-merge:
+    name: Merge automático
+    needs: validate
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.base.ref != 'main' &&
+      needs.validate.outputs.categoria == 'A' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(github.event.pull_request.labels.*.name, 'sem-auto-merge')
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Integrar o PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          # sincronização main -> development: merge commit (mantém o histórico da main);
+          # tarefas: squash (um commit por PR)
+          if [ "$HEAD_REF" = "main" ]; then METODO=--merge; else METODO=--squash; fi
+          if gh pr merge "$PR" --repo "$REPO" $METODO --auto 2>/tmp/erro.txt; then
+            echo "✅ Merge automático ativado no PR #$PR ($METODO)."
           else
-            echo "### ✅ Categoria A — Alteração rotineira" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Todas as verificações passaram." >> $GITHUB_STEP_SUMMARY
-            echo "O auto-merge será ativado após aprovação deste workflow." >> $GITHUB_STEP_SUMMARY
+            echo "Auto-merge indisponível ($(cat /tmp/erro.txt)). Tentando merge direto..."
+            gh pr merge "$PR" --repo "$REPO" $METODO
+            echo "✅ PR #$PR integrado ($METODO)."
           fi
-
-      # ----------------------------------------------------------------
-      # 7. Bloquear definitivamente PRs críticos
-      # ----------------------------------------------------------------
-      - name: Bloquear PR crítico
-        if: steps.protected.outputs.critical == 'true'
-        run: |
-          echo "⛔ PR classificado como Categoria B (crítica)."
-          echo "Razão: ${{ steps.protected.outputs.reason }}"
-          echo "Merge automático bloqueado. Aguardando autorização do responsável."
-          exit 1

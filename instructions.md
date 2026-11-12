@@ -225,14 +225,13 @@ feat!: remover suporte ao formato antigo de exportação
 
 5. Push e abrir PR → development (não main)
 
-6. Workflows executam automaticamente:
-   - validate-pr.yml → valida o PR
-   - auto-merge.yml → ativa auto-merge (Squash)
+6. validate-pr.yml valida o PR e, se for Categoria A, faz o merge automático (Squash)
 
-7. Merge automático em development após todas as verificações passarem
+7. A cada merge na development, o workflow "Preparar release" abre ou atualiza
+   o PR de release (release/proxima → main) com @version, documentação e CHANGELOG
 
-8. Quando development estiver testado e estável:
-   Abrir PR development → main para ir à produção
+8. Quando development estiver testada e estável:
+   o responsável integra o PR de release (um clique). Não abrir PR development → main à mão
 ```
 
 ### Alterações críticas (Categoria B)
@@ -241,9 +240,10 @@ feat!: remover suporte ao formato antigo de exportação
 1. Preparar diagnóstico e proposta detalhada
 2. Apresentar ao responsável e aguardar autorização explícita
 3. Executar somente após aprovação — branch a partir de development
-4. Abrir PR → development
+4. Abrir PR → development (a validação classifica como Categoria B quando altera
+   workflows, .github/scripts, package.json ou o arquivo-ponte: sem merge automático)
 5. Aguardar aprovação manual do responsável para o merge em development
-6. Só vai para main após nova confirmação
+6. Só vai para main após nova confirmação (pelo PR de release)
 ```
 
 **Squash Merge é o padrão** — um commit por PR.
@@ -318,9 +318,7 @@ O campo `@version` no cabeçalho de `paymobifin-assistente.user.js` é a fonte d
 | `BREAKING CHANGE` | MAJOR (ex.: 13.22 → 14.0.0) |
 | `docs`, `chore`, `test`, `ci`, `refactor` sem impacto funcional | nenhum |
 
-Atualizar o `@version` manualmente acompanhado de `chore: versão X.Y.Z` a cada release.
-
-> **Pendência:** sincronização automática do `@version` com o SemVer calculado pelo workflow ainda não implementada.
+O incremento é calculado no **PR de release** (workflow "Preparar release", script `.github/scripts/preparar_release.py`), que atualiza o `@version`, os locais da tabela acima e o `CHANGELOG.md` antes do merge na `main`. **Não** fazer mais commits manuais `chore: versão X.Y.Z`: as branches de tarefa não mudam o `@version`.
 
 ---
 
@@ -330,49 +328,36 @@ Atualizar o `@version` manualmente acompanhado de `chore: versão X.Y.Z` a cada 
 
 | Arquivo | Trigger | Responsabilidade |
 |---|---|---|
-| `.github/workflows/validate-pr.yml` | `pull_request` → `main` | Valida título, arquivos protegidos, integridade do script, conflitos. Bloqueia Categoria B. |
-| `.github/workflows/auto-merge.yml` | Após `Validate PR` ter sucesso | Ativa auto-merge Squash via API. |
-| `.github/workflows/release.yml` | `push` → `main` | Calcula SemVer, atualiza `CHANGELOG.md`, cria tag e GitHub Release. |
+| `.github/workflows/validate-pr.yml` | PR para `main`, `development` ou `feature/**` | Valida título, origem (PR para a `main` só de `development`, `release/proxima` ou `hotfix/*`), conflitos, integridade e sintaxe do script (`node --check`) e versão da documentação. Classifica Categoria A/B. Job **Merge automático**: Categoria A para `development`/`feature/**` é integrada sozinha (Squash; sincronização `main` → `development` por merge commit). |
+| `.github/workflows/release-pr.yml` ("Preparar release") | `push` → `development` | Abre ou atualiza o PR de release `release/proxima` → `main` com a próxima versão, documentação e `CHANGELOG.md` (`.github/scripts/preparar_release.py`). Fecha o PR se não houver nada novo. |
+| `.github/workflows/release.yml` | `push` → `main` | Cria a tag `vX.Y.Z` (do `@version`) e a GitHub Release com as notas do `CHANGELOG.md`. Abre o PR "chore: sincroniza main na development" quando a `main` tem commits que a `development` não tem. Não faz commits na `main`. |
 
 ### Fluxo completo
 
 ```
-branch → commit → push → PR aberto
-  ↓
-validate-pr.yml:
-  ✅ título Conventional Commits
-  ✅ nenhum arquivo de infraestrutura alterado
-  ✅ @downloadURL/@updateURL intactos
-  ✅ 'use strict' e IIFE presentes
-  ✅ sem conflitos
-  ↓
-auto-merge.yml ativa Squash Merge
-  ↓ (após branch protection)
-Squash Merge na main
-  ↓
-release.yml: feat→MINOR | fix/perf→PATCH | BREAKING→MAJOR
-  → CHANGELOG.md atualizado
-  → tag vX.Y.Z criada
-  → GitHub Release publicada
+branch de tarefa → PR → development
+  ↓ validate-pr.yml (Validar alterações)
+  ↓ Categoria A → Merge automático (Squash)          Categoria B → merge manual
+development
+  ↓ release-pr.yml (Preparar release)
+PR release/proxima → main   (versão, documentação e CHANGELOG já calculados)
+  ↓ merge manual pelo responsável (um clique)
+main → Tampermonkey de todos os usuários
+  ↓ release.yml: tag vX.Y.Z + GitHub Release
+  ↓ PR "chore: sincroniza main na development" → merge automático
 ```
 
-### O que os workflows NÃO fazem
+- **A `main` nunca tem merge automático.** Cada merge nela chega na hora a toda a equipe.
+- **Rótulo `sem-auto-merge`:** impede o merge automático de um PR específico.
+- **Incremento:** `feat` → MINOR · `fix`/`perf` → PATCH · `!`/`BREAKING CHANGE` → MAJOR · demais → nenhum (o PR de release se chama "chore: integrar development na main").
 
-- Não modificam o `@version` do script automaticamente
-- Não publicam em serviços externos
-- Não geram release para `docs`, `chore`, `test`, `ci`, `refactor`
+### Token `RELEASE_TOKEN`
+
+PRs e merges feitos com o `GITHUB_TOKEN` padrão não disparam outros workflows. Por isso o merge automático, o PR de release e o PR de sincronização usam o secret `RELEASE_TOKEN` (token pessoal do proprietário). Sem ele, os workflows funcionam com o `GITHUB_TOKEN`, mas: o merge na `development` não abre o PR de release, e os PRs de release e de sincronização ficam sem a verificação "Validar alterações".
 
 ### Configurações necessárias pelo proprietário
 
-Ver `.github/SETUP.md` para o passo a passo. Resumo:
-
-| Configuração | Status |
-|---|---|
-| "Allow auto-merge" em Settings > General | ⏳ Pendente |
-| Branch protection da `main` com status check `Validar alterações` | ⏳ Pendente |
-| "Read and write permissions" para o GITHUB_TOKEN | ⏳ Pendente |
-| "Allow GitHub Actions to create and approve pull requests" | ⏳ Pendente |
-| Squash Merge como único método | ⏳ Pendente |
+Ver `.github/SETUP.md`.
 
 ---
 
@@ -518,21 +503,20 @@ Documentar novas chaves aqui antes de usar. Renomear sem migração quebra dados
 | `docs/script/<módulo>.md` | Mudança de comportamento, nova função |
 | `docs/script/13-api-er.md` | Rota do ER mapeada, alterada ou migrada para a camada `er` (criado na P0.1) |
 | `docs/PLANO-API-ER.md` | Status das fases da P0 |
-| `CHANGELOG.md` | Gerado automaticamente pelo `release.yml` |
+| `CHANGELOG.md` | Gerado automaticamente no PR de release (`release-pr.yml`) |
 | `.github/SETUP.md` | Mudança nos workflows ou requisitos de configuração |
 | Locais de versão listados no item 12 | Sempre que o `@version` mudar (mesmo commit/PR) |
 
 ---
 
-## 19. Comportamento diante de falha no auto-merge
+## 19. Comportamento diante de falha no merge automático
 
-Se o auto-merge não funcionar (workflow de validação falhou, branch protection não configurada,
-permissões insuficientes):
+Se o merge automático não acontecer (validação falhou, Categoria B, rótulo `sem-auto-merge`, configuração pendente):
 
-1. **Não forçar o merge manualmente** — investigar a causa
-2. Verificar o log do workflow no GitHub Actions
-3. Se for falha de configuração (pendência do proprietário): documentar e aguardar
-4. Se for falha no código: corrigir na branch e fazer novo push
+1. **Não forçar o merge manualmente** — investigar a causa no log do workflow (GitHub Actions)
+2. Validação falhou por causa do código ou do título: corrigir na branch e fazer novo push (ou editar o título)
+3. Categoria B: é intencional — aguardar o responsável
+4. Falha de configuração (pendência do proprietário): documentar e aguardar
 5. O merge só acontece quando **todas** as verificações passam
 
 ---
@@ -585,17 +569,14 @@ Ver `.github/SETUP.md` para o passo a passo completo.
 
 | Item | Por que é necessário |
 |---|---|
-| Habilitar "Allow auto-merge" | O `auto-merge.yml` não consegue ativar sem isso |
-| Proteção da `main` com status check obrigatório | Garante que o merge só ocorre após validação |
-| Permissões do GITHUB_TOKEN (read/write) | `release.yml` precisa criar tags e releases |
-| "Allow Actions to create PRs" | `auto-merge.yml` precisa chamar a mutation GraphQL |
-| Squash Merge como único método | Mantém histórico limpo |
-| Definir destino da branch `development` | Evitar confusão no fluxo |
+| Secret `RELEASE_TOKEN` (token pessoal) | Para os PRs e merges feitos pelos workflows dispararem a validação e o "Preparar release" |
+| Habilitar "Allow auto-merge" | Merge automático espera as verificações em vez de integrar direto |
+| "Read and write permissions" e "Allow GitHub Actions to create and approve pull requests" | Workflows criam PRs, tags e releases |
+| Proteção da `main` e da `development` com status check `Validar alterações` | Garante que nada entra sem validação, nem por merge manual |
 
 **Riscos sem essas configurações:**
-1. Push direto na `main` distribui para todos os usuários imediatamente (sem validação)
-2. Auto-merge não funciona sem "Allow auto-merge" habilitado
-3. Releases não são criadas automaticamente sem permissões de escrita
+1. Sem proteção, um merge manual na `main` com a validação reprovada ainda passa (aconteceu nos PRs #43 e #44)
+2. Sem `RELEASE_TOKEN`, o PR de release não é aberto depois do merge automático na `development`
 
 ---
 

@@ -10,7 +10,7 @@
 | Sistema | Como autentica | Fonte |
 |---|---|---|
 | ER (`paymobi.ercard.com.br:9191/ErCardWeb/`) | Cookie `ASP.NET_SessionId`. Cookie anti-falsificação `__RequestVerificationToken_*`, normalmente exigido em POST de formulário | Requisição real em 11/11/2026 (`/Notificacoes/VerificaQtdNotificacoes`) e código |
-| Motor MobFacil (`enviamotor.mobfacil.com.br`) | Token JWT associado ao link do iframe (a resposta ecoa `"parametro": "TokenJWT"`). Forma exata de envio: **a confirmar** | Resposta real de `/api/visualizador` em 11/11/2026 |
+| Motor MobFacil (`enviamotor.mobfacil.com.br`) | Token de 32 caracteres hexadecimais enviado no **corpo JSON** da requisição (`{ "token": "...", "flagUltimos": false }`); a resposta ecoa `"parametro": "TokenJWT"`. Sem cabeçalho de autenticação identificado. Origem do token: **a confirmar** (provavelmente o link do iframe) | Requisições reais de `/api/visualizador` em 11/11/2026 |
 
 Observações:
 - O servidor do ER é IIS 10 + ASP.NET MVC 5.2. As rotas devolvem principalmente HTML montado no servidor.
@@ -21,8 +21,10 @@ Observações:
 ## Motor MobFacil — `/api/visualizador`
 
 **URL:** `https://enviamotor.mobfacil.com.br/api/visualizador`
+**Requisição:** corpo JSON `{ "token": "<32 hex>", "flagUltimos": false }` (por ter corpo, é POST; confirmar em **Cabeçalhos** → `:method`)
 **Resposta:** `application/json; charset=utf-8`
-**Método, parâmetros e cabeçalhos da requisição:** a confirmar (ver Pendências).
+
+`flagUltimos` provavelmente limita a resposta às últimas execuções. Testar com `true` pode resolver a escolha entre várias execuções do mesmo fluxo.
 
 A árvore que a coleta lê hoje (`arvoreReact`/`treeData`, com cliques em `rodarCaminho`) é a exibição desse JSON. Os nós da árvore têm os mesmos nomes das chaves (`Fluxos P1`, `Cpf`, `calculaRisco`, `QuantidadeRestritivos`...). Ler o JSON elimina a navegação, os cliques e a espera de animação.
 
@@ -78,6 +80,27 @@ Atalho usado abaixo: `SPC` = `Biros.SPCBrasil.result.return_object.resultado`.
 | `rendaInf` | Cartão "Renda informada" (tela) | `DadosProposta.Submit.Inputs[Name=PROP_RENDA_PESSOAL].Value` | `"5000"` |
 | `nome` | Cartão "Nome do cliente" (tela) | `DadosProposta.Submit.Inputs[Name=PROP_NOME].Value` | `"NOME FICTICIO"` |
 
+### Proposta reprovada (amostra de 11/11/2026)
+
+Diferenças em relação a uma proposta que passou pelos dois fluxos:
+
+| Ponto | Proposta reprovada no P1 |
+|---|---|
+| Fluxos | Só `fluxos_P1`; **não existe `fluxos_P2`** |
+| `statusFinal` / `StatusResposta` | `"R - Reprovado"` |
+| `motivoStatus` | `["(P1) Reprovar: cliente abaixo do ponto de corte (score=344)"]` — formato `Reprovar:` confirmado |
+| `RegrasDeNegocios.calculaRisco` | **`null`** → `qtd`/`val` vêm da reserva `SPC.pendenciaFinanceira.resumo` (`quantidadeTotal: 1`, `valorTotal: 3418.2`) |
+| `RegrasDeNegocios.validaRendavalores` | **`null`** → sem `RendaCalculo` (`rendaBiro` vazio, como hoje) |
+| `classificacaoRiscoDeCredito` | Presente: `valorScore: "344"` (texto), `Status`, `PontoCorte`, `riscoCredito` |
+| Consultas | Só no P1: `SPC.consultaRealizada.resumo.quantidadeTotal` (`3`) |
+| `Biros` | Só `SPCBrasil` |
+
+Conclusões para o leitor:
+- Regras de negócio podem vir `null`: tratar `null` como "não calculado" e usar a reserva, nunca como zero.
+- `consultas` usa P2 quando existe e P1 quando não existe, como o código já faz.
+- `score` também está em `RegrasDeNegocios.classificacaoRiscoDeCredito.valorScore` (texto). É o `valorScore` que o código atual procura primeiro.
+- `reprov`: juntar os itens de `motivoStatus` que contêm `Reprovar:` com ` ¦ `, como o código atual.
+
 Também disponível em `calculaRisco`: `Status`, `Regra`, `Idade`, `QuantidadePassagens`, `FonteValorRestritivos`, `FonteQuantidadeRestritivos`.
 
 ### Cuidados para o leitor
@@ -91,10 +114,10 @@ Também disponível em `calculaRisco`: `Status`, `Regra`, `Idade`, `QuantidadePa
 
 ### Pendências
 
-1. **Requisição:** método (GET/POST), parâmetros (query ou corpo) e cabeçalhos (ex.: `Authorization`). Ver na aba **Cabeçalhos** e **Payload** da requisição no DevTools.
-2. **Origem do token:** se vem no link do iframe obtido em `/MesaCredito/MesaAnaliseMobFacil`.
-3. **Proposta reprovada:** capturar a resposta de uma proposta reprovada para confirmar o formato de `Reprovar:` em `motivoStatus`.
-4. **Mais de uma execução por fluxo:** confirmar a ordem da lista.
+1. ~~Requisição~~ **Resolvido:** corpo JSON com `token` e `flagUltimos`. Falta só confirmar o método (`:method`).
+2. **Origem do token:** confirmar se é o mesmo valor que aparece no link do iframe obtido em `/MesaCredito/MesaAnaliseMobFacil`.
+3. ~~Proposta reprovada~~ **Resolvido** (seção acima).
+4. **Mais de uma execução por fluxo:** confirmar a ordem da lista e o efeito de `flagUltimos: true`.
 
 ### Como usar (proposta para P0.6)
 

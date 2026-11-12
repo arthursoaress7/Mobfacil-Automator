@@ -10,7 +10,7 @@
 | Sistema | Como autentica | Fonte |
 |---|---|---|
 | ER (`paymobi.ercard.com.br:9191/ErCardWeb/`) | Cookie `ASP.NET_SessionId`. Cookie anti-falsificação `__RequestVerificationToken_*`, normalmente exigido em POST de formulário | Requisição real em 11/11/2026 (`/Notificacoes/VerificaQtdNotificacoes`) e código |
-| Motor MobFacil (`enviamotor.mobfacil.com.br`) | Token de 32 caracteres hexadecimais enviado no **corpo JSON** da requisição (`{ "token": "...", "flagUltimos": false }`); a resposta ecoa `"parametro": "TokenJWT"`. Sem cabeçalho de autenticação identificado. Origem do token: **a confirmar** (provavelmente o link do iframe) | Requisições reais de `/api/visualizador` em 11/11/2026 |
+| Motor MobFacil (`enviamotor.mobfacil.com.br`) | Token de 32 caracteres hexadecimais enviado no **corpo JSON** da requisição (`{ "token": "...", "flagUltimos": false }`); a resposta ecoa `"parametro": "TokenJWT"`. Sem cookie nem cabeçalho de autenticação. O token é o caminho do link do iframe devolvido por `/MesaCredito/MesaAnaliseMobFacil` (`https://enviamotor.mobfacil.com.br/<token>`), e **cada chamada dessa rota gera um token novo** | HAR de 11/11/2026 (6 aberturas do motor) |
 
 Observações:
 - O servidor do ER é IIS 10 + ASP.NET MVC 5.2. As rotas devolvem principalmente HTML montado no servidor.
@@ -21,7 +21,26 @@ Observações:
 ## Motor MobFacil — `/api/visualizador`
 
 **URL:** `https://enviamotor.mobfacil.com.br/api/visualizador`
-**Requisição:** corpo JSON `{ "token": "<32 hex>", "flagUltimos": false }` (por ter corpo, é POST; confirmar em **Cabeçalhos** → `:method`)
+**Requisição:** `POST`, `content-type: application/json`, corpo `{ "token": "<32 hex>", "flagUltimos": false }`
+
+**Como o motor chega aos dados (confirmado no HAR de 11/11/2026):**
+
+```
+1. ER:    GET /MesaCredito/MesaAnaliseMobFacil?lngProposta={id}
+          → HTML com <iframe id="iframePost" src="https://enviamotor.mobfacil.com.br/{token}">
+2. Motor: página do iframe (enviamotor.mobfacil.com.br/{token})
+3. Motor: POST /api/visualizador  { "token": "{token}", "flagUltimos": false }
+          → JSON com a análise completa
+```
+
+**CORS:** a resposta de `/api/visualizador` **não** tem `access-control-allow-origin`. Um `fetch` feito na página do ER (outro domínio) é bloqueado pelo navegador. Opções:
+
+| Opção | Como | Cabeçalho do script | Ganho |
+|---|---|---|---|
+| A — Dentro do iframe | O código do motor (`iniciarMotor`, já roda em `enviamotor.mobfacil.com.br`) chama `/api/visualizador` com o token de `location.pathname`, ou escuta a resposta que a página recebe | Sem mudança (`@include` já cobre o domínio) | Fim dos cliques e da navegação na árvore. O iframe continua sendo carregado |
+| B — Sem iframe | A página do ER chama `MesaAnaliseMobFacil`, tira o token do `src` e faz o `POST` com `GM_xmlhttpRequest` | Exige `@connect enviamotor.mobfacil.com.br` (Categoria B) | Também elimina o carregamento do iframe: só duas requisições por proposta |
+
+Hoje o cabeçalho tem `@connect` para `api-sa1.pusher.com`, `generativelanguage.googleapis.com` e `paymobi.ercard.com.br`.
 **Resposta:** `application/json; charset=utf-8`
 
 `flagUltimos` provavelmente limita a resposta às últimas execuções. Testar com `true` pode resolver a escolha entre várias execuções do mesmo fluxo.
@@ -114,8 +133,8 @@ Também disponível em `calculaRisco`: `Status`, `Regra`, `Idade`, `QuantidadePa
 
 ### Pendências
 
-1. ~~Requisição~~ **Resolvido:** corpo JSON com `token` e `flagUltimos`. Falta só confirmar o método (`:method`).
-2. **Origem do token:** confirmar se é o mesmo valor que aparece no link do iframe obtido em `/MesaCredito/MesaAnaliseMobFacil`.
+1. ~~Requisição~~ **Resolvido:** `POST` com corpo JSON `token` + `flagUltimos`.
+2. ~~Origem do token~~ **Resolvido:** é o caminho do link do iframe; um token novo a cada `MesaAnaliseMobFacil`. Validade do token e reaproveitamento: não testados (gerar um token novo a cada coleta, como a tela faz).
 3. ~~Proposta reprovada~~ **Resolvido** (seção acima).
 4. **Mais de uma execução por fluxo:** confirmar a ordem da lista e o efeito de `flagUltimos: true`.
 
@@ -133,3 +152,23 @@ Nos dois casos não há requisição entre domínios, então não é preciso `@c
 ## Rotas do ER
 
 Inventário preliminar em `docs/PLANO-API-ER.md`, seção 3. Detalhar aqui por rota (método, parâmetros, formato, leitor) à medida que cada módulo for migrado.
+
+### Mesa de Crédito (HAR de 11/11/2026)
+
+Base: `https://paymobi.ercard.com.br:9191/ErCardWeb/` (o ER usa barra dupla: `ErCardWeb//Rota`). Todas com o cookie de sessão.
+
+| Rota | Método | Parâmetros | Resposta |
+|---|---|---|---|
+| `/MesaCredito/MesaCredito` | POST | — | HTML da tela da Mesa |
+| `/MesaCredito/MesaCreditoLista` | GET | `strDados` = JSON com os filtros (`strDataInicial`, `strDataFinal`, `strProduto`, `strSituacao`, `strReanalise`, `strMesa`, `strTipoData`...) | HTML com a lista de propostas |
+| `/MesaCredito/MesaAnaliseProposta` | GET | `lngProposta` | HTML da análise da proposta |
+| `/MesaCredito/DetalheProposta` | GET | `lngProposta` | HTML (`#frmMesaAnalise`) com o detalhe |
+| `/MesaCredito/MesaAnaliseMobFacil` | GET | `lngProposta` | HTML com o `<iframe src>` do motor (token) |
+| `/MesaCredito/MesaAnaliseDocumentos` | GET | `lngProposta`, `blnDocumentosAnteriores=false` | HTML com a lista de documentos |
+| `/Documentos/BaixaDocumento` | POST | `lngDocumento`, `strGerarArquivo=S`, `blnGerarUnicoPdf=false` | PDF (no HAR, conteúdo em base64) |
+| `/MesaCredito/PreencheAnalistas` | POST | — | **JSON** `[{ strAnalista, strNome }]` |
+| `/MesaCredito/PreencheMesasUsuario` | POST | — | **JSON** `[{ strMesa, strDescricao }]` |
+| `/VendasLojistas/PreencheProdutosUsuario` | POST | — | **JSON** `[{ Produto, Abreviatura, Nome, Segmento... }]` |
+| `/Notificacoes/VerificaQtdNotificacoes` | GET | — | Texto com o número de notificações (consulta periódica da tela) |
+
+Ainda não mapeadas com HAR: Fila de Pendências, Fila de Propostas, Central de Atendimento (CAC).

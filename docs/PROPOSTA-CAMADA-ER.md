@@ -1,6 +1,6 @@
 # Proposta P0.2 — Camada de acesso ao ER (`er`)
 
-> **Status:** em revisão — aguardando autorização do responsável (Categoria B).
+> **Status:** **aprovada pelo responsável em 12/11/2026** (todas as decisões da seção 12). Implementação: P0.3.
 > Base: código v13.29.0 e mapeamento em [`docs/script/13-api-er.md`](./script/13-api-er.md). Plano geral em [`docs/PLANO-API-ER.md`](./PLANO-API-ER.md).
 > Esta proposta não altera código. A implementação é a P0.3, só depois da aprovação.
 

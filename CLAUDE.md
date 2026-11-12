@@ -18,7 +18,7 @@
 |---|---|
 | Arquivo principal | `paymobifin-assistente.user.js` (~8.300 linhas) |
 | Tipo | Tampermonkey userscript (monólito, sem build) |
-| Versão atual | 13.29.0 |
+| Versão atual | 13.29.1 |
 | Sites alvo | `paymobi.ercard.com.br` e `enviamotor.mobfacil.com.br` |
 | Arquitetura | **Monolítica** — não dividir em arquivos |
 | Fluxo Git | branch temporária → `development` (testes) → `main` (produção) |
@@ -36,8 +36,9 @@
 - **Não sobrescreva dados de armazenamento existentes** — siga o padrão de `salvar()`
 - **Dentro do painel, use `$()`, não `document.querySelector()`**
 - **Timeouts apenas em `CONFIG`** — nunca valores hard-coded fora dele
-- **Use o prefixo correto** para novas funções (`ng`, `at`, `lb`, `tm`, `cac`, `eq`, `hs`, `bs`, `rd`)
+- **Use o prefixo correto** para novas funções (`ng`, `at`, `lb`, `tm`, `cac`, `eq`, `hs`, `bs`, `pd`, `rd`, `er`)
 - **Alterações críticas (arquitetura, armazenamento, segurança, workflows) exigem autorização explícita**
+- **Prioridade atual (P0): consolidar o acesso ao ER** — trabalho na branch `feature/api-er`; leia `docs/PLANO-API-ER.md` e o item 23 do `instructions.md`
 
 ---
 
@@ -84,6 +85,10 @@ docs/script/08-ccbs-contas.md
 docs/script/09-equipe.md
 docs/script/10-navegacao-busca.md
 docs/script/11-rd-encerramento.md
+docs/script/12-desbloqueios.md
+docs/script/13-api-er.md           ← rotas do ER e do motor (P0)
+docs/PLANO-API-ER.md               ← plano da P0 (acesso ao ER)
+docs/PROPOSTA-CAMADA-ER.md         ← desenho da camada er (P0.2)
 README.md
 .github/SETUP.md                    ← configurações para o proprietário
 ```

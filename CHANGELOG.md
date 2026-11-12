@@ -1,5 +1,35 @@
 # Changelog
 
+## [v13.29.1] — 2026-11-12
+
+### 🐛 Correções
+
+- fix: dica da posição geral e documentação do protocolo de atendimento do cac (f31f414)
+
+### 🔧 Outros
+
+- Merge pull request #43 from arthursoaress7/development (af4758e)
+- Merge pull request #44 from arthursoaress7/feature/api-er (58f30dd)
+- Merge pull request #42 from arthursoaress7/fix/dica-protocolo-cac (425167f)
+- Merge pull request #41 from arthursoaress7/docs/plano-api-er (53826ea)
+
+
+## [v13.29.0] — 2026-11-11
+
+### ✨ Novas funcionalidades
+
+- feat: Desbloqueios no arquivo principal e sessão expirada do ER atualizado (#40) (ea74405)
+- feat: Desbloqueios no arquivo principal (#39) (f978a6e)
+
+### 🐛 Correções
+
+- fix: reconhece a sessão expirada do ER atualizado (#37) (597f766)
+
+### 🔧 Outros
+
+- Merge pull request #36 from arthursoaress7/docs/sincronizar-versao (2875b4b)
+
+
 ## [v13.28.0] — 2026-11-11
 
 ### ✨ Novas funcionalidades

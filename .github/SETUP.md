@@ -1,144 +1,108 @@
 # Configuração do repositório — Ações necessárias pelo proprietário
 
-> Este documento é exclusivo para **arthursoaress7** (proprietário do repositório).
-> As configurações abaixo exigem permissão de administrador e não podem ser feitas pelos colaboradores.
+> Exclusivo para **arthursoaress7** (proprietário do repositório). Estas configurações exigem permissão de administrador.
+> Fluxo descrito no item 13 do [`instructions.md`](../instructions.md).
 
 ---
 
-## ⚡ Ação imediata — Merge manual do PR dos workflows
+## Como o fluxo funciona
 
-O PR **`feature/auto-merge-workflow`** foi bloqueado pelo próprio `validate-pr.yml` porque altera
-arquivos em `.github/workflows/` — o que é classificado como Categoria B (alteração crítica).
+```
+branch de tarefa → PR → development     validação + merge automático (Categoria A)
+development → PR de release → main       aberto/atualizado sozinho; merge manual (um clique)
+main → tag + release                     automático; depois a main volta para a development sozinha
+```
 
-Esse comportamento é **correto e intencional**: nenhuma IA pode alterar os workflows sem autorização.
-
-Porém, este é o PR que *cria* os workflows pela primeira vez. Ele precisa ser mergeado **manualmente**
-pelo proprietário, uma única vez.
-
-**Como fazer:**
-1. Abrir o PR `feature/auto-merge-workflow` no GitHub
-2. Clicar em **"Merge pull request"** → **"Squash and merge"**
-3. Confirmar o merge
-
-Após este merge, todos os PRs futuros rodarão os workflows automaticamente. Esta exceção manual
-não se repetirá.
+Os passos abaixo fazem esse fluxo funcionar de ponta a ponta.
 
 ---
 
-## Por que isso é necessário
+## Passo 1 — Criar o token `RELEASE_TOKEN`
 
-Os workflows de auto-merge e release estão prontos no código, mas precisam de configurações
-no painel do GitHub para funcionar. Sem elas, os workflows rodam mas não conseguem fazer o merge
-ou criar releases automaticamente.
+PRs e merges feitos com o token padrão do GitHub Actions (`GITHUB_TOKEN`) **não disparam outros workflows**. Sem um token pessoal:
+- o merge automático na `development` não abre o PR de release;
+- o PR de release e o PR de sincronização ficam sem a verificação "Validar alterações".
 
----
+**Criar o token:**
+1. GitHub → foto do perfil → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**
+2. **Repository access:** *Only select repositories* → `PaymobiFin-Assistente`
+3. **Permissions → Repository permissions:**
+   - Contents: **Read and write**
+   - Pull requests: **Read and write**
+   - Workflows: **Read and write** (permite que o PR de release contenha mudanças de workflows vindas da `development`)
+4. **Expiration:** até 1 ano (anote a data para renovar)
+5. Copie o token gerado
 
-## Passo 1 — Habilitar Auto-merge no repositório
+**Salvar como secret:**
+1. Repositório → **Settings → Secrets and variables → Actions → New repository secret**
+2. Name: `RELEASE_TOKEN` · Secret: o token copiado
 
-**Onde:** `Settings > General > Pull Requests`
-
-**O que fazer:** Marcar a opção **"Allow auto-merge"**
-
-**Por que:** O workflow `auto-merge.yml` usa a API do GitHub para ativar o auto-merge em PRs
-rotineiros. Sem essa opção habilitada, a chamada à API retorna erro.
-
----
-
-## Passo 2 — Proteger a branch `main`
-
-**Onde:** `Settings > Branches > Add branch protection rule`
-
-**Branch name pattern:** `main`
-
-**Opções a marcar:**
-
-| Opção | Valor | Motivo |
-|---|---|---|
-| Require a pull request before merging | ✅ Ativo | Impede push direto na main |
-| Require approvals | ❌ Desativo | IAs usam autenticação pessoal — aprovar o próprio PR não funciona |
-| Require status checks to pass before merging | ✅ Ativo | Garante que o `validate-pr.yml` passou |
-| Status check obrigatório | `Validar alterações` | Nome exato do job no `validate-pr.yml` |
-| Require branches to be up to date | ✅ Ativo | PR deve estar sincronizado com a main |
-| Do not allow bypassing the above settings | ✅ Ativo | Nem o proprietário pode dar bypass sem PR |
-| Allow force pushes | ❌ Desativo | Nunca |
-| Allow deletions | ❌ Desativo | Nunca |
-
-> **Importante:** sem "Require status checks", o auto-merge é ativado mas o PR é mergeado
-> imediatamente sem aguardar validação, o que anula a segurança do fluxo.
+> As ações feitas com esse token aparecem no GitHub como feitas pela sua conta.
 
 ---
 
-## Passo 3 — Permissões do GITHUB_TOKEN para Actions
+## Passo 2 — Permissões do GitHub Actions
 
 **Onde:** `Settings > Actions > General > Workflow permissions`
 
-**O que fazer:** Selecionar **"Read and write permissions"**
-
-**Marcar também:** "Allow GitHub Actions to create and approve pull requests"
-
-**Por que:** O workflow `auto-merge.yml` precisa de `pull-requests: write` para chamar
-a mutation GraphQL `enablePullRequestAutoMerge`. O workflow `release.yml` precisa de
-`contents: write` para criar tags e releases.
-
-> **Alternativa mais segura (opcional):** criar um PAT (Personal Access Token) com escopos
-> `repo` e `workflow`, salvar como secret `RELEASE_TOKEN` e substituir
-> `${{ secrets.GITHUB_TOKEN }}` por `${{ secrets.RELEASE_TOKEN }}` nos workflows.
-> Isso isola as permissões e permite revogar sem afetar outras operações.
+- Selecionar **"Read and write permissions"**
+- Marcar **"Allow GitHub Actions to create and approve pull requests"**
 
 ---
 
-## Passo 4 — Habilitar Squash Merge como padrão (recomendado)
+## Passo 3 — Merge automático e métodos de merge
 
 **Onde:** `Settings > General > Pull Requests`
 
-**O que fazer:**
-- Desmarcar "Allow merge commits"
-- Desmarcar "Allow rebase merging"
-- Manter apenas **"Allow squash merging"**
-- Squash commit message: **"Pull request title and description"**
-
-**Por que:** Mantém o histórico da `main` limpo — um commit por feature/fix,
-com mensagem no formato Conventional Commits.
+| Opção | Valor | Motivo |
+|---|---|---|
+| Allow merge commits | ✅ | A sincronização `main` → `development` usa merge commit |
+| Allow squash merging | ✅ | PRs de tarefa entram com um commit cada |
+| Allow auto-merge | ✅ | O merge automático espera as verificações em vez de integrar direto |
+| Automatically delete head branches | ✅ (recomendado) | Remove as branches de tarefa depois do merge. **Não** apaga `main` nem `development` |
 
 ---
 
-## Passo 5 — Definir o destino da branch `development`
+## Passo 4 — Proteger a `main` e a `development`
 
-A branch `development` existe no repositório mas o fluxo adotado é GitHub Flow
-(branches temporárias → `main`). Decida:
+**Onde:** `Settings > Branches > Add branch protection rule` (uma regra para cada)
 
-- **Manter como arquivo:** não deletar, mas não usar para novos PRs
-- **Remover:** `git push origin --delete development` (só se não houver trabalho em andamento)
+| Opção | `main` | `development` | Motivo |
+|---|---|---|---|
+| Require a pull request before merging | ✅ | ✅ | Ninguém faz push direto |
+| Require approvals | ❌ | ❌ | A sua conta não pode aprovar o próprio PR |
+| Require status checks to pass before merging | ✅ | ✅ | Nada entra sem validação |
+| Status check obrigatório | `Validar alterações` | `Validar alterações` | Nome do job no `validate-pr.yml` |
+| Require branches to be up to date | ❌ | ❌ | Evita travar o merge automático e o PR de release |
+| Do not allow bypassing the above settings | ✅ | ✅ | Nem merges manuais passam com a validação reprovada |
+| Allow force pushes | ❌ | ❌ | Nunca |
+| Allow deletions | ❌ | ❌ | Nunca |
+
+> Sem esta proteção, um merge manual com a validação reprovada ainda passa (aconteceu nos PRs #43 e #44).
+> Não proteja `release/proxima`: o workflow "Preparar release" atualiza essa branch com push forçado.
 
 ---
 
-## Verificação após configuração
+## Verificação depois de configurar
 
-Após aplicar as configurações, abra um PR de uma branch `docs/` ou `fix/` qualquer.
-O fluxo esperado é:
-
-1. PR aberto
-2. Workflow `Validate PR` executa automaticamente
-3. Se todas as verificações passarem, workflow `Auto Merge` ativa o auto-merge
-4. GitHub aguarda o status check obrigatório ser satisfeito
-5. Merge automático (Squash) é executado
-6. Workflow `Release` avalia se há necessidade de nova versão
-
-Se o merge ocorrer sem erros, o fluxo está funcionando.
+1. Abra um PR de documentação qualquer para a `development` (ex.: `docs/teste-fluxo`).
+2. **Validate PR** roda; o job **Merge automático** integra o PR.
+3. **Preparar release** roda e abre o PR **"chore: integrar development na main"** (ou "chore: release vX.Y.Z" se houver `feat`/`fix`), já com a verificação "Validar alterações".
+4. Integre o PR de release na `main`.
+5. **Release** roda: cria a tag (se a versão mudou) e abre **"chore: sincroniza main na development"**, que é integrado sozinho.
 
 ---
 
 ## Dúvidas frequentes
 
-**O GITHUB_TOKEN consegue fazer merge do próprio PR que criou?**
-Sim — em repositórios pessoais, o `GITHUB_TOKEN` tem permissão para isso quando
-"Allow GitHub Actions to create and approve pull requests" está habilitado.
+**Um PR não foi integrado sozinho. Por quê?**
+Veja o resumo do workflow **Validate PR**. Causas comuns: título fora do padrão `tipo: descrição`; Categoria B (workflows, `.github/scripts`, `package.json`, arquivo-ponte); rótulo `sem-auto-merge`; PR em rascunho.
 
-**O auto-merge funciona sem branch protection?**
-Não — sem branch protection, o PR pode ser mergeado imediatamente e o auto-merge
-nem é necessário. O workflow tenta fazer o merge direto nesse caso, mas o fluxo
-ideal requer a proteção configurada.
+**Como impedir o merge automático de um PR?**
+Coloque o rótulo `sem-auto-merge` no PR.
 
-**O que acontece se o workflow de validação falhar?**
-O auto-merge não é ativado. O PR fica aberto aguardando correção. O merge automático
-não ocorre enquanto houver verificações com falha.
+**Posso integrar o PR de release com "Squash and merge"?**
+Pode. "Create a merge commit" deixa o histórico mais claro, mas os dois funcionam: a sincronização traz a `main` de volta para a `development`.
+
+**O token expirou. O que acontece?**
+Os workflows que usam `RELEASE_TOKEN` falham com erro de autenticação. Gere um token novo (Passo 1) e atualize o secret.

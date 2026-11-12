@@ -431,7 +431,7 @@ else if (window.top === window) iniciarPainel();
 | `bs` | Busca de cliente |
 | `pd` | Relatório de Pendências |
 | `rd` | RD Atendimento |
-| `er` | Acesso ao ER (sessão, base, requisições; camada consolidada na P0) |
+| `er` | Acesso ao ER: sessão, base, requisições do RD e a camada `er` (P0.3, seção "ACESSO AO ER" no nível de cima do arquivo) |
 
 ### Seletor interno do painel
 
@@ -467,6 +467,8 @@ Documentar novas chaves aqui antes de usar. Renomear sem migração quebra dados
 | `rdAnalises/rdLinhas/erBase` | Dados do RD | RD |
 | `gruposCfg/buscaAberta/buscaComCac` | Config e busca | Config/Busca |
 | `pdRecolhido` | Seção Pendências recolhida (padrão: sim) | Relatório de Pendências |
+| `erModulos` | `{ [módulo]: true }` — módulos que leem o ER pela camada `er` (padrão: `{}`, tudo desligado) | Camada er |
+| `erFalhas` | `{ 'AAAA-MM-DD': { rota: { motivo: n } } }` — contagem de falhas por rota (últimos `CONFIG.ER_FALHAS_DIAS` dias), sem dados de clientes | Camada er |
 
 ---
 

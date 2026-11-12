@@ -75,6 +75,7 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
   **Dependências:** P0.1. Exige autorização explícita antes de P0.3.
 
 - [ ] **P0.3 — Implementar a camada base** (Categoria B)  
+  **Status:** Implementada na sub-branch `feature/er-camada-base` (12/11/2026), em revisão. 36 testes automatizados locais com respostas reais dos HARs; falta o teste manual no ER.  
   **Objetivo:** camada funcionando sem nenhum módulo migrado; nenhum comportamento existente muda.
 
 - [ ] **P0.4 — Piloto: Relatório de Pendências**  

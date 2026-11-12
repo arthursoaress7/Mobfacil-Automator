@@ -54,6 +54,7 @@
     POLL_PRINCIPAL: 100,    // ms entre verificações na janela principal
     PAUSA: 100,             // ms entre propostas
     TIMEOUT_REDE: 30,       // s máximos do fetch da página do motor
+    ER_FALHAS_DIAS: 14,     // dias de histórico da contagem de falhas da camada er (GM erFalhas)
     BATIDA: 5,              // s: tempo para considerar que a coleta de outra aba ainda está viva
     CORTE_SCORE: 390,       // reprova se score < 390
     CORTE_VALOR: 4000,      // reprova se valor de restrições > 4000
@@ -107,6 +108,7 @@
     mesaHoje: true,                  // Mesa de Crédito abre com as datas de hoje (ou as que você escolheu hoje)
     navAuto: true,                   // abre sozinho a tela do sistema que a função precisa (Mesa de Crédito, Fila de Propostas)
     equipeAtiva: false,              // sincronização da equipe (Pusher): só liga quando o funcionário configura
+    erModulos: {},                   // camada er (P0): módulos que leem o ER pela camada nova, ex. { pd: true }. Tudo desligado por padrão
   };
   const cfg = k => GM_getValue(k, PADRAO[k]);
 
@@ -117,6 +119,221 @@
   // logada, também diz "sessão de trabalho expirou". O "ç" pode vir como &#231; ou &ccedil;: \S{1,8} cobre as formas.
   const erSemSessao = t => /id=["']?frmLogin|id=["']?txtSenha|function\s+ReiniciaSistema|refa\S{1,8}a seu login/i.test(t || '');
   const SESSAO_EXPIRADA = 'sessão do ER expirada';
+
+  /* ================= ACESSO AO ER (camada er) =================
+     Entrada única para LER dados do ER (P0; desenho aprovado em docs/PROPOSTA-CAMADA-ER.md). Somente leitura.
+       erBuscar(nome, params, opcoes) -> { ok: true, dados, rota }
+                                       | { ok: false, motivo, rota, status, detalhe, precisa? }
+       motivos: sessao, conta, tempo, rede, http, estrutura, sem_base, bloqueada, cancelada, rota_desconhecida
+     Nível de cima do arquivo: serve ao painel (fetch na mesma origem) e ao RD (GM_xmlhttpRequest + erBase).
+     P0.3: nenhum módulo usa a camada ainda. Cada módulo migra separadamente e só com a chave erModulos ligada. */
+
+  // rotas que alteram dados no ER (protocolo, envio ao cliente, login): a camada se recusa a chamá-las
+  const ER_BLOQUEADAS = [
+    /\/CentralAtendimento\/CentralFinalizaProtocolo/i,
+    /\/CentralAtendimento\/(Central|Efetiva)EnvioProtocolo/i,
+    /\/CentralAtendimento\/CentralProtocoloSms/i,
+    /\/CentralAtendimento\/CentralAdesao/i,
+    /\/(Login|Logon|Logout|Logoff|Autentica)/i,
+  ];
+  // respostas de conta sem permissão para a rota ("ã"/"á" podem vir como &#227;/&aacute;: \S{1,8} cobre as formas)
+  const ER_CONTA_ERRADA = [
+    { rx: /Aprovador\s+\S+\s+n\S{1,8}o\s+cadastrado/i, precisa: 'mesa' },   // Mesa de Crédito aberta com a master
+    { rx: /Usu\S{1,8}rio\s+sem\s+direito/i, precisa: 'master' },            // ex.: CAC por nome com a conta da Mesa
+  ];
+
+  const erEstrutura = motivo => Object.assign(new Error(motivo), { erEstrutura: true });
+  const erSemAcessoRota = motivo => Object.assign(new Error(motivo), { erConta: true });
+  const erLimpo = t => String(t || '').replace(/[\s ]+/g, ' ').trim();
+  const erHojeBR = () => { const d = new Date(); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear(); };
+  // pares <dt>rótulo</dt><dd>valor</dd> (chave em minúsculas, sem ":"), como pdDl/cacDl
+  const erDl = doc => {
+    const o = {};
+    doc.querySelectorAll('dt').forEach(dt => {
+      const dd = dt.nextElementSibling, k = erLimpo(dt.textContent).replace(/:$/, '').toLowerCase();
+      if (dd && dd.tagName === 'DD' && !(k in o)) o[k] = erLimpo(dd.textContent);
+    });
+    return o;
+  };
+
+  /* Registro das rotas. Cada rota: caminho, metodo (GET|POST), formato (html|json), conta (mesa|master|qualquer),
+     params(p) opcional, vazio (texto de "nenhum resultado" -> dados: []) opcional e ler(doc|json, p) -> dados.
+     ler lança erEstrutura('...') quando falta o essencial. Novas rotas entram junto com a migração de cada módulo. */
+  const ER_ROTAS = {
+    // conta da Mesa: lista de mesas do usuário; master (não aprovadora da Mesa): []
+    mesasUsuario: {
+      caminho: '/MesaCredito/PreencheMesasUsuario', metodo: 'POST', formato: 'json', conta: 'qualquer',
+      ler: j => {
+        if (!Array.isArray(j)) throw erEstrutura('a lista de mesas não veio');
+        return j.map(m => ({ mesa: String(m.strMesa || ''), descricao: String(m.strDescricao || '') }));
+      },
+    },
+    // Fila de Pendências, "TODAS PENDENTES" (mesmos parâmetros de pdLista)
+    pendencias: {
+      caminho: '/FilaPendencias/FilaPendenciasLista', metodo: 'GET', formato: 'html', conta: 'master',
+      params: p => ({
+        strPendencia: '', strTipoRepasse: 'R', strTipoPendencia: 'T', strProduto: '', strLojista: '', strLoja: '',
+        strDataInicial: p.desde || '01/01/2020', strDataFinal: p.ate || erHojeBR(), strTipoData: 'S', strCliente: '', lngAutorizacao: '', lngProposta: '',
+        strPromotora: '', strPromotoraFilial: '', strAgrupamento: 'N', strReembolso: '', strTipoBloqueio: '', strTipoDocumento: '',
+        strConveniada: '', strPlano: '' }),
+      vazio: /n[ãa]o foi localizada nenhuma pend[êe]ncia/i,
+      ler: doc => {
+        const t = doc.querySelector('table');
+        if (!t) throw erSemAcessoRota('a resposta não trouxe a Fila de Pendências');   // como pdLista: tratado como sem acesso
+        const ths = [...t.querySelectorAll('thead th')].map(th => erLimpo(th.textContent).toLowerCase());
+        const col = n => ths.findIndex(x => x.startsWith(n));
+        const ci = { pend: col('pend'), aut: col('autoriza'), nome: col('nome'), data: col('data') };
+        if (ci.aut < 0) throw erEstrutura('a Fila de Pendências veio sem a coluna Autorização');
+        return [...t.querySelectorAll('tbody tr')].map(tr => {
+          const c = [...tr.children].map(td => erLimpo(td.textContent));
+          return { aut: (c[ci.aut] || '').replace(/\D/g, ''), pend: c[ci.pend] || '', nome: c[ci.nome] || '', data: c[ci.data] || '' };
+        }).filter(l => l.aut);
+      },
+    },
+    // "Manutenção de Pendência" de uma autorização (só lida): pares rótulo/valor; o módulo escolhe os campos
+    pendenciaDetalhe: {
+      caminho: '/FilaPendencias/DetalheCompra', metodo: 'GET', formato: 'html', conta: 'master',
+      params: p => ({ strAutorizacao: p.aut, strPendencia: p.pend || '', strTipoConsulta: 'P' }),
+      ler: doc => {
+        const d = erDl(doc);
+        if (!('nro da proposta' in d)) throw erEstrutura('o detalhe da pendência veio sem "Nro da Proposta"');
+        return d;
+      },
+    },
+  };
+
+  // endereço do ER: no próprio ER, o do sistema (como cacBase); no RD, o guardado pelo painel (GM erBase)
+  const erNoRD = () => location.hostname === 'app.tallos.com.br';
+  const erEndereco = () => {
+    if (erNoRD()) return String(GM_getValue('erBase', '') || '').replace(/\/+$/, '');
+    if (!/(^|\.)paymobi\.ercard\.com\.br$/i.test(location.hostname)) return '';
+    const v = (document.getElementById('txtCaminhoSistema') || {}).value;
+    if (v) return v.replace(/\/+$/, '');
+    const m = location.pathname.match(/^(.*?\/ErCardWeb)(\/|$)/i);
+    return location.origin + (m ? m[1] : '');
+  };
+
+  // requisição: fetch com a sessão do ER (no ER) ou GM_xmlhttpRequest (no RD); tempo máximo CONFIG.TIMEOUT_REDE
+  function erTransporte(url, metodo, corpo, sinal) {
+    const cab = { 'X-Requested-With': 'XMLHttpRequest' };
+    if (metodo === 'POST') cab['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8';
+    const alvo = metodo === 'POST' || !corpo ? url : url + '?' + corpo;
+    if (erNoRD()) {
+      return new Promise(resolve => {
+        GM_xmlhttpRequest({
+          method: metodo, url: alvo, data: metodo === 'POST' ? corpo : undefined, headers: cab, timeout: CONFIG.TIMEOUT_REDE * 1000,
+          onload: r => resolve({ ok: r.status >= 200 && r.status < 300, status: r.status, texto: r.responseText || '' }),
+          onerror: () => resolve({ ok: false, status: 0, texto: '', erro: 'rede' }),
+          ontimeout: () => resolve({ ok: false, status: 0, texto: '', erro: 'tempo' }),
+        });
+      });
+    }
+    const ctl = new AbortController();
+    const tm = setTimeout(() => ctl.abort(), CONFIG.TIMEOUT_REDE * 1000);
+    let cancelada = false;
+    const parar = () => { cancelada = true; ctl.abort(); };
+    if (sinal) { if (sinal.aborted) parar(); else sinal.addEventListener('abort', parar, { once: true }); }
+    const op = { method: metodo, credentials: 'include', signal: ctl.signal, headers: cab };
+    if (metodo === 'POST') op.body = corpo;
+    return fetch(alvo, op)
+      .then(async r => ({ ok: r.ok, status: r.status, texto: await r.text() }))
+      .catch(() => ({ ok: false, status: 0, texto: '', erro: cancelada ? 'cancelada' : (ctl.signal.aborted ? 'tempo' : 'rede') }))
+      .finally(() => { clearTimeout(tm); if (sinal) sinal.removeEventListener('abort', parar); });
+  }
+
+  // contagem de falhas por dia, rota e motivo (sem dados de clientes), para decidir quando remover o caminho antigo
+  function erRegistrarFalha(rota, motivo) {
+    try {
+      const d = new Date(), hoje = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const f = GM_getValue('erFalhas', {}) || {};
+      const dia = f[hoje] = f[hoje] || {};
+      const r = dia[rota] = dia[rota] || {};
+      r[motivo] = (r[motivo] || 0) + 1;
+      const limite = Date.now() - CONFIG.ER_FALHAS_DIAS * 86400000;
+      Object.keys(f).forEach(k => { if (new Date(k + 'T00:00:00').getTime() < limite) delete f[k]; });
+      GM_setValue('erFalhas', f);
+    } catch (_) {}
+  }
+
+  // aviso de mudança no ER: uma vez por página para cada rota e motivo. O painel pode ouvir o evento 'mf-er-aviso'.
+  const erAvisados = new Set();
+  function erAvisar(rota, motivo, detalhe) {
+    const k = rota + '|' + motivo;
+    if (erAvisados.has(k)) return;
+    erAvisados.add(k);
+    console.warn('[PaymobiFin] er', rota, motivo, detalhe || '');
+    try { window.dispatchEvent(new CustomEvent('mf-er-aviso', { detail: { rota, motivo, detalhe: detalhe || '' } })); } catch (_) {}
+  }
+
+  async function erBuscar(nome, params = {}, opcoes = {}) {
+    const rota = ER_ROTAS[nome];
+    if (!rota) return { ok: false, motivo: 'rota_desconhecida', rota: nome, status: 0, detalhe: '' };
+    const falha = (motivo, extra = {}) => {
+      // sessão, conta e cancelamento são situações normais (o módulo trata); o resto é falha da rota
+      if (!['sessao', 'conta', 'cancelada'].includes(motivo)) {
+        erRegistrarFalha(nome, motivo);
+        if (!opcoes.semAviso) erAvisar(nome, motivo, extra.detalhe);
+      }
+      const r = { ok: false, motivo, rota: nome, status: extra.status || 0, detalhe: extra.detalhe || '' };
+      if (extra.precisa) r.precisa = extra.precisa;
+      return r;
+    };
+    if (!['GET', 'POST'].includes(rota.metodo) || ER_BLOQUEADAS.some(rx => rx.test(rota.caminho))) return falha('bloqueada', { detalhe: rota.caminho });
+    const base = erEndereco();
+    if (!base) return falha('sem_base', { detalhe: 'endereço do ER desconhecido (abra o ER uma vez neste navegador)' });
+    const corpo = new URLSearchParams(rota.params ? rota.params(params) : params).toString();
+    const r = await erTransporte(base + rota.caminho, rota.metodo, corpo, opcoes.sinal);
+    if (r.erro) return falha(r.erro);
+    if (erSemSessao(r.texto)) return falha('sessao', { status: r.status, detalhe: SESSAO_EXPIRADA });
+    const errada = ER_CONTA_ERRADA.find(c => c.rx.test(r.texto));
+    if (errada) return falha('conta', { status: r.status, precisa: errada.precisa, detalhe: 'esta conta não tem acesso' });
+    if (r.status === 401 || r.status === 403) return falha('conta', { status: r.status, precisa: rota.conta !== 'qualquer' ? rota.conta : '', detalhe: 'HTTP ' + r.status });
+    if (!r.ok) return falha('http', { status: r.status, detalhe: 'HTTP ' + r.status });
+    try {
+      let entrada;
+      if (rota.formato === 'json') {
+        try { entrada = JSON.parse(r.texto); } catch (_) { throw erEstrutura('a resposta não é JSON'); }
+      } else {
+        entrada = new DOMParser().parseFromString(r.texto, 'text/html');
+        if (rota.vazio && !entrada.querySelector('table') && rota.vazio.test(erLimpo(entrada.body && entrada.body.textContent))) return { ok: true, dados: [], rota: nome };
+      }
+      return { ok: true, dados: rota.ler(entrada, params), rota: nome };
+    } catch (e) {
+      if (e && e.erConta) return falha('conta', { status: r.status, precisa: rota.conta !== 'qualquer' ? rota.conta : '', detalhe: e.message });
+      return falha('estrutura', { status: r.status, detalhe: e && e.erEstrutura ? e.message : 'erro no leitor: ' + (e && e.message) });
+    }
+  }
+
+  // conta logada: 'mesa' (aprovadora da Mesa de Crédito) ou 'master'; null se não deu para saber. Guardada só na memória da página.
+  let erContaAtual = null;
+  async function erConta(opcoes = {}) {
+    if (erContaAtual && !opcoes.renovar) return erContaAtual;
+    const r = await erBuscar('mesasUsuario', {}, { semAviso: true });
+    erContaAtual = r.ok ? (r.dados.length ? 'mesa' : 'master') : null;
+    return erContaAtual;
+  }
+
+  // o módulo usa a camada? (Configurações > Acesso ao ER; tudo desligado por padrão)
+  const erModuloAtivo = m => { const v = cfg('erModulos'); return !!(v && v[m]); };
+
+  // Teste manual (P0.3), só leitura. No console do ER: sessionStorage.setItem('mfErTeste', '1') e recarregue a página.
+  // Depois: dispatchEvent(new CustomEvent('mf-er-teste', { detail: 'conta' }))   (ou 'pendencias', 'mesasUsuario', 'falhas', 'rotas')
+  // O resultado aparece no console como "[PaymobiFin] er teste". Usa evento (e não um objeto na janela) porque o Tampermonkey
+  // pode isolar o script da página; o texto do evento atravessa esse isolamento. Some ao fechar a aba.
+  try {
+    if (window.top === window && PAGINA.sessionStorage && PAGINA.sessionStorage.getItem('mfErTeste') === '1') {
+      window.addEventListener('mf-er-teste', async e => {
+        const pedido = typeof e.detail === 'string' ? e.detail : 'conta';
+        let r;
+        if (pedido === 'conta') r = await erConta({ renovar: true });
+        else if (pedido === 'falhas') r = GM_getValue('erFalhas', {});
+        else if (pedido === 'rotas') r = Object.keys(ER_ROTAS);
+        else r = await erBuscar(pedido);
+        console.log('[PaymobiFin] er teste', pedido, JSON.stringify(r, null, 2));
+      });
+      console.log('[PaymobiFin] er teste ativo. Ex.: dispatchEvent(new CustomEvent("mf-er-teste", { detail: "conta" }))');
+    }
+  } catch (_) {}
 
   // sleep via Web Worker: abas em segundo plano deixam setTimeout lento (até 1 minuto por tick); o worker não.
   // Se o site bloquear o worker (CSP), cai no setTimeout normal. O setTimeout reserva (ms + 1,5 s) evita travar se o worker falhar.

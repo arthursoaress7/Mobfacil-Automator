@@ -1,267 +1,102 @@
 name: Release
 
-# Calcula a versão SemVer, atualiza CHANGELOG.md e cria a GitHub Release
-# sempre que um commit é integrado na main com tipo que gera release.
+# Depois de cada merge na main:
+#   1. Lê o @version do script. Se a tag vX.Y.Z ainda não existe, cria a tag e a GitHub Release
+#      com as notas da seção correspondente do CHANGELOG.md (preparado no PR de release).
+#   2. Se a main tiver commits que a development não tem (ex.: o merge do PR de release),
+#      abre o PR "chore: sincroniza main na development", que a validação integra sozinha.
 #
-# Tipos que geram release:
-#   feat  → MINOR
-#   fix   → PATCH
-#   perf  → PATCH
-#   feat! / BREAKING CHANGE → MAJOR
+# Este workflow não faz commits na main: a versão e o CHANGELOG já chegam prontos pelo
+# PR de release (workflow "Preparar release").
 #
-# Tipos que NÃO geram release:
-#   docs, chore, test, ci, refactor (sem impacto funcional)
-#
-# PRÉ-REQUISITOS (configuração pelo proprietário):
-#   - Settings > Actions > General > "Read and write permissions" para o GITHUB_TOKEN
-#     OU criar um PAT e salvar como secret RELEASE_TOKEN
-#   - Não requer semantic-release nem Node.js — implementação nativa em bash/python
-#
-# NOTA SOBRE @version:
-#   O campo @version do userscript é atualizado manualmente com um commit
-#   "chore: versão X.Y.Z". Este workflow cria a tag e a GitHub Release
-#   com base nos commits desde a última tag, mas NÃO modifica o script.
-#   A sincronização do @version com o SemVer automático é uma pendência futura.
+# Token: usa o secret RELEASE_TOKEN (PAT) para que o PR de sincronização rode a validação
+# e o merge automático. Sem ele, o PR é criado com o GITHUB_TOKEN e fica esperando merge manual.
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
-    name: Calcular versão e criar release
+    name: Criar tag e release
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout (histórico completo)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ----------------------------------------------------------------
-      # Identificar commits desde a última tag
-      # ----------------------------------------------------------------
-      - name: Obter última tag
-        id: last_tag
+      - name: Ler versão
+        id: v
         run: |
-          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$TAG" ]; then
-            echo "Nenhuma tag encontrada. Usando todos os commits."
-            echo "tag=" >> $GITHUB_OUTPUT
-            echo "ref=HEAD" >> $GITHUB_OUTPUT
+          V=$(grep -oP '(?<=@version\s{6})\S+' paymobifin-assistente.user.js)
+          echo "versao=$V" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
+            echo "Tag v$V já existe: nada a publicar."
+            echo "nova=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Última tag: $TAG"
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "ref=$TAG" >> $GITHUB_OUTPUT
+            echo "nova=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Analisar commits e calcular SemVer
-        id: semver
+      - name: Notas da release (CHANGELOG)
+        if: steps.v.outputs.nova == 'true'
         run: |
-          REF="${{ steps.last_tag.outputs.ref }}"
+          V="${{ steps.v.outputs.versao }}"
+          awk -v cab="## [v$V]" '
+            index($0, cab) == 1 { dentro = 1; next }
+            dentro && /^## \[/ { exit }
+            dentro { print }
+          ' CHANGELOG.md > /tmp/notas.md
+          [ -s /tmp/notas.md ] || echo "Release v$V" > /tmp/notas.md
+          printf '\n---\n**Instalação/Atualização:** o Tampermonkey atualiza automaticamente via `@updateURL` apontando para `main`.\n' >> /tmp/notas.md
 
-          if [ -z "$REF" ] || [ "$REF" = "HEAD" ]; then
-            COMMITS=$(git log --pretty=format:"%s" HEAD)
-          else
-            COMMITS=$(git log --pretty=format:"%s" "${REF}..HEAD")
-          fi
-
-          echo "Commits analisados:"
-          echo "$COMMITS"
-          echo ""
-
-          # Determinar o tipo de incremento
-          BUMP="none"
-          HAS_BREAKING=false
-          HAS_FEAT=false
-          HAS_FIX=false
-
-          while IFS= read -r line; do
-            # BREAKING CHANGE → MAJOR
-            if echo "$line" | grep -qiE "(BREAKING CHANGE|feat!|fix!|refactor!)"; then
-              HAS_BREAKING=true
-            fi
-            # feat → MINOR
-            if echo "$line" | grep -qE "^feat(\(.+\))?: "; then
-              HAS_FEAT=true
-            fi
-            # fix, perf → PATCH
-            if echo "$line" | grep -qE "^(fix|perf)(\(.+\))?: "; then
-              HAS_FIX=true
-            fi
-          done <<< "$COMMITS"
-
-          if [ "$HAS_BREAKING" = "true" ]; then
-            BUMP="major"
-          elif [ "$HAS_FEAT" = "true" ]; then
-            BUMP="minor"
-          elif [ "$HAS_FIX" = "true" ]; then
-            BUMP="patch"
-          fi
-
-          echo "Incremento calculado: $BUMP"
-          echo "bump=$BUMP" >> $GITHUB_OUTPUT
-
-          # Calcular a nova versão
-          if [ "$BUMP" = "none" ]; then
-            echo "Nenhum commit que gera release. Encerrando."
-            echo "should_release=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "should_release=true" >> $GITHUB_OUTPUT
-
-          LAST_TAG="${{ steps.last_tag.outputs.tag }}"
-          if [ -z "$LAST_TAG" ]; then
-            # Primeira release: ler o @version do script como base
-            SCRIPT_VERSION=$(grep -oP '(?<=@version\s{6})\d+\.\d+' paymobifin-assistente.user.js 2>/dev/null || echo "0.0")
-            MAJOR=$(echo "$SCRIPT_VERSION" | cut -d. -f1)
-            MINOR=$(echo "$SCRIPT_VERSION" | cut -d. -f2)
-            PATCH=0
-          else
-            # Remover o 'v' inicial se existir
-            VERSION="${LAST_TAG#v}"
-            MAJOR=$(echo "$VERSION" | cut -d. -f1)
-            MINOR=$(echo "$VERSION" | cut -d. -f2)
-            PATCH=$(echo "$VERSION" | cut -d. -f3)
-            PATCH="${PATCH:-0}"
-          fi
-
-          case "$BUMP" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
-
-          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "Nova versão: $NEW_VERSION"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      # ----------------------------------------------------------------
-      # Gerar CHANGELOG.md
-      # ----------------------------------------------------------------
-      - name: Gerar CHANGELOG
-        if: steps.semver.outputs.should_release == 'true'
-        id: changelog
+      - name: Criar tag e GitHub Release
+        if: steps.v.outputs.nova == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.semver.outputs.new_version }}"
-          DATE=$(date +%Y-%m-%d)
-          REF="${{ steps.last_tag.outputs.ref }}"
-
-          if [ -z "$REF" ] || [ "$REF" = "HEAD" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" "${REF}..HEAD")
-          fi
-
-          # Separar por tipo
-          BREAKING=$(echo "$COMMITS" | grep -E "BREAKING CHANGE|feat!|fix!" || true)
-          FEATS=$(echo "$COMMITS" | grep -E "^- feat(\(.+\))?: " || true)
-          FIXES=$(echo "$COMMITS" | grep -E "^- (fix|perf)(\(.+\))?: " || true)
-          OTHERS=$(echo "$COMMITS" | grep -vE "^- (feat|fix|perf|docs|chore|test|ci|refactor)(\(.+\))?!?: " || true)
-
-          # Montar entrada do changelog
-          ENTRY="## [$VERSION] — $DATE\n"
-
-          if [ -n "$BREAKING" ]; then
-            ENTRY="${ENTRY}\n### ⚠️ Mudanças incompatíveis\n\n${BREAKING}\n"
-          fi
-          if [ -n "$FEATS" ]; then
-            ENTRY="${ENTRY}\n### ✨ Novas funcionalidades\n\n${FEATS}\n"
-          fi
-          if [ -n "$FIXES" ]; then
-            ENTRY="${ENTRY}\n### 🐛 Correções\n\n${FIXES}\n"
-          fi
-          if [ -n "$OTHERS" ]; then
-            ENTRY="${ENTRY}\n### 🔧 Outros\n\n${OTHERS}\n"
-          fi
-
-          echo "Entrada do changelog gerada."
-
-          # Criar ou atualizar CHANGELOG.md
-          if [ -f "CHANGELOG.md" ]; then
-            # Inserir a nova entrada após o cabeçalho (primeira linha)
-            HEADER=$(head -1 CHANGELOG.md)
-            REST=$(tail -n +2 CHANGELOG.md)
-            printf "%s\n\n%b\n%s" "$HEADER" "$ENTRY" "$REST" > CHANGELOG.md
-          else
-            printf "# Changelog\n\n%b" "$ENTRY" > CHANGELOG.md
-          fi
-
-          echo "CHANGELOG.md atualizado."
-
-          # Salvar o conteúdo da entrada para usar no corpo da release
-          printf "%b" "$ENTRY" > /tmp/release_notes.txt
-          echo "notes_file=/tmp/release_notes.txt" >> $GITHUB_OUTPUT
-
-      # ----------------------------------------------------------------
-      # Commitar CHANGELOG.md, criar tag e criar GitHub Release
-      # ----------------------------------------------------------------
-      - name: Commitar CHANGELOG e criar tag
-        if: steps.semver.outputs.should_release == 'true'
-        run: |
-          VERSION="${{ steps.semver.outputs.new_version }}"
-
+          V="v${{ steps.v.outputs.versao }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$V" -m "Release $V"
+          git push origin "$V"
+          gh release create "$V" --title "PaymobiFin $V" --notes-file /tmp/notas.md
+          echo "## ✅ Release $V publicada" >> "$GITHUB_STEP_SUMMARY"
 
-          git add CHANGELOG.md
-          git commit -m "chore: changelog $VERSION [skip ci]" || echo "Sem alterações no CHANGELOG."
-
-          git tag "$VERSION" -m "Release $VERSION"
-          git push origin HEAD:main
-          git push origin "$VERSION"
-
-          echo "✅ Tag $VERSION criada e publicada."
-
-      - name: Criar GitHub Release
-        if: steps.semver.outputs.should_release == 'true'
-        uses: actions/github-script@v7
+  sincronizar:
+    name: Sincronizar main na development
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout (histórico completo)
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const version = '${{ steps.semver.outputs.new_version }}';
-            const notesFile = '${{ steps.changelog.outputs.notes_file }}';
+          fetch-depth: 0
 
-            let body = '';
-            try {
-              body = fs.readFileSync(notesFile, 'utf8');
-            } catch (e) {
-              body = `Release ${version}`;
-            }
-
-            body += '\n\n---\n';
-            body += '**Instalação/Atualização:** o Tampermonkey atualiza automaticamente via `@updateURL` apontando para `main`.\n';
-
-            await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: version,
-              name: `PaymobiFin ${version}`,
-              body: body,
-              draft: false,
-              prerelease: false
-            });
-
-            console.log(`✅ GitHub Release ${version} criada.`);
-
-      - name: Sem release necessária
-        if: steps.semver.outputs.should_release != 'true'
+      - name: Abrir PR main -> development, se preciso
         run: |
-          echo "## Sem release" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Nenhum commit do tipo \`feat\`, \`fix\` ou \`perf\` encontrado desde a última tag." >> $GITHUB_STEP_SUMMARY
-          echo "Nenhuma release criada." >> $GITHUB_STEP_SUMMARY
+          git fetch origin development
+          if [ -z "$(git rev-list origin/development..origin/main)" ]; then
+            echo "A development já contém a main."
+            exit 0
+          fi
+          N=$(gh pr list --head main --base development --state open --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            echo "PR de sincronização já aberto: #$N"
+            exit 0
+          fi
+          gh pr create --head main --base development \
+            --title "chore: sincroniza main na development" \
+            --body "Gerado automaticamente depois do merge na main, para a development voltar a conter tudo o que está na main (ex.: o commit do PR de release). Integrado sozinho pela validação (merge commit)."
+          echo "## PR de sincronização aberto" >> "$GITHUB_STEP_SUMMARY"

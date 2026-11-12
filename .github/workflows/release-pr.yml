@@ -1,0 +1,97 @@
+name: Preparar release
+
+# A cada merge na development, abre ou atualiza o PR de release (release/proxima -> main):
+#   - calcula a próxima versão pelos commits da development que ainda não estão na main;
+#   - atualiza o @version, os locais de versão da documentação (item 12 do instructions.md)
+#     e o CHANGELOG.md (.github/scripts/preparar_release.py);
+#   - o merge na main é sempre feito pelo responsável (um clique).
+#
+# Token: usa o secret RELEASE_TOKEN (PAT) para que o PR criado aqui rode a validação.
+# Sem ele, o PR é criado com o GITHUB_TOKEN e a verificação "Validar alterações" não roda nele.
+
+on:
+  push:
+    branches: [development]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: preparar-release
+  cancel-in-progress: true
+
+jobs:
+  release-pr:
+    name: Abrir ou atualizar o PR de release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      RAMO: release/proxima
+    steps:
+      - name: Checkout (development, histórico completo)
+        uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Há algo para levar à main?
+        id: dif
+        run: |
+          git fetch origin main
+          if git diff --quiet origin/main HEAD; then
+            echo "Nada novo: development e main têm o mesmo conteúdo."
+            echo "vazio=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "vazio=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fechar PR de release sem conteúdo
+        if: steps.dif.outputs.vazio == 'true'
+        run: |
+          N=$(gh pr list --head "$RAMO" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh pr close "$N" --comment "Fechado automaticamente: a main já tem todo o conteúdo da development." --delete-branch
+          fi
+
+      - name: Calcular versão e atualizar arquivos
+        if: steps.dif.outputs.vazio == 'false'
+        id: rel
+        run: python3 .github/scripts/preparar_release.py
+
+      - name: Conferir sintaxe do script
+        if: steps.dif.outputs.vazio == 'false'
+        run: node --check paymobifin-assistente.user.js
+
+      - name: Publicar a branch release/proxima
+        if: steps.dif.outputs.vazio == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$RAMO"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "${{ steps.rel.outputs.titulo }}"
+          fi
+          git push --force origin "$RAMO"
+
+      - name: Abrir ou atualizar o PR
+        if: steps.dif.outputs.vazio == 'false'
+        env:
+          TITULO: ${{ steps.rel.outputs.titulo }}
+        run: |
+          N=$(gh pr list --head "$RAMO" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh pr edit "$N" --title "$TITULO" --body-file /tmp/release_corpo.md
+            echo "PR #$N atualizado: $TITULO"
+          else
+            gh pr create --head "$RAMO" --base main --title "$TITULO" --body-file /tmp/release_corpo.md
+            echo "PR de release criado: $TITULO"
+          fi
+          {
+            echo "## PR de release"
+            echo ""
+            echo "**$TITULO** (${{ steps.rel.outputs.commits }} commits; incremento: ${{ steps.rel.outputs.incremento }})"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -61,8 +61,8 @@ PaymobiFin-Assistente/
 │   ├── SETUP.md                    ← configurações necessárias pelo proprietário
 │   └── workflows/
 │       ├── validate-pr.yml         ← valida todo PR antes do merge
-│       ├── auto-merge.yml          ← merge automático para alterações rotineiras
-│       └── release.yml             ← cria versão e CHANGELOG automaticamente
+│       ├── release-pr.yml          ← abre/atualiza o PR de release (development → main)
+│       └── release.yml             ← cria tag e release; sincroniza main na development
 └── docs/
     └── script/
         ├── 01-visao-geral.md
@@ -178,7 +178,7 @@ Mudança incompatível: `feat!:` ou `BREAKING CHANGE:` no rodapé.
 
 ## Pull Requests
 
-- PR de branch temporária → `development` (rotina, pode ter auto-merge)
+- PR de branch temporária → `development` (rotina: merge automático depois da validação)
 - PR de `development` → `main` (produção, requer validação manual)
 - Usar **Squash Merge** para manter histórico limpo
 
@@ -188,10 +188,10 @@ Mudança incompatível: `feat!:` ou `BREAKING CHANGE:` no rodapé.
 
 O campo `@version` no cabeçalho do script é a única fonte da versão.
 
-O workflow `release.yml` calcula e cria a release automaticamente a cada merge na `main`:
+O PR de release (workflow "Preparar release") calcula a próxima versão a cada merge na `development` e já atualiza o `@version`, a documentação e o `CHANGELOG.md`:
 - `feat` → MINOR · `fix`/`perf` → PATCH · `BREAKING CHANGE` → MAJOR
 
-Acompanha um commit manual `chore: versão X.Y.Z` para atualizar o `@version` no script.
+Ao integrar o PR de release na `main`, o `release.yml` cria a tag e a GitHub Release. Não há mais commit manual de versão.
 
 ---
 
@@ -199,9 +199,9 @@ Acompanha um commit manual `chore: versão X.Y.Z` para atualizar o `@version` no
 
 | Workflow | Quando executa | O que faz |
 |---|---|---|
-| `validate-pr.yml` | Todo PR aberto | Valida título, detecta alterações críticas (Categoria B), verifica integridade do script |
-| `auto-merge.yml` | Após validação passar | Ativa Squash Merge automático para PRs rotineiros |
-| `release.yml` | Push na `main` | Calcula SemVer, atualiza CHANGELOG, cria tag e GitHub Release |
+| `validate-pr.yml` | PR para `main`, `development` ou `feature/**` | Valida título, origem, script e versão; merge automático da Categoria A (fora da `main`) |
+| `release-pr.yml` | Push na `development` | Abre/atualiza o PR de release com versão, documentação e CHANGELOG |
+| `release.yml` | Push na `main` | Cria tag e GitHub Release; abre o PR de sincronização `main` → `development` |
 
 > **Configuração necessária:** ver [`.github/SETUP.md`](./.github/SETUP.md) para as configurações que o proprietário do repositório precisa aplicar.
 

@@ -2635,7 +2635,7 @@
     GM_deleteValue('urlVideoAjuda');   // o tutorial do YouTube saiu do painel: limpa o link que ficou salvo
 
     const FILTROS = {
-      reprovadas: sit => /\brep\b|reprov/i.test(sit),
+      reprovadas: sit => ehReprovada(sit),   // "17 - PRE PROP REP", "07 - REPR AUT" (reprovada automaticamente), "REPROVADA"
       efetivadas: sit => /efetivad/i.test(sit) && !/n[ãa]o\s+efetivad/i.test(sit),
       aprovadas: sit => /\bapr\b|aprov/i.test(sit) && !/efetivad/i.test(sit),   // "APR", "06 - APROV MAN", "APROVADA"
       valortransacao: () => true,   // todas as propostas da lista

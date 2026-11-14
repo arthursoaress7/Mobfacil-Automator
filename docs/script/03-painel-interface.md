@@ -48,7 +48,7 @@ No fim do `<style>` do painel há um bloco só de CSS, todo escopado em `#mf-p[d
 
 ```
 ┌─────────────────────────────────────┐
-│ ■ PaymobiFin - Assistente  v13.29.1 │  ← barra de título (arrastar, minimizar)
+│ ■ PaymobiFin - Assistente  v13.29.2 │  ← barra de título (arrastar, minimizar)
 ├─────────────────────────────────────┤
 │ Atendimento | Histórico | Agenda | Relatórios | Mais ▾ │  ← abas
 ├─────────────────────────────────────┤

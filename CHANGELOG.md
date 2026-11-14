@@ -1,5 +1,15 @@
 # Changelog
 
+## [v13.29.2] — 2026-11-14
+
+### 🐛 Correções
+
+- fix: Relatório - Reprovadas inclui as reprovadas automaticamente (REPR AUT) (#55) (bef7091)
+
+### 🔧 Outros
+
+- docs: registrar decisões do responsável de 12/11 (p0.2 aprovada) (#51) (4dbff4c)
+
 ## [v13.29.1] — 2026-11-12
 
 ### 🐛 Correções

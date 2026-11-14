@@ -229,11 +229,11 @@ Não há testes automatizados. Em cada fase com código:
 
 ## 8. Decisões pendentes do responsável
 
-| # | Decisão | Quando |
+| # | Decisão | Situação (12/11/2026) |
 |---|---|---|
-| 1 | Aprovar o desenho da camada e as chaves `erModulos` e `erFalhas` | Fim da fase 1 |
-| 2 | Quem testa a branch no ER real | Antes da fase 4 |
-| 3 | Arquitetura com build/módulos (discussão em aberto) | Antes da fase 3 |
+| 1 | Aprovar o desenho da camada e as chaves `erModulos` e `erFalhas` | **Aprovado** |
+| 2 | Quem testa a branch no ER real | **O responsável** |
+| 3 | Arquitetura com build/módulos | **Depois de mapear todo o projeto**; a camada é feita dentro do monólito |
 
 ---
 
@@ -242,5 +242,5 @@ Não há testes automatizados. Em cada fase com código:
 | Fase | Status |
 |---|---|
 | 1 — Inventário e mapeamento | Em andamento: inventário preliminar feito; motor MobFacil mapeado (`/api/visualizador`, JSON) em `docs/script/13-api-er.md` |
-| 2 — Desenho | Proposta em revisão: `docs/PROPOSTA-CAMADA-ER.md` |
+| 2 — Desenho | **Aprovado** (12/11/2026): `docs/PROPOSTA-CAMADA-ER.md` |
 | 3 a 9 | Pendente |

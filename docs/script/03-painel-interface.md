@@ -48,7 +48,7 @@ No fim do `<style>` do painel há um bloco só de CSS, todo escopado em `#mf-p[d
 
 ```
 ┌─────────────────────────────────────┐
-│ ■ PaymobiFin - Assistente  v13.29.1 │  ← barra de título (arrastar, minimizar)
+│ ■ PaymobiFin - Assistente  v13.29.2 │  ← barra de título (arrastar, minimizar)
 ├─────────────────────────────────────┤
 │ Atendimento | Histórico | Agenda | Relatórios | Mais ▾ │  ← abas
 ├─────────────────────────────────────┤
@@ -115,7 +115,7 @@ A função `relatorioCols(m, id, d, processada)` monta as colunas de resultado p
 |---|---|
 | Auditoria | Proposta, Nome, CPF, IMEI, Qtd Restritivos, Valor Restritivos, Score, Consultas, Motivo Reprovação |
 | Diário | Propostas do dia com resultado |
-| Reprovadas | Apenas propostas reprovadas |
+| Reprovadas | Apenas propostas reprovadas: situação com "REP", "REPR" ou "REPROV" (ex.: "17 - PRE PROP REP", "07 - REPR AUT"), a mesma regra de `ehReprovada` |
 | Efetivadas | Apenas propostas aprovadas e efetivadas |
 | Aprovadas | Propostas aprovadas (com CPF) |
 

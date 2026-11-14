@@ -69,8 +69,8 @@ Plano detalhado: [`docs/PLANO-API-ER.md`](./docs/PLANO-API-ER.md). A API oficial
   **Objetivo:** listar todas as rotas e leituras de tela usadas pelo script e, no DevTools, verificar quais telas do ER carregam dados por JSON (inclusive o motor MobFacil).  
   **Critérios de aceite:** `docs/script/13-api-er.md` com, para cada rota: método, parâmetros, formato da resposta (HTML/JSON), funções que a usam e dados extraídos.
 
-- [ ] **P0.2 — Desenho da camada** (Categoria B)  
-  **Status:** Proposta em revisão (12/11/2026): [`docs/PROPOSTA-CAMADA-ER.md`](./docs/PROPOSTA-CAMADA-ER.md)  
+- [x] **P0.2 — Desenho da camada** (Categoria B)  
+  **Status:** **Aprovado pelo responsável em 12/11/2026** (as 8 decisões da seção 12 de [`docs/PROPOSTA-CAMADA-ER.md`](./docs/PROPOSTA-CAMADA-ER.md)), dentro do monólito  
   **Objetivo:** definir `erBuscar`, o registro de rotas, os leitores por rota, o tratamento padrão de erros e sessão e os avisos de mudança.  
   **Dependências:** P0.1. Exige autorização explícita antes de P0.3.
 
@@ -476,6 +476,20 @@ O módulo de geração de acordos (`at*`) já possui:
 
 ---
 
+## Decisões do responsável (12/11/2026)
+
+| # | Tema | Decisão |
+|---|---|---|
+| A | Proposta da camada `er` (P0.2) | **Aprovada** (8 itens da seção 12 da proposta) |
+| B | Arquitetura (módulos com build, gerenciamento de estado) | **Decidir depois de mapear todo o projeto.** Até lá a camada é escrita dentro do monólito (decisão 1 da proposta) |
+| C | Tratamento dos protocolos abertos pelo CAC (P4.12) | **Em revisão:** rever as opções antes de decidir |
+| D | Quem testa a `feature/api-er` no ER real | **O responsável** (por enquanto) |
+| E | Configurações do proprietário (`.github/SETUP.md`) | **Aprovado:** aplicar quando o proprietário estiver disponível. Até lá, o fluxo de merges funciona em modo parcial |
+| F | Uso das rotas internas × contrato com o fornecedor (dúvida 9) | **Em estudo** pelo responsável |
+| G | Dúvidas de P1 a P3 (tabela abaixo) | **Depois da P0** |
+
+---
+
 ## Dúvidas funcionais que precisam de decisão da equipe
 
 | # | Dúvida | Contexto |
@@ -488,4 +502,4 @@ O módulo de geração de acordos (`at*`) já possui:
 | 6 | Os modelos personalizados (`negModelos`) devem ser compartilhados entre a equipe? | P2.3 — hoje são por navegador |
 | 7 | Há campos do acordo que poderiam ser preenchidos automaticamente a partir do ER? | P3.2 — hoje muitos campos são manuais |
 | 8 | ~~O ER autentica por cookie ou por token?~~ **Respondido no código (11/11/2026): cookie de sessão.** | P0 — as rotas são chamadas com `credentials: 'include'` |
-| 9 | O uso das rotas internas do ER é compatível com o contrato e os termos de uso? | P0 / P4.11 — confirmar com a gestão quando possível |
+| 9 | O uso das rotas internas do ER é compatível com o contrato e os termos de uso? | P0 / P4.11 — em estudo pelo responsável (decisão F de 12/11/2026) |
